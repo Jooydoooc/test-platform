@@ -1,0 +1,9 @@
+node_modules
+.next
+out
+.DS_Store
+*.log
+.env*
+.playwright-mcp/
+.vercel
+*.tsbuildinfo
