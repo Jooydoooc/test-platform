@@ -85,7 +85,7 @@ export default function EditTestPage({
           ← Back
         </LinkButton>
         <div className="flex items-center gap-3">
-          {saved && <span className="text-sm text-green-600">Saved ✓</span>}
+          {saved && <span className="text-sm text-emerald-600">Saved ✓</span>}
           <span className="text-sm text-slate-500">
             {maxScore(test)} point{maxScore(test) === 1 ? "" : "s"}
           </span>

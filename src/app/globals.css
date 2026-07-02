@@ -3,18 +3,47 @@
 @tailwind utilities;
 
 :root {
-  --background: #f8fafc;
+  /* Cool, near-white study surface. Not cream, not flat white. */
+  --background: #f6f7f9;
   --foreground: #0f172a;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
+  /* Brand-tint native controls (checkbox, radio, range) app-wide. */
+  accent-color: #5a3fca;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   /* Respect the iPhone notch / home indicator when viewport-fit=cover. */
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
-  /* Smoother momentum scrolling on iOS. */
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Consistent, brand-tinted focus ring for keyboard users across the app. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid #5a3fca;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #d1ccf7;
+  color: #35276b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

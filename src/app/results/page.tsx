@@ -9,7 +9,7 @@ export default function ResultsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Results</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Results</h1>
         <p className="text-sm text-slate-600">
           Every completed attempt, most recent first.
         </p>
@@ -51,7 +51,7 @@ export default function ResultsPage() {
                     </td>
                     <td
                       className={`px-4 py-3 font-semibold ${
-                        pct >= 50 ? "text-green-600" : "text-red-600"
+                        pct >= 50 ? "text-emerald-600" : "text-rose-600"
                       }`}
                     >
                       {pct}%

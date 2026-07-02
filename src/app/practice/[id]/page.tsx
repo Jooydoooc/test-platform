@@ -114,7 +114,7 @@ function Runner({ test }: { test: Test }) {
           </h1>
           <p
             className={`text-lg font-semibold ${
-              pct >= 50 ? "text-green-600" : "text-amber-600"
+              pct >= 50 ? "text-emerald-600" : "text-amber-600"
             }`}
           >
             {pct}% correct
@@ -136,9 +136,9 @@ function Runner({ test }: { test: Test }) {
                 <span
                   className={`shrink-0 text-sm font-semibold ${
                     v === "correct"
-                      ? "text-green-600"
+                      ? "text-emerald-600"
                       : v === "incorrect"
-                        ? "text-red-600"
+                        ? "text-rose-600"
                         : "text-slate-400"
                   }`}
                 >
@@ -178,9 +178,9 @@ function Runner({ test }: { test: Test }) {
             Question {index + 1} of {total}
           </span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
           <div
-            className="h-full rounded-full bg-slate-900 transition-all"
+            className="h-full rounded-full bg-brand-600 transition-all"
             style={{ width: `${((index + 1) / total) * 100}%` }}
           />
         </div>
@@ -203,8 +203,8 @@ function Runner({ test }: { test: Test }) {
           <div
             className={`rounded-md border p-3 text-sm ${
               verdict === "correct"
-                ? "border-green-200 bg-green-50 text-green-800"
-                : "border-red-200 bg-red-50 text-red-800"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-rose-200 bg-rose-50 text-rose-800"
             }`}
           >
             <p className="font-semibold">

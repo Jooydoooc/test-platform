@@ -2,12 +2,16 @@ import Link from "next/link";
 import type { ComponentProps } from "react";
 
 const base =
-  "inline-flex min-h-[44px] items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:pointer-events-none sm:min-h-0";
+  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-150 disabled:opacity-50 disabled:pointer-events-none sm:min-h-0";
 
 const variants = {
-  primary: "bg-slate-900 text-white hover:bg-slate-700",
-  secondary: "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
-  danger: "border border-red-200 bg-white text-red-600 hover:bg-red-50",
+  primary:
+    "bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800",
+  secondary:
+    "border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100",
+  ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+  danger:
+    "border border-red-200 bg-white text-red-600 hover:border-red-300 hover:bg-red-50",
 } as const;
 
 type Variant = keyof typeof variants;
@@ -35,7 +39,7 @@ export function LinkButton({
 export function Card({ className = "", ...props }: ComponentProps<"div">) {
   return (
     <div
-      className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}
+      className={`rounded-xl border border-slate-200/80 bg-white p-5 shadow-card ${className}`}
       {...props}
     />
   );
@@ -50,7 +54,7 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-slate-700">
+      <span className="mb-1.5 block text-sm font-medium text-slate-700">
         {label}
       </span>
       {children}
@@ -61,4 +65,57 @@ export function Field({
 // text-base (16px) on small screens prevents iOS Safari from auto-zooming
 // when an input is focused; sm:text-sm restores the tighter look on desktop.
 export const inputClass =
-  "w-full rounded-md border border-slate-300 px-3 py-2.5 text-base outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 sm:py-2 sm:text-sm";
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 sm:py-2 sm:text-sm";
+
+const badgeTones = {
+  brand: "bg-brand-50 text-brand-700 ring-brand-600/15",
+  amber: "bg-amber-50 text-amber-700 ring-amber-600/20",
+  success: "bg-emerald-50 text-emerald-700 ring-emerald-600/15",
+  neutral: "bg-slate-100 text-slate-600 ring-slate-500/15",
+} as const;
+
+export function Badge({
+  tone = "neutral",
+  className = "",
+  ...props
+}: ComponentProps<"span"> & { tone?: keyof typeof badgeTones }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${badgeTones[tone]} ${className}`}
+      {...props}
+    />
+  );
+}
+
+// Thin progress meter for scores / completion. `value` is 0–100.
+export function ProgressBar({
+  value,
+  className = "",
+  tone = "brand",
+}: {
+  value: number;
+  className?: string;
+  tone?: "brand" | "success" | "amber";
+}) {
+  const pct = Math.max(0, Math.min(100, value));
+  const fill =
+    tone === "success"
+      ? "bg-emerald-500"
+      : tone === "amber"
+        ? "bg-amber-500"
+        : "bg-brand-600";
+  return (
+    <div
+      className={`h-2 w-full overflow-hidden rounded-full bg-slate-100 ${className}`}
+      role="progressbar"
+      aria-valuenow={Math.round(pct)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div
+        className={`h-full rounded-full transition-[width] duration-500 ${fill}`}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}

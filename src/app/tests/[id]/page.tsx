@@ -195,7 +195,7 @@ export default function TakeTestPage({
       )}
 
       <div>
-        <h1 className="text-2xl font-bold">{test.title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{test.title}</h1>
         {test.description && (
           <p className="mt-1 text-slate-600">{test.description}</p>
         )}
@@ -382,7 +382,7 @@ function Results({
         </h1>
         <p
           className={`text-lg font-semibold ${
-            pct >= 50 ? "text-green-600" : "text-red-600"
+            pct >= 50 ? "text-emerald-600" : "text-rose-600"
           }`}
         >
           {pct}%
@@ -402,7 +402,7 @@ function Results({
                 </h3>
                 <span
                   className={`shrink-0 text-sm font-semibold ${
-                    correct ? "text-green-600" : "text-red-600"
+                    correct ? "text-emerald-600" : "text-rose-600"
                   }`}
                 >
                   {correct ? "✓" : "✗"} {earned}/{q.points}
@@ -412,7 +412,7 @@ function Results({
                 Your answer: {label(q, answers[q.id] ?? [])}
               </p>
               {!correct && (
-                <p className="text-sm text-green-700">
+                <p className="text-sm text-emerald-700">
                   Correct: {label(q, q.correct)}
                 </p>
               )}
@@ -430,7 +430,7 @@ function Results({
         </a>
         <a
           href="/results"
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
         >
           View all results
         </a>

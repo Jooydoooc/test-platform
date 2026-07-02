@@ -26,7 +26,7 @@ export default function TelegramPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Telegram</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Telegram</h1>
         <p className="text-sm text-slate-600">
           Connect a bot to send announcements, submission alerts, and student
           results.
@@ -79,7 +79,7 @@ function ConnectionCard({
               checking
                 ? "bg-amber-400"
                 : connected
-                  ? "bg-green-500"
+                  ? "bg-emerald-500"
                   : "bg-red-500"
             }
           />
@@ -154,7 +154,7 @@ function SettingsCard() {
     setTestState("Sending…");
     const res = await sendMessage({
       chatId: cfg.notifyChatId,
-      text: "✅ <b>Test Platform</b> connected. Notifications will arrive here.",
+      text: "✅ <b>Lexora</b> connected. Notifications will arrive here.",
     });
     setTestState(res.ok ? "Sent! Check Telegram." : `Failed: ${res.error}`);
   }

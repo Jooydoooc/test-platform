@@ -66,7 +66,7 @@ export default function LeaderboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">🏆 Leaderboard</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">🏆 Leaderboard</h1>
           <p className="text-sm text-slate-600">
             Top scores ranked by percentage.
           </p>
@@ -189,7 +189,7 @@ function LeaderboardSection({
                   </td>
                   <td
                     className={`px-4 py-2.5 text-right font-semibold tabular-nums ${
-                      p >= 50 ? "text-green-600" : "text-red-600"
+                      p >= 50 ? "text-emerald-600" : "text-rose-600"
                     }`}
                   >
                     {p}%

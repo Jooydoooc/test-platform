@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, LinkButton } from "@/components/ui";
+import { PencilIcon, SendIcon } from "@/components/icons";
 import { useTests } from "@/lib/store";
 
 export default function AdminPage() {
@@ -10,7 +11,7 @@ export default function AdminPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Admin</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Admin</h1>
         <p className="text-sm text-slate-600">
           Teacher tools for managing content and integrations.
         </p>
@@ -27,7 +28,10 @@ export default function AdminPage() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold">✍️ Authoring</h2>
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/15">
+            <PencilIcon />
+          </span>
+          <h2 className="text-lg font-semibold text-slate-900">Authoring</h2>
           <p className="flex-1 text-sm text-slate-600">
             Create and edit tests, assign them to a book and level, and build
             question banks.
@@ -36,7 +40,10 @@ export default function AdminPage() {
         </Card>
 
         <Card className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold">📨 Telegram</h2>
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/15">
+            <SendIcon />
+          </span>
+          <h2 className="text-lg font-semibold text-slate-900">Telegram</h2>
           <p className="flex-1 text-sm text-slate-600">
             Connect a bot for submission alerts, announcements, and student
             result messages.
@@ -53,7 +60,7 @@ export default function AdminPage() {
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <Card className="p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
         {label}
       </p>
       <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
