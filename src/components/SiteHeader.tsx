@@ -17,14 +17,12 @@ export function SiteHeader() {
   }, [pathname]);
 
   const navItems = [
-    ...(user?.role === "teacher" ? [{ href: "/author", label: "Author" }] : []),
-    { href: "/tests", label: "Take a test" },
+    { href: "/", label: "Home" },
     { href: "/practice", label: "Practice" },
-    { href: "/leaderboard", label: "Leaderboard" },
-    { href: "/results", label: "Results" },
-    ...(user?.role === "teacher"
-      ? [{ href: "/telegram", label: "Telegram" }]
-      : []),
+    { href: "/tests", label: "Tests" },
+    { href: "/books", label: "Books" },
+    { href: "/dashboard", label: "Dashboard" },
+    ...(user?.role === "teacher" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
   function signOut() {
@@ -34,7 +32,8 @@ export function SiteHeader() {
   }
 
   function isActive(href: string) {
-    return pathname.startsWith(href);
+    // "/" should only match the home page exactly, not every route.
+    return href === "/" ? pathname === "/" : pathname.startsWith(href);
   }
 
   return (

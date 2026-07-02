@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth";
 
 const PUBLIC_PATHS = ["/login"];
-const TEACHER_PATHS = ["/author", "/telegram"];
+const TEACHER_PATHS = ["/author", "/telegram", "/admin"];
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useSession();

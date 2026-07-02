@@ -4,10 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import {
   DEFAULT_BOOK,
   DEFAULT_CATEGORY,
+  DEFAULT_TEST_GROUP,
+  LEVEL_TESTS,
   type Attempt,
   type Category,
   type Question,
   type Test,
+  type TestGroup,
 } from "./types";
 
 const TESTS_KEY = "tp.tests";
@@ -343,6 +346,19 @@ export function bookOf(test: Test): string {
  */
 export function categoryOf(test: Test): Category {
   return test.category ?? DEFAULT_CATEGORY;
+}
+
+/**
+ * The Tests-page group a test belongs to. Uses the explicit `group` field when
+ * set; otherwise infers one so legacy/seed data lands sensibly (vocabulary
+ * units → Vocabulary Tests, titles matching a level test → Level Tests).
+ */
+export function groupOf(test: Test): TestGroup {
+  if (test.group) return test.group;
+  const title = test.title.toLowerCase();
+  if (LEVEL_TESTS.some((n) => n.toLowerCase() === title)) return "Level Tests";
+  if (test.id.startsWith("eew1")) return "Vocabulary Tests";
+  return DEFAULT_TEST_GROUP;
 }
 
 // A few sample attempts so the leaderboard is meaningful before anyone plays.

@@ -109,6 +109,23 @@ export default function EditTestPage({
             onChange={(e) => update({ description: e.target.value })}
           />
         </Field>
+        <Field label="Time limit (minutes)">
+          <input
+            type="number"
+            min={0}
+            className={`${inputClass} w-32`}
+            value={test.durationMinutes ?? ""}
+            onChange={(e) => {
+              const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
+              update({ durationMinutes: n > 0 ? n : undefined });
+            }}
+            placeholder="Untimed"
+          />
+          <span className="mt-1 block text-xs text-slate-400">
+            Leave blank or 0 for an untimed test. When set, the test auto-submits
+            when time runs out.
+          </span>
+        </Field>
       </Card>
 
       <div className="space-y-4">

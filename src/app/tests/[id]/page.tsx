@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, Field, inputClass } from "@/components/ui";
 import {
@@ -16,6 +16,17 @@ import { loadConfig, sendMessage } from "@/lib/telegram-client";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** Seconds -> "M:SS" (or "H:MM:SS" past an hour). */
+function formatTime(totalSec: number): string {
+  const s = Math.max(0, Math.floor(totalSec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  const ss = String(sec).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 // Fire off any configured Telegram notifications for a finished attempt.
@@ -74,6 +85,11 @@ export default function TakeTestPage({
   const [level, setLevel] = useState<Level | "">("");
   const [answers, setAnswers] = useState<Answers>({});
   const [submitted, setSubmitted] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
+  // Deadline (epoch ms) and remaining seconds for timed tests; null = untimed.
+  const [deadline, setDeadline] = useState<number | null>(null);
+  const [remainingSec, setRemainingSec] = useState<number | null>(null);
+  const startedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     const t = getTest(id);
@@ -82,7 +98,28 @@ export default function TakeTestPage({
       return;
     }
     setTest(t);
+    startedAtRef.current = Date.now();
+    if (t.durationMinutes && t.durationMinutes > 0) {
+      setDeadline(Date.now() + t.durationMinutes * 60_000);
+    }
   }, [id, router]);
+
+  // Keep the latest submit closure in a ref so the 1s timer can auto-submit
+  // with up-to-date answers without re-creating the interval each keystroke.
+  const submitRef = useRef<(timedOut?: boolean) => void>(() => {});
+
+  // Countdown tick for timed tests.
+  useEffect(() => {
+    if (deadline === null || submitted) return;
+    const tick = () => {
+      const rem = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+      setRemainingSec(rem);
+      if (rem <= 0) submitRef.current(true);
+    };
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [deadline, submitted]);
 
   if (!test) return <p className="text-slate-500">Loading…</p>;
 
@@ -94,10 +131,16 @@ export default function TakeTestPage({
     (q) => (answers[q.id]?.length ?? 0) > 0 && answers[q.id]?.[0] !== "",
   ).length;
 
-  function submit() {
+  function submit(wasTimedOut = false) {
+    if (submitted) return;
     const score = gradeTest(test!, answers);
     const total = maxScore(test!);
     const takerName = name.trim() || "Anonymous";
+    const isTimed = !!(test!.durationMinutes && test!.durationMinutes > 0);
+    const timeTakenSec =
+      isTimed && startedAtRef.current != null
+        ? Math.round((Date.now() - startedAtRef.current) / 1000)
+        : undefined;
     saveAttempt({
       id: uid(),
       testId: test!.id,
@@ -109,25 +152,60 @@ export default function TakeTestPage({
       score,
       maxScore: total,
       submittedAt: Date.now(),
+      timeTakenSec,
+      timedOut: wasTimedOut || undefined,
     });
     void notifyTelegram(test!, takerName, score, total, group.trim(), level);
+    setTimedOut(wasTimedOut);
     setSubmitted(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+  submitRef.current = submit;
 
   if (submitted) {
     return (
-      <Results test={test} answers={answers} name={name.trim() || "Anonymous"} />
+      <Results
+        test={test}
+        answers={answers}
+        name={name.trim() || "Anonymous"}
+        timedOut={timedOut}
+      />
     );
   }
 
+  const timeLow = remainingSec !== null && remainingSec <= 60;
+
   return (
     <div className="space-y-6">
+      {remainingSec !== null && (
+        <div
+          className={`sticky top-0 z-10 -mx-4 flex items-center justify-between border-b px-4 py-2.5 backdrop-blur ${
+            timeLow
+              ? "border-red-200 bg-red-50/95 text-red-700"
+              : "border-slate-200 bg-white/95 text-slate-700"
+          }`}
+          role="timer"
+          aria-live={timeLow ? "assertive" : "off"}
+        >
+          <span className="text-sm font-medium">Time remaining</span>
+          <span className="font-mono text-lg font-bold tabular-nums">
+            {formatTime(remainingSec)}
+          </span>
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold">{test.title}</h1>
         {test.description && (
           <p className="mt-1 text-slate-600">{test.description}</p>
         )}
+        {test.durationMinutes ? (
+          <p className="mt-1 text-sm text-slate-500">
+            ⏱ Timed test · {test.durationMinutes} minute
+            {test.durationMinutes === 1 ? "" : "s"} · auto-submits when time runs
+            out.
+          </p>
+        ) : null}
       </div>
 
       <Card className="grid gap-4 sm:grid-cols-3">
@@ -179,7 +257,7 @@ export default function TakeTestPage({
         <span className="text-sm text-slate-600">
           {answeredCount} / {test.questions.length} answered
         </span>
-        <Button onClick={submit}>Submit test</Button>
+        <Button onClick={() => submit()}>Submit test</Button>
       </Card>
     </div>
   );
@@ -269,10 +347,12 @@ function Results({
   test,
   answers,
   name,
+  timedOut,
 }: {
   test: Test;
   answers: Answers;
   name: string;
+  timedOut?: boolean;
 }) {
   const score = gradeTest(test, answers);
   const total = maxScore(test);
@@ -289,6 +369,12 @@ function Results({
 
   return (
     <div className="space-y-6">
+      {timedOut && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          ⏱ Time ran out — your test was submitted automatically with the answers
+          you had so far.
+        </div>
+      )}
       <Card className="space-y-2 text-center">
         <p className="text-sm text-slate-500">Results for {name}</p>
         <h1 className="text-4xl font-bold">

@@ -18,8 +18,8 @@ export default function PracticePage() {
     [tests, category],
   );
   const books = useMemo(
-    () => orderBooks(inCategory.map(bookOf)),
-    [inCategory],
+    () => orderBooks(category, inCategory.map(bookOf)),
+    [inCategory, category],
   );
 
   // Resolve the active book: keep the chosen one if still present, else first.
