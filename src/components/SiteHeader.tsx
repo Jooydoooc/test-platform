@@ -3,6 +3,21 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import {
+  ChevronDownIcon,
+  LayoutDashboardIcon,
+  LogOutIcon,
+  SlidersHorizontalIcon,
+  TrophyIcon,
+  UserIcon,
+} from "lucide-react";
+import {
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuTrigger,
+} from "@/components/ui/menu";
 import { logout, useSession } from "@/lib/auth";
 
 export function SiteHeader() {
@@ -72,24 +87,57 @@ export function SiteHeader() {
           )}
 
           {user ? (
-            <div className="flex items-center gap-2 text-sm">
-              <Link
-                href="/profile"
-                aria-label="Your profile"
-                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
-              >
-                {user.name}
-                <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
-                  {user.role}
-                </span>
-              </Link>
-              <button
-                onClick={signOut}
-                className="rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
-              >
-                Log out
-              </button>
-            </div>
+            <Menu>
+              <MenuTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Account menu"
+                    className="group flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-slate-600 outline-none transition-colors hover:bg-slate-100 hover:text-slate-900 data-[popup-open]:bg-slate-100 data-[popup-open]:text-slate-900"
+                  >
+                    {user.name}
+                    <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
+                      {user.role}
+                    </span>
+                    <ChevronDownIcon className="size-4 opacity-60 transition-transform group-data-[popup-open]:rotate-180" />
+                  </button>
+                }
+              />
+              <MenuPopup align="end" sideOffset={8} className="min-w-[13rem]">
+                <div className="px-2 py-1.5">
+                  <p className="truncate text-sm font-medium text-slate-900">
+                    {user.name}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    @{user.username}
+                  </p>
+                </div>
+                <MenuSeparator />
+                <MenuItem render={<Link href="/profile" />}>
+                  <UserIcon />
+                  Profile
+                </MenuItem>
+                <MenuItem render={<Link href="/dashboard" />}>
+                  <LayoutDashboardIcon />
+                  Dashboard
+                </MenuItem>
+                <MenuItem render={<Link href="/leaderboard" />}>
+                  <TrophyIcon />
+                  Leaderboard
+                </MenuItem>
+                {user.role === "teacher" && (
+                  <MenuItem render={<Link href="/admin" />}>
+                    <SlidersHorizontalIcon />
+                    Teacher tools
+                  </MenuItem>
+                )}
+                <MenuSeparator />
+                <MenuItem variant="destructive" onClick={signOut}>
+                  <LogOutIcon />
+                  Log out
+                </MenuItem>
+              </MenuPopup>
+            </Menu>
           ) : (
             pathname !== "/login" && (
               <Link
