@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logout, useSession } from "@/lib/auth";
@@ -9,24 +9,47 @@ export function SiteHeader() {
   const { user } = useSession();
   const pathname = usePathname();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const optionsRef = useRef<HTMLDivElement>(null);
 
-  // Close the mobile menu whenever the route changes.
+  // Close both menus whenever the route changes.
   useEffect(() => {
-    setOpen(false);
+    setNavOpen(false);
+    setOptionsOpen(false);
   }, [pathname]);
 
+  // Close the options dropdown on outside click or Escape.
+  useEffect(() => {
+    if (!optionsOpen) return;
+    function onPointerDown(e: MouseEvent) {
+      if (optionsRef.current && !optionsRef.current.contains(e.target as Node)) {
+        setOptionsOpen(false);
+      }
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOptionsOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [optionsOpen]);
+
+  // Primary nav. Dashboard now lives in the options menu, not the bar.
   const navItems = [
     { href: "/", label: "Home" },
     { href: "/practice", label: "Practice" },
     { href: "/tests", label: "Tests" },
     { href: "/books", label: "Books" },
-    { href: "/dashboard", label: "Dashboard" },
     ...(user?.role === "teacher" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
   function signOut() {
-    setOpen(false);
+    setNavOpen(false);
+    setOptionsOpen(false);
     logout();
     router.replace("/login");
   }
@@ -49,8 +72,8 @@ export function SiteHeader() {
           Lexora
         </Link>
 
-        {/* Desktop / tablet: inline nav + user menu */}
-        <div className="hidden flex-1 items-center justify-end gap-4 sm:flex">
+        {/* Desktop / tablet: inline nav + single options icon */}
+        <div className="hidden flex-1 items-center justify-end gap-3 sm:flex">
           {user && (
             <nav className="flex gap-1 text-sm">
               {navItems.map((item) => (
@@ -70,19 +93,49 @@ export function SiteHeader() {
           )}
 
           {user ? (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-slate-600">
-                {user.name}
-                <span className="ml-1.5 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
-                  {user.role}
-                </span>
-              </span>
+            <div className="relative" ref={optionsRef}>
               <button
-                onClick={signOut}
-                className="rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
+                type="button"
+                onClick={() => setOptionsOpen((v) => !v)}
+                aria-label="Options"
+                aria-haspopup="menu"
+                aria-expanded={optionsOpen}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
               >
-                Log out
+                <GearIcon />
               </button>
+
+              {optionsOpen && (
+                <div
+                  role="menu"
+                  aria-label="Options"
+                  className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
+                >
+                  <div className="border-b border-slate-100 px-3 py-2.5">
+                    <p className="truncate text-sm font-medium text-slate-800">
+                      {user.name}
+                    </p>
+                    <p className="text-xs capitalize text-slate-500">
+                      {user.role}
+                    </p>
+                  </div>
+                  <Link
+                    href="/dashboard"
+                    role="menuitem"
+                    onClick={() => setOptionsOpen(false)}
+                    className="block px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    Dashboard
+                  </Link>
+                  <button
+                    role="menuitem"
+                    onClick={signOut}
+                    className="block w-full border-t border-slate-100 px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    Log out
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             pathname !== "/login" && (
@@ -101,13 +154,13 @@ export function SiteHeader() {
           {user ? (
             <button
               type="button"
-              onClick={() => setOpen((v) => !v)}
-              aria-label={open ? "Close menu" : "Open menu"}
-              aria-expanded={open}
+              onClick={() => setNavOpen((v) => !v)}
+              aria-label={navOpen ? "Close menu" : "Open menu"}
+              aria-expanded={navOpen}
               aria-controls="mobile-menu"
               className="-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100"
             >
-              {open ? <CloseIcon /> : <MenuIcon />}
+              {navOpen ? <CloseIcon /> : <MenuIcon />}
             </button>
           ) : (
             pathname !== "/login" && (
@@ -123,24 +176,17 @@ export function SiteHeader() {
       </div>
 
       {/* Mobile dropdown panel */}
-      {user && open && (
+      {user && navOpen && (
         <nav
           id="mobile-menu"
           className="border-t border-slate-200 px-4 py-3 sm:hidden"
         >
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm text-slate-700">{user.name}</span>
-            <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
-              {user.role}
-            </span>
-          </div>
-
           <ul className="space-y-1">
             {navItems.map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  onClick={() => setOpen(false)}
+                  onClick={() => setNavOpen(false)}
                   className={`block rounded-md px-3 py-2.5 text-sm transition-colors ${
                     isActive(item.href)
                       ? "bg-brand-50 font-medium text-brand-700"
@@ -153,15 +199,49 @@ export function SiteHeader() {
             ))}
           </ul>
 
-          <button
-            onClick={signOut}
-            className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Log out
-          </button>
+          <div className="mt-3 border-t border-slate-200 pt-3">
+            <div className="px-3 pb-2">
+              <p className="truncate text-sm font-medium text-slate-800">
+                {user.name}
+              </p>
+              <p className="text-xs capitalize text-slate-500">{user.role}</p>
+            </div>
+            <Link
+              href="/dashboard"
+              onClick={() => setNavOpen(false)}
+              className="block rounded-md px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100"
+            >
+              Dashboard
+            </Link>
+            <button
+              onClick={signOut}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Log out
+            </button>
+          </div>
         </nav>
       )}
     </header>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
   );
 }
 
