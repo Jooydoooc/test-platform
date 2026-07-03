@@ -73,12 +73,16 @@ export function SiteHeader() {
 
           {user ? (
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-slate-600">
+              <Link
+                href="/profile"
+                aria-label="Your profile"
+                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+              >
                 {user.name}
-                <span className="ml-1.5 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
+                <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
                   {user.role}
                 </span>
-              </span>
+              </Link>
               <button
                 onClick={signOut}
                 className="rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
