@@ -22,6 +22,8 @@ export function SiteHeader() {
     { href: "/tests", label: "Tests" },
     { href: "/books", label: "Books" },
     { href: "/dashboard", label: "Dashboard" },
+    { href: "/leaderboard", label: "Leaderboard" },
+    { href: "/profile", label: "Profile" },
     ...(user?.role === "teacher" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
@@ -49,8 +51,8 @@ export function SiteHeader() {
           Lexora
         </Link>
 
-        {/* Desktop / tablet: inline nav + user menu */}
-        <div className="hidden flex-1 items-center justify-end gap-4 sm:flex">
+        {/* Desktop: inline nav + user menu */}
+        <div className="hidden flex-1 items-center justify-end gap-3 lg:flex">
           {user && (
             <nav className="flex gap-1 text-sm">
               {navItems.map((item) => (
@@ -96,8 +98,8 @@ export function SiteHeader() {
           )}
         </div>
 
-        {/* Mobile: hamburger toggle (or inline Sign in when logged out) */}
-        <div className="sm:hidden">
+        {/* Mobile / tablet: hamburger toggle (or inline Sign in when logged out) */}
+        <div className="lg:hidden">
           {user ? (
             <button
               type="button"
@@ -126,7 +128,7 @@ export function SiteHeader() {
       {user && open && (
         <nav
           id="mobile-menu"
-          className="border-t border-slate-200 px-4 py-3 sm:hidden"
+          className="border-t border-slate-200 px-4 py-3 lg:hidden"
         >
           <div className="mb-3 flex items-center justify-between">
             <span className="text-sm text-slate-700">{user.name}</span>
