@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Card, LinkButton } from "@/components/ui";
+import { BookIcon } from "@/components/icons";
 import { bookOf, categoryOf, useTests } from "@/lib/store";
 import { CATEGORIES, orderBooks, type Category } from "@/lib/types";
 import type { Test } from "@/lib/types";
@@ -13,10 +14,14 @@ export default function BooksPage() {
   const byCategory = useMemo(() => {
     return CATEGORIES.map((cat) => {
       const inCat = tests.filter((t) => categoryOf(t) === cat);
-      const books = orderBooks(cat, inCat.map(bookOf)).map((book) => ({
-        book,
-        tests: inCat.filter((t) => bookOf(t) === book),
-      }));
+      const books = orderBooks(cat, inCat.map(bookOf))
+        .map((book) => ({
+          book,
+          tests: inCat.filter((t) => bookOf(t) === book),
+        }))
+        // Only show books that actually have units; empty catalog entries
+        // would otherwise render as hollow cards.
+        .filter((b) => b.tests.length > 0);
       return { cat, books, count: inCat.length };
     });
   }, [tests]);
@@ -56,15 +61,20 @@ function CategorySection({
       </div>
 
       {count === 0 ? (
-        <Card>
-          <p className="text-sm text-slate-500">No books in this level yet.</p>
-        </Card>
+        <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
+          No books in this level yet.
+        </div>
       ) : (
         <div className="space-y-4">
           {books.map(({ book, tests }) => (
             <Card key={book} className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="font-semibold">📘 {book}</h3>
+                <h3 className="flex items-center gap-2 font-semibold text-slate-900">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/15">
+                    <BookIcon width={16} height={16} />
+                  </span>
+                  {book}
+                </h3>
                 <span className="text-xs text-slate-500">
                   {tests.length} {tests.length === 1 ? "unit" : "units"}
                 </span>

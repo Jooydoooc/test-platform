@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Card, inputClass } from "@/components/ui";
+import { TrophyIcon } from "@/components/icons";
 import { useAttempts } from "@/lib/store";
 import { LEVELS, type Attempt } from "@/lib/types";
 
@@ -66,7 +67,10 @@ export default function LeaderboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">🏆 Leaderboard</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900">
+            <TrophyIcon width={24} height={24} className="text-amber-500" />
+            Leaderboard
+          </h1>
           <p className="text-sm text-slate-600">
             Top scores ranked by percentage.
           </p>

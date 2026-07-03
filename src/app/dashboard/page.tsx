@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Card, ProgressBar } from "@/components/ui";
+import { TrophyIcon } from "@/components/icons";
 import { useAttempts } from "@/lib/store";
 import type { Attempt } from "@/lib/types";
 
@@ -121,7 +122,10 @@ export default function DashboardPage() {
 
           {/* Mini leaderboard */}
           <section className="space-y-3">
-            <h2 className="font-semibold text-slate-900">🏆 Top scores</h2>
+            <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+              <TrophyIcon width={18} height={18} className="text-amber-500" />
+              Top scores
+            </h2>
             <Card className="overflow-hidden p-0">
               <table className="w-full text-sm">
                 <thead className="border-b border-slate-200 text-left text-slate-500">
