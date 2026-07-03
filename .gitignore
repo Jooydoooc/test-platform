@@ -7,3 +7,5 @@ out
 .playwright-mcp/
 .vercel
 *.tsbuildinfo
+
+.claude/

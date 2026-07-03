@@ -32,7 +32,7 @@ export default function TestsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Take a test</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Take a test</h1>
         <p className="text-sm text-slate-600">Choose a test below to begin.</p>
       </div>
 
@@ -75,7 +75,7 @@ export default function TestsPage() {
                     aria-current={isActive ? "page" : undefined}
                     className={`flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm font-medium transition ${
                       isActive
-                        ? "bg-slate-900 text-white"
+                        ? "bg-brand-600 text-white"
                         : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                     }`}
                   >

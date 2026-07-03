@@ -26,12 +26,19 @@ function LoginForm() {
   }
 
   return (
-    <div className="mx-auto max-w-sm space-y-6">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold">Sign in</h1>
-        <p className="text-sm text-slate-600">
-          Log in to author or take tests.
-        </p>
+    <div className="mx-auto max-w-sm space-y-6 pt-4 sm:pt-10">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold text-white shadow-sm">
+          L
+        </span>
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            Sign in to Lexora
+          </h1>
+          <p className="text-sm text-slate-600">
+            Your private English practice and progress space.
+          </p>
+        </div>
       </div>
 
       <Card>

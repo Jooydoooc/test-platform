@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Card } from "@/components/ui";
+import { Card, ProgressBar } from "@/components/ui";
 import { useAttempts } from "@/lib/store";
 import type { Attempt } from "@/lib/types";
 
@@ -45,7 +45,9 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          Dashboard
+        </h1>
         <p className="text-sm text-slate-600">
           Your progress, recent results, and the top of the leaderboard.
         </p>
@@ -54,8 +56,13 @@ export default function DashboardPage() {
       {/* Progress stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Attempts" value={stats.count} />
-        <Stat label="Average" value={`${stats.avg}%`} />
-        <Stat label="Best" value={`${stats.best}%`} />
+        <Stat label="Average" value={`${stats.avg}%`} progress={stats.avg} />
+        <Stat
+          label="Best"
+          value={`${stats.best}%`}
+          progress={stats.best}
+          tone="amber"
+        />
         <Stat label="Tests taken" value={stats.tests} />
       </div>
 
@@ -99,7 +106,7 @@ export default function DashboardPage() {
                         </td>
                         <td
                           className={`px-4 py-2.5 text-right font-semibold tabular-nums ${
-                            p >= 50 ? "text-green-600" : "text-red-600"
+                            p >= 50 ? "text-emerald-600" : "text-rose-600"
                           }`}
                         >
                           {p}%
@@ -142,7 +149,7 @@ export default function DashboardPage() {
                             {a.testTitle}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-green-600">
+                        <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-emerald-600">
                           {p}%
                         </td>
                       </tr>
@@ -158,13 +165,28 @@ export default function DashboardPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+function Stat({
+  label,
+  value,
+  progress,
+  tone = "brand",
+}: {
+  label: string;
+  value: string | number;
+  progress?: number;
+  tone?: "brand" | "amber";
+}) {
   return (
     <Card className="p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
         {label}
       </p>
-      <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
+        {value}
+      </p>
+      {progress !== undefined && (
+        <ProgressBar value={progress} tone={tone} className="mt-2.5" />
+      )}
     </Card>
   );
 }

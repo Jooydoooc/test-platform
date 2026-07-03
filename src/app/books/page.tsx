@@ -24,7 +24,7 @@ export default function BooksPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Books</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Books</h1>
         <p className="text-sm text-slate-600">
           Browse every book by level. Open a unit to practise its questions.
         </p>
