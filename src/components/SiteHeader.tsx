@@ -182,9 +182,23 @@ export function SiteHeader() {
           id="mobile-menu"
           className="border-t border-slate-200 px-4 py-3 lg:hidden"
         >
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm text-slate-700">{user.name}</span>
-            <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
+          {/* Account identity — mirrors the desktop dropdown header */}
+          <div className="mb-3 flex items-center gap-3">
+            <span
+              aria-hidden
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white"
+            >
+              {user.name.trim().charAt(0).toUpperCase() || "?"}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-slate-900">
+                {user.name}
+              </p>
+              <p className="truncate text-xs text-slate-500">
+                @{user.username}
+              </p>
+            </div>
+            <span className="ms-auto shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
               {user.role}
             </span>
           </div>
@@ -207,10 +221,14 @@ export function SiteHeader() {
             ))}
           </ul>
 
+          <div className="my-2 h-px bg-slate-200" />
+
+          {/* Destructive Log out — mirrors the dropdown's destructive item */}
           <button
             onClick={signOut}
-            className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
           >
+            <LogOutIcon className="size-4" />
             Log out
           </button>
         </nav>
