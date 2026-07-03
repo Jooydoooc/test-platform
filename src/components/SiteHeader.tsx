@@ -111,14 +111,24 @@ export function SiteHeader() {
                   aria-label="Options"
                   className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
                 >
-                  <div className="border-b border-slate-100 px-3 py-2.5">
-                    <p className="truncate text-sm font-medium text-slate-800">
-                      {user.name}
-                    </p>
-                    <p className="text-xs capitalize text-slate-500">
-                      {user.role}
-                    </p>
-                  </div>
+                  <Link
+                    href="/dashboard"
+                    role="menuitem"
+                    onClick={() => setOptionsOpen(false)}
+                    className="flex items-center gap-3 border-b border-slate-100 px-3 py-2.5 hover:bg-slate-50"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700">
+                      {initial(user.name)}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-slate-800">
+                        {user.name}
+                      </span>
+                      <span className="block text-xs capitalize text-slate-500">
+                        Profile · {user.role}
+                      </span>
+                    </span>
+                  </Link>
                   <Link
                     href="/dashboard"
                     role="menuitem"
@@ -200,16 +210,27 @@ export function SiteHeader() {
           </ul>
 
           <div className="mt-3 border-t border-slate-200 pt-3">
-            <div className="px-3 pb-2">
-              <p className="truncate text-sm font-medium text-slate-800">
-                {user.name}
-              </p>
-              <p className="text-xs capitalize text-slate-500">{user.role}</p>
-            </div>
             <Link
               href="/dashboard"
               onClick={() => setNavOpen(false)}
-              className="block rounded-md px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100"
+              className="flex items-center gap-3 rounded-md px-3 py-2 hover:bg-slate-100"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700">
+                {initial(user.name)}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-slate-800">
+                  {user.name}
+                </span>
+                <span className="block text-xs capitalize text-slate-500">
+                  Profile · {user.role}
+                </span>
+              </span>
+            </Link>
+            <Link
+              href="/dashboard"
+              onClick={() => setNavOpen(false)}
+              className="mt-1 block rounded-md px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100"
             >
               Dashboard
             </Link>
@@ -224,6 +245,10 @@ export function SiteHeader() {
       )}
     </header>
   );
+}
+
+function initial(name: string) {
+  return name.trim().charAt(0).toUpperCase() || "?";
 }
 
 function GearIcon() {
