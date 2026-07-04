@@ -214,7 +214,7 @@ function Results({
   const pct = total > 0 ? Math.round((score / total) * 100) : 0;
 
   function label(q: Question, ids: string[]): string {
-    if (q.type === "short") return ids[0] || "—";
+    if (q.type === "short" || q.type === "gap") return ids[0] || "—";
     if (q.type === "boolean")
       return ids[0] === "false" ? "False" : ids[0] === "true" ? "True" : "—";
     const texts = ids

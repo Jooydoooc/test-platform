@@ -18,6 +18,7 @@ const ATTEMPTS_KEY = "tp.attempts";
 // Bumped when new built-in seed tests are shipped, so existing users who were
 // seeded earlier get them added on their next load (see loadTests).
 const EEW1_SEED_FLAG = "tp.seed.eew1";
+const GAP1_SEED_FLAG = "tp.seed.gap1";
 
 export function uid(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -219,6 +220,74 @@ function buildVocabTests(now: number): Test[] {
   });
 }
 
+// ---- built-in grammar gap-fill practice ----
+// Single-blank fill-in-the-blank items. The blank is marked in the prompt with
+// underscores; accepted answers live in `correct` (case-insensitive match).
+function buildGapTest(now: number): Test {
+  const items: Array<{ prompt: string; correct: string[]; explanation: string }> = [
+    {
+      prompt: "She ___ to school every morning.",
+      correct: ["goes"],
+      explanation: "Third-person singular in the present simple takes -s: he/she/it goes.",
+    },
+    {
+      prompt: "They ___ watching a film at the moment.",
+      correct: ["are"],
+      explanation: "Present continuous with 'they' uses 'are' + verb-ing.",
+    },
+    {
+      prompt: "I have lived in this city ___ 2015.",
+      correct: ["since"],
+      explanation: "'Since' marks a point in time; 'for' marks a length of time.",
+    },
+    {
+      prompt: "If it rains tomorrow, we ___ stay at home.",
+      correct: ["will", "'ll"],
+      explanation: "First conditional: if + present simple, will + base verb.",
+    },
+    {
+      prompt: "This is the ___ book I have ever read.",
+      correct: ["best"],
+      explanation: "The superlative of 'good' is 'best'.",
+    },
+    {
+      prompt: "There aren't ___ apples left in the basket.",
+      correct: ["any"],
+      explanation: "Use 'any' with plural nouns in negative sentences.",
+    },
+    {
+      prompt: "He was tired, ___ he went to bed early.",
+      correct: ["so"],
+      explanation: "'So' introduces a result; 'because' introduces a reason.",
+    },
+    {
+      prompt: "I look forward ___ hearing from you.",
+      correct: ["to"],
+      explanation: "'Look forward to' is followed by a noun or verb-ing.",
+    },
+  ];
+  const questions: Question[] = items.map((it, i) => ({
+    id: `gap1q${i + 1}`,
+    type: "gap" as const,
+    prompt: it.prompt,
+    choices: [],
+    correct: it.correct,
+    points: 1,
+    explanation: it.explanation,
+  }));
+  return {
+    id: "grammar-gap-1",
+    title: "Grammar · Gap-Fill Practice",
+    description: "Fill in the missing word to complete each sentence.",
+    category: DEFAULT_CATEGORY,
+    book: "Essential Grammar",
+    group: "Grammar Tests",
+    questions,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 // ---- seed data so the app isn't empty on first load ----
 
 function seedTests(): Test[] {
@@ -278,6 +347,7 @@ function seedTests(): Test[] {
       ],
     },
     ...buildVocabTests(now),
+    buildGapTest(now),
   ];
 }
 
@@ -290,15 +360,26 @@ export function loadTests(): Test[] {
     write(TESTS_KEY, seeded);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(EEW1_SEED_FLAG, "1");
+      window.localStorage.setItem(GAP1_SEED_FLAG, "1");
     }
     return seeded;
   }
-  // One-time backfill: users seeded before the vocabulary tests shipped get any
-  // missing units added (existing edits/deletions of other tests are untouched).
-  if (typeof window !== "undefined" && !window.localStorage.getItem(EEW1_SEED_FLAG)) {
+  // One-time backfills: users seeded before a batch of built-in tests shipped
+  // get the missing ones added (their edits/deletions of others are untouched).
+  if (typeof window !== "undefined") {
     const have = new Set(existing.map((t) => t.id));
-    const additions = buildVocabTests(Date.now()).filter((t) => !have.has(t.id));
-    window.localStorage.setItem(EEW1_SEED_FLAG, "1");
+    const additions: Test[] = [];
+    if (!window.localStorage.getItem(EEW1_SEED_FLAG)) {
+      additions.push(
+        ...buildVocabTests(Date.now()).filter((t) => !have.has(t.id)),
+      );
+      window.localStorage.setItem(EEW1_SEED_FLAG, "1");
+    }
+    if (!window.localStorage.getItem(GAP1_SEED_FLAG)) {
+      const gap = buildGapTest(Date.now());
+      if (!have.has(gap.id)) additions.push(gap);
+      window.localStorage.setItem(GAP1_SEED_FLAG, "1");
+    }
     if (additions.length > 0) {
       const merged = [...existing, ...additions];
       write(TESTS_KEY, merged);
@@ -411,7 +492,8 @@ function norm(s: string): string {
 
 /** Returns points earned for one question given the taker's answer. */
 export function gradeQuestion(q: Question, answer: string[] = []): number {
-  if (q.type === "short") {
+  // short and gap both match a typed answer against accepted answers.
+  if (q.type === "short" || q.type === "gap") {
     const given = norm(answer[0] ?? "");
     return given && q.correct.some((c) => norm(c) === given) ? q.points : 0;
   }

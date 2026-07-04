@@ -1,6 +1,6 @@
 // Core domain types for the test platform.
 
-export type QuestionType = "single" | "multiple" | "boolean" | "short";
+export type QuestionType = "single" | "multiple" | "boolean" | "short" | "gap";
 
 export interface Choice {
   id: string;
@@ -11,10 +11,11 @@ export interface Question {
   id: string;
   type: QuestionType;
   prompt: string;
-  /** Choices for single/multiple. Empty for boolean/short. */
+  /** Choices for single/multiple. Empty for boolean/short/gap. */
   choices: Choice[];
   /** IDs of correct choices (single/multiple), "true"/"false" (boolean),
-   *  or accepted answer strings (short). */
+   *  or accepted answer strings (short/gap). For gap, the prompt marks the
+   *  blank with two or more underscores, e.g. "She ___ to school." */
   correct: string[];
   points: number;
   /** Optional short explanation shown after checking in practice mode. */

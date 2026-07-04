@@ -230,9 +230,11 @@ export function QuestionRunner({
           </span>
         </div>
 
-        <p className={`${sora.className} mt-3 text-lg font-semibold leading-snug sm:text-xl`}>
-          {q.prompt}
-        </p>
+        {q.type !== "gap" && (
+          <p className={`${sora.className} mt-3 text-lg font-semibold leading-snug sm:text-xl`}>
+            {q.prompt}
+          </p>
+        )}
 
         <div className="mt-5">
           <Options
@@ -245,7 +247,7 @@ export function QuestionRunner({
         </div>
 
         {/* Single-answer selection echo, e.g. "You selected A." */}
-        {!checked && !isMultiAnswer(q) && q.type !== "short" && (
+        {!checked && !isMultiAnswer(q) && q.type !== "short" && q.type !== "gap" && (
           <p className="mt-3 min-h-[1.25rem] text-sm text-[#6b7280]">
             {selectionEcho(q, answer) ?? " "}
           </p>
@@ -336,6 +338,18 @@ function Options({
   onChange: (v: string[]) => void;
 }) {
   const q = question;
+
+  if (q.type === "gap") {
+    return (
+      <GapSentence
+        question={q}
+        answer={answer}
+        disabled={disabled}
+        reveal={reveal}
+        onChange={onChange}
+      />
+    );
+  }
 
   if (q.type === "short") {
     return (
@@ -452,6 +466,66 @@ function OptionCard({
 }
 
 // ----------------------------------------------------------------------------
+// Gap-fill: the sentence with an inline blank the student types into
+// ----------------------------------------------------------------------------
+
+function GapSentence({
+  question,
+  answer,
+  disabled,
+  reveal,
+  onChange,
+}: {
+  question: Question;
+  answer: string[];
+  disabled: boolean;
+  reveal: boolean;
+  onChange: (v: string[]) => void;
+}) {
+  // The prompt marks the blank with two or more underscores. Split into the
+  // text before the blank and the text after it (first blank only in v1).
+  const match = question.prompt.match(/_{2,}/);
+  const before = match ? question.prompt.slice(0, match.index) : question.prompt;
+  const after = match ? question.prompt.slice(match.index! + match[0].length) : "";
+
+  // On reveal, colour the input by whether the typed answer was accepted.
+  const isCorrect = reveal && gradeQuestion(question, answer) === question.points;
+  const borderColor = reveal
+    ? isCorrect
+      ? TOKENS.success
+      : TOKENS.error
+    : TOKENS.accent;
+
+  const input = (
+    <input
+      className="mx-1 inline-block min-w-[7rem] max-w-full border-b-2 bg-transparent px-1 pb-0.5 text-center text-lg font-semibold outline-none sm:text-xl"
+      style={{ borderColor, color: TOKENS.text }}
+      value={answer[0] ?? ""}
+      disabled={disabled}
+      autoComplete="off"
+      autoCapitalize="off"
+      spellCheck={false}
+      aria-label="Fill in the blank"
+      placeholder="…"
+      onChange={(e) => onChange([e.target.value])}
+    />
+  );
+
+  return (
+    <p
+      className={`${sora.className} text-lg leading-relaxed sm:text-xl`}
+      style={{ color: TOKENS.text }}
+    >
+      {before}
+      {match ? input : null}
+      {after}
+      {/* No blank marker in the prompt: offer the input on its own line. */}
+      {!match && <span className="mt-3 block">{input}</span>}
+    </p>
+  );
+}
+
+// ----------------------------------------------------------------------------
 // Practice feedback
 // ----------------------------------------------------------------------------
 
@@ -466,7 +540,7 @@ function Feedback({
   const color = correct ? TOKENS.success : TOKENS.error;
   const opts = optionsFor(question);
   const correctText =
-    question.type === "short"
+    question.type === "short" || question.type === "gap"
       ? question.correct.join(", ")
       : question.correct
           .map((id) => opts.find((o) => o.id === id)?.text)

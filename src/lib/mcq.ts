@@ -25,6 +25,7 @@ export function isMultiAnswer(q: Question): boolean {
 /** The instruction line shown under the question number. */
 export function instructionFor(q: Question): string {
   if (q.type === "multiple") return "Choose all correct answers.";
+  if (q.type === "gap") return "Fill in the blank.";
   if (q.type === "short") return "Type your answer.";
   return "Choose one answer.";
 }

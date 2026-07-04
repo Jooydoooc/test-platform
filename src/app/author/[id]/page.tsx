@@ -11,6 +11,7 @@ const TYPE_LABELS: Record<QuestionType, string> = {
   multiple: "Multiple choice",
   boolean: "True / False",
   short: "Short answer",
+  gap: "Gap-fill",
 };
 
 // Scoped DESIGN_STYLE tokens (near-white / navy / gold). Applied here only
@@ -392,8 +393,18 @@ function QuestionBody({
           rows={2}
           value={q.prompt}
           onChange={(e) => onChange({ prompt: e.target.value })}
-          placeholder="Type the question…"
+          placeholder={
+            q.type === "gap"
+              ? "Mark the blank with underscores, e.g. She ___ to school."
+              : "Type the question…"
+          }
         />
+        {q.type === "gap" && (
+          <span className="mt-1 block text-xs text-[#6b6a63]">
+            Mark the blank with two or more underscores (___). The student types
+            the missing word.
+          </span>
+        )}
       </Field>
 
       {(q.type === "single" || q.type === "multiple") && (
@@ -451,7 +462,7 @@ function QuestionBody({
         </Field>
       )}
 
-      {q.type === "short" && (
+      {(q.type === "short" || q.type === "gap") && (
         <Field label="Accepted answers (one per line, case-insensitive)">
           <textarea
             className={input}
