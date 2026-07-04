@@ -11,11 +11,24 @@ This file is the final checkpoint before any code is written. It consolidates th
 
 ## Tech stack
 
-Same stack as the existing Speak_Age platform, for consistency and to reuse known-working infrastructure:
-- **Backend**: Node.js / Express
-- **Database**: PostgreSQL via Neon
-- **Auth**: JWT + Google OAuth
+**Updated: the backend is Supabase** (decision recorded when the localStorage
+prototype was migrated). This supersedes the earlier Speak_Age-style
+Node/Express + Neon + hand-rolled JWT plan; Supabase gives Auth + Google OAuth +
+Postgres + Row Level Security out of the box and is enforced with RLS rather than
+route guards alone.
+
+- **App**: Next.js (App Router) on Vercel
+- **Backend / Database**: Supabase (managed PostgreSQL)
+- **Auth**: Supabase Auth (email/password + Google OAuth) — not a separate JWT layer
+- **Authorization**: Postgres Row Level Security is the real enforcement, plus
+  server-side route protection in `src/middleware.ts` (defense in depth)
 - **Deployment**: Vercel
+- **Service role**: `SUPABASE_SERVICE_ROLE_KEY` is server-only (grading/admin
+  writes); never exposed to the client. Anon key + RLS is safe in the browser.
+
+The earlier Express + Prisma + Neon scaffold in `server/` is kept **dormant** for
+reference (its Prisma schema was the basis for the Supabase SQL in
+`supabase/migrations/`), but is not the active backend.
 
 ## Core data model (canonical entities)
 
