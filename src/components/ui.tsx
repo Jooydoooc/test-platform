@@ -95,7 +95,7 @@ export function ProgressBar({
 }: {
   value: number;
   className?: string;
-  tone?: "brand" | "success" | "amber";
+  tone?: "brand" | "success" | "amber" | "error";
 }) {
   const pct = Math.max(0, Math.min(100, value));
   const fill =
@@ -103,7 +103,9 @@ export function ProgressBar({
       ? "bg-emerald-500"
       : tone === "amber"
         ? "bg-amber-500"
-        : "bg-brand-600";
+        : tone === "error"
+          ? "bg-error"
+          : "bg-brand-600";
   return (
     <div
       className={`h-2 w-full overflow-hidden rounded-full bg-slate-100 ${className}`}
