@@ -66,7 +66,7 @@ export function SiteHeader() {
           href="/"
           className="group flex shrink-0 items-center gap-2 text-base font-semibold tracking-tight text-slate-900 sm:text-lg"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white shadow-sm">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 text-sm font-bold text-brand-600 shadow-sm">
             L
           </span>
           Lexora
@@ -82,7 +82,7 @@ export function SiteHeader() {
                   href={item.href}
                   className={`rounded-md px-3 py-1.5 transition-colors ${
                     isActive(item.href)
-                      ? "bg-brand-50 font-medium text-brand-700"
+                      ? "bg-accent-100 font-medium text-brand-700"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                   }`}
                 >
@@ -199,7 +199,7 @@ export function SiteHeader() {
                   onClick={() => setNavOpen(false)}
                   className={`block rounded-md px-3 py-2.5 text-sm transition-colors ${
                     isActive(item.href)
-                      ? "bg-brand-50 font-medium text-brand-700"
+                      ? "bg-accent-100 font-medium text-brand-700"
                       : "text-slate-700 hover:bg-slate-100"
                   }`}
                 >

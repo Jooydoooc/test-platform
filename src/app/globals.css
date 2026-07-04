@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 :root {
-  /* Cool, near-white study surface. Not cream, not flat white. */
-  --background: #f6f7f9;
-  --foreground: #0f172a;
+  /* Warm near-white study surface (DESIGN_STYLE.md) — not cream, not flat white. */
+  --background: #fafaf8;
+  --foreground: #1b2130;
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     sans-serif;
 }
@@ -23,8 +23,8 @@ body {
     Roboto,
     sans-serif
   );
-  /* Brand-tint native controls (checkbox, radio, range) app-wide. */
-  accent-color: #5a3fca;
+  /* Gold-tint native controls (checkbox, radio, range) app-wide. */
+  accent-color: #e3a82b;
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -35,15 +35,23 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Consistent, brand-tinted focus ring for keyboard users across the app. */
+/* Sora for headings / display, per DESIGN_STYLE.md. Falls back to Inter. */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display, var(--font-sans));
+}
+
+/* Consistent, navy focus ring for keyboard users across the app. */
 :where(a, button, input, select, textarea):focus-visible {
-  outline: 2px solid #5a3fca;
+  outline: 2px solid #1b2130;
   outline-offset: 2px;
 }
 
 ::selection {
-  background: #d1ccf7;
-  color: #35276b;
+  background: #f3e4c0;
+  color: #1b2130;
 }
 
 @media (prefers-reduced-motion: reduce) {

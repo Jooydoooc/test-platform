@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Sora, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/SiteHeader";
 import { AuthGate } from "@/components/AuthGate";
@@ -9,6 +9,21 @@ const inter = Inter({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-sans",
+});
+
+// Sora (headings) + IBM Plex Mono (scores/numbers) per DESIGN_STYLE.md.
+const sora = Sora({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-display",
+  weight: ["500", "600", "700"],
+});
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-mono",
+  weight: ["500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -33,7 +48,10 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html
+      lang="en"
+      className={`${inter.variable} ${sora.variable} ${plexMono.variable}`}
+    >
       <body className="min-h-screen antialiased">
         <SiteHeader />
         <main className="mx-auto max-w-5xl px-4 py-8 sm:py-10">
