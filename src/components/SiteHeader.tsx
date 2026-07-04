@@ -1,55 +1,49 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import {
+  ChevronDownIcon,
+  LayoutDashboardIcon,
+  LogOutIcon,
+  SlidersHorizontalIcon,
+  TrophyIcon,
+  UserIcon,
+} from "lucide-react";
+import {
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuTrigger,
+} from "@/components/ui/menu";
 import { logout, useSession } from "@/lib/auth";
 
 export function SiteHeader() {
   const { user } = useSession();
   const pathname = usePathname();
   const router = useRouter();
-  const [navOpen, setNavOpen] = useState(false);
-  const [optionsOpen, setOptionsOpen] = useState(false);
-  const optionsRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
 
-  // Close both menus whenever the route changes.
+  // Close the mobile menu whenever the route changes.
   useEffect(() => {
-    setNavOpen(false);
-    setOptionsOpen(false);
+    setOpen(false);
   }, [pathname]);
 
-  // Close the options dropdown on outside click or Escape.
-  useEffect(() => {
-    if (!optionsOpen) return;
-    function onPointerDown(e: MouseEvent) {
-      if (optionsRef.current && !optionsRef.current.contains(e.target as Node)) {
-        setOptionsOpen(false);
-      }
-    }
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setOptionsOpen(false);
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [optionsOpen]);
-
-  // Primary nav. Dashboard now lives in the options menu, not the bar.
   const navItems = [
     { href: "/", label: "Home" },
     { href: "/practice", label: "Practice" },
     { href: "/tests", label: "Tests" },
     { href: "/books", label: "Books" },
+    { href: "/dashboard", label: "Dashboard" },
+    { href: "/leaderboard", label: "Leaderboard" },
+    { href: "/profile", label: "Profile" },
     ...(user?.role === "teacher" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
   function signOut() {
-    setNavOpen(false);
-    setOptionsOpen(false);
+    setOpen(false);
     logout();
     router.replace("/login");
   }
@@ -66,14 +60,14 @@ export function SiteHeader() {
           href="/"
           className="group flex shrink-0 items-center gap-2 text-base font-semibold tracking-tight text-slate-900 sm:text-lg"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 text-sm font-bold text-brand-600 shadow-sm">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white shadow-sm">
             L
           </span>
           Lexora
         </Link>
 
-        {/* Desktop / tablet: inline nav + single options icon */}
-        <div className="hidden flex-1 items-center justify-end gap-3 sm:flex">
+        {/* Desktop: inline nav + user menu */}
+        <div className="hidden flex-1 items-center justify-end gap-3 lg:flex">
           {user && (
             <nav className="flex gap-1 text-sm">
               {navItems.map((item) => (
@@ -82,7 +76,7 @@ export function SiteHeader() {
                   href={item.href}
                   className={`rounded-md px-3 py-1.5 transition-colors ${
                     isActive(item.href)
-                      ? "bg-accent-100 font-medium text-brand-700"
+                      ? "bg-brand-50 font-medium text-brand-700"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                   }`}
                 >
@@ -93,60 +87,57 @@ export function SiteHeader() {
           )}
 
           {user ? (
-            <div className="relative" ref={optionsRef}>
-              <button
-                type="button"
-                onClick={() => setOptionsOpen((v) => !v)}
-                aria-label="Options"
-                aria-haspopup="menu"
-                aria-expanded={optionsOpen}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
-              >
-                <GearIcon />
-              </button>
-
-              {optionsOpen && (
-                <div
-                  role="menu"
-                  aria-label="Options"
-                  className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
-                >
-                  <Link
-                    href="/dashboard"
-                    role="menuitem"
-                    onClick={() => setOptionsOpen(false)}
-                    className="flex items-center gap-3 border-b border-slate-100 px-3 py-2.5 hover:bg-slate-50"
-                  >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700">
-                      {initial(user.name)}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-slate-800">
-                        {user.name}
-                      </span>
-                      <span className="block text-xs capitalize text-slate-500">
-                        Profile · {user.role}
-                      </span>
-                    </span>
-                  </Link>
-                  <Link
-                    href="/dashboard"
-                    role="menuitem"
-                    onClick={() => setOptionsOpen(false)}
-                    className="block px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
-                  >
-                    Dashboard
-                  </Link>
+            <Menu>
+              <MenuTrigger
+                render={
                   <button
-                    role="menuitem"
-                    onClick={signOut}
-                    className="block w-full border-t border-slate-100 px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    type="button"
+                    aria-label="Account menu"
+                    className="group flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-slate-600 outline-none transition-colors hover:bg-slate-100 hover:text-slate-900 data-[popup-open]:bg-slate-100 data-[popup-open]:text-slate-900"
                   >
-                    Log out
+                    {user.name}
+                    <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
+                      {user.role}
+                    </span>
+                    <ChevronDownIcon className="size-4 opacity-60 transition-transform group-data-[popup-open]:rotate-180" />
                   </button>
+                }
+              />
+              <MenuPopup align="end" sideOffset={8} className="min-w-[13rem]">
+                <div className="px-2 py-1.5">
+                  <p className="truncate text-sm font-medium text-slate-900">
+                    {user.name}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    @{user.username}
+                  </p>
                 </div>
-              )}
-            </div>
+                <MenuSeparator />
+                <MenuItem render={<Link href="/profile" />}>
+                  <UserIcon />
+                  Profile
+                </MenuItem>
+                <MenuItem render={<Link href="/dashboard" />}>
+                  <LayoutDashboardIcon />
+                  Dashboard
+                </MenuItem>
+                <MenuItem render={<Link href="/leaderboard" />}>
+                  <TrophyIcon />
+                  Leaderboard
+                </MenuItem>
+                {user.role === "teacher" && (
+                  <MenuItem render={<Link href="/admin" />}>
+                    <SlidersHorizontalIcon />
+                    Teacher tools
+                  </MenuItem>
+                )}
+                <MenuSeparator />
+                <MenuItem variant="destructive" onClick={signOut}>
+                  <LogOutIcon />
+                  Log out
+                </MenuItem>
+              </MenuPopup>
+            </Menu>
           ) : (
             pathname !== "/login" && (
               <Link
@@ -159,18 +150,18 @@ export function SiteHeader() {
           )}
         </div>
 
-        {/* Mobile: hamburger toggle (or inline Sign in when logged out) */}
-        <div className="sm:hidden">
+        {/* Mobile / tablet: hamburger toggle (or inline Sign in when logged out) */}
+        <div className="lg:hidden">
           {user ? (
             <button
               type="button"
-              onClick={() => setNavOpen((v) => !v)}
-              aria-label={navOpen ? "Close menu" : "Open menu"}
-              aria-expanded={navOpen}
+              onClick={() => setOpen((v) => !v)}
+              aria-label={open ? "Close menu" : "Open menu"}
+              aria-expanded={open}
               aria-controls="mobile-menu"
               className="-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100"
             >
-              {navOpen ? <CloseIcon /> : <MenuIcon />}
+              {open ? <CloseIcon /> : <MenuIcon />}
             </button>
           ) : (
             pathname !== "/login" && (
@@ -186,20 +177,41 @@ export function SiteHeader() {
       </div>
 
       {/* Mobile dropdown panel */}
-      {user && navOpen && (
+      {user && open && (
         <nav
           id="mobile-menu"
-          className="border-t border-slate-200 px-4 py-3 sm:hidden"
+          className="border-t border-slate-200 px-4 py-3 lg:hidden"
         >
+          {/* Account identity — mirrors the desktop dropdown header */}
+          <div className="mb-3 flex items-center gap-3">
+            <span
+              aria-hidden
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white"
+            >
+              {user.name.trim().charAt(0).toUpperCase() || "?"}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-slate-900">
+                {user.name}
+              </p>
+              <p className="truncate text-xs text-slate-500">
+                @{user.username}
+              </p>
+            </div>
+            <span className="ms-auto shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
+              {user.role}
+            </span>
+          </div>
+
           <ul className="space-y-1">
             {navItems.map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  onClick={() => setNavOpen(false)}
+                  onClick={() => setOpen(false)}
                   className={`block rounded-md px-3 py-2.5 text-sm transition-colors ${
                     isActive(item.href)
-                      ? "bg-accent-100 font-medium text-brand-700"
+                      ? "bg-brand-50 font-medium text-brand-700"
                       : "text-slate-700 hover:bg-slate-100"
                   }`}
                 >
@@ -209,64 +221,19 @@ export function SiteHeader() {
             ))}
           </ul>
 
-          <div className="mt-3 border-t border-slate-200 pt-3">
-            <Link
-              href="/dashboard"
-              onClick={() => setNavOpen(false)}
-              className="flex items-center gap-3 rounded-md px-3 py-2 hover:bg-slate-100"
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700">
-                {initial(user.name)}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-slate-800">
-                  {user.name}
-                </span>
-                <span className="block text-xs capitalize text-slate-500">
-                  Profile · {user.role}
-                </span>
-              </span>
-            </Link>
-            <Link
-              href="/dashboard"
-              onClick={() => setNavOpen(false)}
-              className="mt-1 block rounded-md px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100"
-            >
-              Dashboard
-            </Link>
-            <button
-              onClick={signOut}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Log out
-            </button>
-          </div>
+          <div className="my-2 h-px bg-slate-200" />
+
+          {/* Destructive Log out — mirrors the dropdown's destructive item */}
+          <button
+            onClick={signOut}
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+          >
+            <LogOutIcon className="size-4" />
+            Log out
+          </button>
         </nav>
       )}
     </header>
-  );
-}
-
-function initial(name: string) {
-  return name.trim().charAt(0).toUpperCase() || "?";
-}
-
-function GearIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
   );
 }
 
