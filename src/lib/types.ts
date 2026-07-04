@@ -17,6 +17,8 @@ export interface Question {
    *  or accepted answer strings (short). */
   correct: string[];
   points: number;
+  /** Optional short explanation shown after checking in practice mode. */
+  explanation?: string;
 }
 
 export interface Test {
