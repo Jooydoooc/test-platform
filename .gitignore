@@ -4,6 +4,7 @@ out
 .DS_Store
 *.log
 .env*
+!.env.example
 .playwright-mcp/
 .vercel
 *.tsbuildinfo
