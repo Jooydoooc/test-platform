@@ -9,7 +9,6 @@ import {
   LogOutIcon,
   SlidersHorizontalIcon,
   TrophyIcon,
-  UserIcon,
 } from "lucide-react";
 import {
   Menu,
@@ -38,7 +37,6 @@ export function SiteHeader() {
     { href: "/books", label: "Books" },
     { href: "/dashboard", label: "Dashboard" },
     { href: "/leaderboard", label: "Leaderboard" },
-    { href: "/profile", label: "Profile" },
     ...(user?.role === "teacher" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
@@ -113,10 +111,6 @@ export function SiteHeader() {
                   </p>
                 </div>
                 <MenuSeparator />
-                <MenuItem render={<Link href="/profile" />}>
-                  <UserIcon />
-                  Profile
-                </MenuItem>
                 <MenuItem render={<Link href="/dashboard" />}>
                   <LayoutDashboardIcon />
                   Dashboard
