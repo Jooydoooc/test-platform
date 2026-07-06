@@ -81,8 +81,13 @@ alter table feedback                  enable row level security;
 -- profiles
 -- ---------------------------------------------------------------------------
 
+-- A student reads their own profile; a teacher reads profiles of students in a
+-- group they own (teaches_student). Intentionally narrow: there is no
+-- "browse/assign ungrouped students" flow yet. When one is built, add a
+-- deliberate clause here (e.g. is_teacher() AND that student is ungrouped)
+-- rather than widening this to "every teacher sees every student".
 create policy profiles_select on profiles for select
-  using (id = auth.uid() or teaches_student(id) or is_teacher() and id = auth.uid());
+  using (id = auth.uid() or teaches_student(id));
 create policy profiles_self_update on profiles for update
   using (id = auth.uid()) with check (id = auth.uid());
 create policy profiles_teacher_update on profiles for update
