@@ -120,11 +120,23 @@ export function gradeQuestion(input: GradeInput): GradeOutcome {
       return sel.length === 1 && correct.includes(sel[0]) ? full() : zero();
     }
     case "MULTIPLE_CHOICE_MULTI":
-    case "MATCHING":
-    case "REORDERING": {
+    case "MATCHING": {
+      // Order-insensitive: a set of selected options / matched pairs. Sort both
+      // sides so any ordering of the same items compares equal.
       const sel = [...respSelected(input.response)].sort().join(",");
       const correct = [...keyCorrect(input.answerKey)].sort().join(",");
       return sel !== "" && sel === correct ? full() : zero();
+    }
+    case "REORDERING": {
+      // Sequencing: order IS the answer. Compare positionally — a correct set
+      // in the wrong order must NOT score. (Do not sort.)
+      const sel = respSelected(input.response);
+      const correct = keyCorrect(input.answerKey);
+      const matches =
+        sel.length > 0 &&
+        sel.length === correct.length &&
+        sel.every((v, i) => v === correct[i]);
+      return matches ? full() : zero();
     }
     case "GAP_FILL":
     case "SHORT_ANSWER":
