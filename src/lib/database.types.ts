@@ -157,6 +157,36 @@ export type ResultSkillScoreRow = {
   accuracy: number;
 };
 
+export type UnitRow = {
+  id: string;
+  textbook_id: string;
+  title: string;
+  order: number;
+};
+
+// Standalone vocab-quiz model (migration 0004) — separate from vocabulary_items.
+export type WordRow = {
+  id: string;
+  unit_id: string;
+  word: string;
+  part_of_speech: string | null;
+  definition_en: string;
+  translation_uz: string;
+  examples: Json; // string[] at runtime
+  created_at: string;
+};
+
+export type UserProgressRow = {
+  id: string;
+  user_id: string;
+  unit_id: string;
+  exercise_type: string;
+  score: number;
+  total: number;
+  attempt_number: number;
+  completed_at: string;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -170,6 +200,9 @@ export interface Database {
       attempt_answers: Table<AttemptAnswerRow>;
       results: Table<ResultRow>;
       result_skill_scores: Table<ResultSkillScoreRow>;
+      units: Table<UnitRow>;
+      words: Table<WordRow>;
+      user_progress: Table<UserProgressRow>;
     };
     Views: Record<string, never>;
     Functions: {
