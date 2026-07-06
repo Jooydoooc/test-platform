@@ -1,11 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  Clock,
+  RotateCcw,
+  Send,
+  X,
+} from "lucide-react";
 import type { Question, Test } from "@/lib/types";
 import { gradeQuestion } from "@/lib/store";
 import {
   OPTION_LETTERS,
-  TOKENS,
   answeredCount,
   instructionFor,
   isAnswered,
@@ -13,7 +23,6 @@ import {
   optionsFor,
   selectionEcho,
 } from "@/lib/mcq";
-import { sora, plexMono } from "@/lib/fonts";
 
 /** Metadata returned to the parent when a test is submitted. */
 export interface SubmitMeta {
@@ -69,6 +78,17 @@ export function QuestionRunner({
   const answered = isAnswered(answer);
   const nAnswered = answeredCount(test, answers);
 
+  // Practice-only running tally of correct checks (derived, not stored).
+  const nCorrect = useMemo(
+    () =>
+      test.questions.filter(
+        (qq) =>
+          checkedMap[qq.id] &&
+          gradeQuestion(qq, answers[qq.id] ?? []) === qq.points,
+      ).length,
+    [test, checkedMap, answers],
+  );
+
   // Keep the newest submit closure reachable from the timer without re-arming it.
   const submitRef = useRef<(timedOut?: boolean) => void>(() => {});
 
@@ -106,7 +126,8 @@ export function QuestionRunner({
 
   function goTo(next: number) {
     setIndex(Math.max(0, Math.min(total - 1, next)));
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    if (typeof window !== "undefined")
+      window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function checkAnswer() {
@@ -129,68 +150,75 @@ export function QuestionRunner({
       : "incorrect"
     : null;
 
-  if (practiceDone) {
-    return <PracticeSummary test={test} answers={answers} onRestart={restart} />;
-  }
-
   function restart() {
     setIndex(0);
     setAnswers({});
     setCheckedMap({});
     setPracticeDone(false);
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    if (typeof window !== "undefined")
+      window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  if (practiceDone) {
+    return <PracticeSummary test={test} answers={answers} onRestart={restart} />;
   }
 
   const atLast = index + 1 >= total;
   const timeLow = remainingSec !== null && remainingSec <= 60;
+  const progress = ((index + 1) / total) * 100;
 
   return (
-    <div className="space-y-5" style={{ color: TOKENS.text }}>
+    <div className="mx-auto max-w-3xl space-y-5 text-[#0F172A]">
       {/* ---- Top bar ---- */}
-      <div
-        className="sticky top-0 z-10 -mx-4 border-b px-4 py-3 backdrop-blur sm:rounded-xl sm:border sm:px-5"
-        style={{
-          background: `${TOKENS.bg}f2`,
-          borderColor: TOKENS.border,
-        }}
-      >
+      <div className="sticky top-2 z-10 rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md sm:px-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1
-              className={`${sora.className} truncate text-base font-semibold sm:text-lg`}
-            >
+            <h1 className="truncate font-display text-base font-semibold sm:text-lg">
               {test.title}
             </h1>
             {subtitle && (
-              <p className="truncate text-xs text-[#6b7280] sm:text-sm">{subtitle}</p>
+              <p className="truncate text-xs text-slate-500 sm:text-sm">
+                {subtitle}
+              </p>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-3 sm:gap-5">
+          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
             <div className="text-right">
-              <div
-                className={`${plexMono.className} text-sm font-semibold tabular-nums sm:text-base`}
-              >
-                Question {index + 1} of {total}
+              <div className="font-mono text-sm font-semibold tabular-nums sm:text-base">
+                {index + 1}
+                <span className="text-slate-400"> / {total}</span>
               </div>
-              <div className="text-xs text-[#6b7280]">
-                <span className={`${plexMono.className} tabular-nums`}>{nAnswered}</span>{" "}
-                answered
+              <div className="text-xs text-slate-500">
+                {mode === "practice" ? (
+                  <>
+                    <span className="font-mono tabular-nums text-success">
+                      {nCorrect}
+                    </span>{" "}
+                    correct
+                  </>
+                ) : (
+                  <>
+                    <span className="font-mono tabular-nums">{nAnswered}</span>{" "}
+                    answered
+                  </>
+                )}
               </div>
             </div>
             {remainingSec !== null && (
               <div
-                className="flex flex-col items-end border-l pl-3 sm:pl-5"
-                style={{ borderColor: TOKENS.border }}
+                className="flex flex-col items-end border-l border-slate-200 pl-3 sm:pl-4"
                 role="timer"
                 aria-live={timeLow ? "assertive" : "off"}
               >
                 <span
-                  className={`${plexMono.className} text-base font-semibold tabular-nums sm:text-lg`}
-                  style={{ color: timeLow ? TOKENS.error : TOKENS.text }}
+                  className={`flex items-center gap-1 font-mono text-base font-semibold tabular-nums sm:text-lg ${
+                    timeLow ? "text-error" : "text-[#0F172A]"
+                  }`}
                 >
+                  <Clock className="size-4" />
                   {formatTime(remainingSec)}
                 </span>
-                <span className="text-[10px] uppercase tracking-wide text-[#6b7280]">
+                <span className="text-[10px] uppercase tracking-wide text-slate-500">
                   time left
                 </span>
               </div>
@@ -199,44 +227,32 @@ export function QuestionRunner({
         </div>
 
         {/* Progress meter */}
-        <div
-          className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
-          style={{ background: TOKENS.border }}
-        >
+        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
           <div
-            className="h-full rounded-full transition-[width] duration-300"
-            style={{
-              width: `${((index + 1) / total) * 100}%`,
-              background: TOKENS.info,
-            }}
+            className="h-full rounded-full bg-brand-600 transition-[width] duration-500 ease-out"
+            style={{ width: `${progress}%` }}
           />
         </div>
       </div>
 
       {/* ---- Question card ---- */}
-      <div
-        className="rounded-xl border bg-white p-5 sm:p-7"
-        style={{ borderColor: TOKENS.border }}
-      >
-        <div className="flex items-baseline gap-3">
-          <span
-            className={`${plexMono.className} text-sm font-semibold tabular-nums`}
-            style={{ color: TOKENS.accent }}
-          >
-            {String(index + 1).padStart(2, "0")}
+      <div className="rounded-3xl border border-slate-200/70 bg-white p-5 shadow-card sm:p-8">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-7 items-center rounded-full bg-brand-50 px-2.5 font-mono text-xs font-bold tabular-nums text-brand-700">
+            Q{index + 1}
           </span>
-          <span className="text-xs font-medium uppercase tracking-wide text-[#6b7280]">
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
             {instructionFor(q)}
           </span>
         </div>
 
         {q.type !== "gap" && (
-          <p className={`${sora.className} mt-3 text-lg font-semibold leading-snug sm:text-xl`}>
+          <p className="mt-4 font-display text-lg font-semibold leading-snug sm:text-2xl">
             {q.prompt}
           </p>
         )}
 
-        <div className="mt-5">
+        <div className="mt-6">
           <Options
             question={q}
             answer={answer}
@@ -247,29 +263,26 @@ export function QuestionRunner({
         </div>
 
         {/* Single-answer selection echo, e.g. "You selected A." */}
-        {!checked && !isMultiAnswer(q) && q.type !== "short" && q.type !== "gap" && (
-          <p className="mt-3 min-h-[1.25rem] text-sm text-[#6b7280]">
-            {selectionEcho(q, answer) ?? " "}
-          </p>
-        )}
+        {!checked &&
+          !isMultiAnswer(q) &&
+          q.type !== "short" &&
+          q.type !== "gap" && (
+            <p className="mt-3 min-h-[1.25rem] text-sm text-slate-500">
+              {selectionEcho(q, answer) ?? " "}
+            </p>
+          )}
 
         {/* Practice feedback */}
-        {verdict && (
-          <Feedback verdict={verdict} question={q} />
-        )}
+        {verdict && <Feedback verdict={verdict} question={q} />}
       </div>
 
       {/* ---- Question navigator ---- */}
-      <Navigator
-        test={test}
-        answers={answers}
-        current={index}
-        onJump={goTo}
-      />
+      <Navigator test={test} answers={answers} current={index} onJump={goTo} />
 
       {/* ---- Bottom navigation ---- */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SecondaryButton onClick={() => goTo(index - 1)} disabled={index === 0}>
+          <ArrowLeft className="size-4" />
           Previous
         </SecondaryButton>
 
@@ -277,15 +290,22 @@ export function QuestionRunner({
           {mode === "practice" ? (
             checked ? (
               <>
-                <SecondaryButton onClick={retry}>Try again</SecondaryButton>
+                <SecondaryButton onClick={retry}>
+                  <RotateCcw className="size-4" />
+                  Try again
+                </SecondaryButton>
                 <PrimaryButton
-                  onClick={() => (atLast ? setPracticeDone(true) : goTo(index + 1))}
+                  onClick={() =>
+                    atLast ? setPracticeDone(true) : goTo(index + 1)
+                  }
                 >
                   {atLast ? "Finish" : "Next question"}
+                  {!atLast && <ArrowRight className="size-4" />}
                 </PrimaryButton>
               </>
             ) : (
               <PrimaryButton onClick={checkAnswer} disabled={!answered}>
+                <Check className="size-4" />
                 Check answer
               </PrimaryButton>
             )
@@ -294,9 +314,11 @@ export function QuestionRunner({
               {!atLast && (
                 <SecondaryButton onClick={() => goTo(index + 1)}>
                   Next
+                  <ArrowRight className="size-4" />
                 </SecondaryButton>
               )}
               <PrimaryButton onClick={() => setConfirmOpen(true)}>
+                <Send className="size-4" />
                 Submit test
               </PrimaryButton>
             </>
@@ -354,8 +376,7 @@ function Options({
   if (q.type === "short") {
     return (
       <input
-        className="w-full rounded-lg border bg-white px-3 py-2.5 text-base outline-none transition-colors placeholder:text-[#9ca3af] focus:ring-2 sm:text-sm"
-        style={{ borderColor: TOKENS.border, color: TOKENS.text }}
+        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-[#0F172A] outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 sm:text-sm"
         value={answer[0] ?? ""}
         disabled={disabled}
         onChange={(e) => onChange([e.target.value])}
@@ -368,7 +389,7 @@ function Options({
   const opts = optionsFor(q);
 
   return (
-    <div className="space-y-2.5" role={multi ? "group" : "radiogroup"}>
+    <div className="space-y-3" role={multi ? "group" : "radiogroup"}>
       {opts.map((c, i) => {
         const selected = answer.includes(c.id);
         const isCorrect = q.correct.includes(c.id);
@@ -409,6 +430,28 @@ function Options({
   );
 }
 
+const OPTION_STYLES: Record<
+  "idle" | "selected" | "correct" | "wrong",
+  { card: string; chip: string }
+> = {
+  idle: {
+    card: "border-slate-200 bg-white hover:border-slate-300 hover:-translate-y-0.5 hover:shadow-card-hover",
+    chip: "bg-slate-100 text-slate-500",
+  },
+  selected: {
+    card: "border-accent-400 bg-accent-50 ring-1 ring-accent-400",
+    chip: "bg-accent-500 text-white",
+  },
+  correct: {
+    card: "border-success bg-emerald-50 ring-1 ring-success/30",
+    chip: "bg-success text-white",
+  },
+  wrong: {
+    card: "border-error bg-red-50 ring-1 ring-error/30",
+    chip: "bg-error text-white",
+  },
+};
+
 function OptionCard({
   letter,
   text,
@@ -428,20 +471,12 @@ function OptionCard({
   state: "idle" | "selected" | "correct" | "wrong";
   onToggle: () => void;
 }) {
-  const styles: Record<typeof state, { border: string; bg: string; chipBg: string; chipText: string }> = {
-    idle: { border: TOKENS.border, bg: "#fff", chipBg: TOKENS.bg, chipText: "#6b7280" },
-    selected: { border: TOKENS.accent, bg: "#FBF3E2", chipBg: TOKENS.accent, chipText: "#fff" },
-    correct: { border: TOKENS.success, bg: "#EEF6F0", chipBg: TOKENS.success, chipText: "#fff" },
-    wrong: { border: TOKENS.error, bg: "#F8ECEA", chipBg: TOKENS.error, chipText: "#fff" },
-  };
-  const s = styles[state];
-
+  const s = OPTION_STYLES[state];
   return (
     <label
-      className={`flex items-center gap-3 rounded-lg border p-3.5 transition-colors focus-within:ring-2 sm:p-4 ${
+      className={`flex items-center gap-3.5 rounded-2xl border p-3.5 transition duration-200 focus-within:ring-2 focus-within:ring-brand-500/40 motion-reduce:hover:translate-y-0 sm:p-4 ${
         disabled ? "cursor-default" : "cursor-pointer"
-      }`}
-      style={{ borderColor: s.border, background: s.bg }}
+      } ${s.card}`}
     >
       <input
         type={multi ? "checkbox" : "radio"}
@@ -452,15 +487,20 @@ function OptionCard({
         onChange={onToggle}
       />
       <span
-        className={`${plexMono.className} flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sm font-semibold`}
-        style={{ background: s.chipBg, color: s.chipText }}
+        className={`flex size-8 shrink-0 items-center justify-center rounded-xl font-mono text-sm font-semibold transition ${s.chip}`}
         aria-hidden
       >
         {letter}
       </span>
-      <span className="text-sm leading-snug sm:text-base" style={{ color: TOKENS.text }}>
+      <span className="flex-1 text-sm leading-snug text-[#0F172A] sm:text-base">
         {text}
       </span>
+      {state === "correct" && (
+        <Check className="size-5 shrink-0 text-success" aria-hidden />
+      )}
+      {state === "wrong" && (
+        <X className="size-5 shrink-0 text-error" aria-hidden />
+      )}
     </label>
   );
 }
@@ -486,20 +526,21 @@ function GapSentence({
   // text before the blank and the text after it (first blank only in v1).
   const match = question.prompt.match(/_{2,}/);
   const before = match ? question.prompt.slice(0, match.index) : question.prompt;
-  const after = match ? question.prompt.slice(match.index! + match[0].length) : "";
+  const after = match
+    ? question.prompt.slice(match.index! + match[0].length)
+    : "";
 
   // On reveal, colour the input by whether the typed answer was accepted.
   const isCorrect = reveal && gradeQuestion(question, answer) === question.points;
   const borderColor = reveal
     ? isCorrect
-      ? TOKENS.success
-      : TOKENS.error
-    : TOKENS.accent;
+      ? "border-success"
+      : "border-error"
+    : "border-accent-400";
 
   const input = (
     <input
-      className="mx-1 inline-block min-w-[7rem] max-w-full border-b-2 bg-transparent px-1 pb-0.5 text-center text-lg font-semibold outline-none sm:text-xl"
-      style={{ borderColor, color: TOKENS.text }}
+      className={`mx-1 inline-block min-w-[7rem] max-w-full border-b-2 bg-transparent px-1 pb-0.5 text-center text-lg font-semibold text-[#0F172A] outline-none sm:text-xl ${borderColor}`}
       value={answer[0] ?? ""}
       disabled={disabled}
       autoComplete="off"
@@ -512,10 +553,7 @@ function GapSentence({
   );
 
   return (
-    <p
-      className={`${sora.className} text-lg leading-relaxed sm:text-xl`}
-      style={{ color: TOKENS.text }}
-    >
+    <p className="font-display text-lg leading-relaxed text-[#0F172A] sm:text-xl">
       {before}
       {match ? input : null}
       {after}
@@ -537,7 +575,6 @@ function Feedback({
   question: Question;
 }) {
   const correct = verdict === "correct";
-  const color = correct ? TOKENS.success : TOKENS.error;
   const opts = optionsFor(question);
   const correctText =
     question.type === "short" || question.type === "gap"
@@ -549,22 +586,37 @@ function Feedback({
 
   return (
     <div
-      className="mt-5 rounded-lg border p-4"
-      style={{ borderColor: color, background: correct ? "#EEF6F0" : "#F8ECEA" }}
+      className={`mt-6 flex gap-3 rounded-2xl border p-4 ${
+        correct ? "border-success/30 bg-emerald-50" : "border-error/30 bg-red-50"
+      }`}
     >
-      <p className="text-sm font-semibold" style={{ color }}>
-        {correct ? "Correct." : "Not quite."}
-      </p>
-      {!correct && (
-        <p className="mt-1 text-sm" style={{ color: TOKENS.text }}>
-          Correct answer: {correctText || "—"}
+      <span
+        className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
+          correct ? "bg-success text-white" : "bg-error text-white"
+        }`}
+        aria-hidden
+      >
+        {correct ? <Check className="size-5" /> : <X className="size-5" />}
+      </span>
+      <div className="min-w-0">
+        <p
+          className={`text-sm font-semibold ${
+            correct ? "text-success" : "text-error"
+          }`}
+        >
+          {correct ? "Correct." : "Not quite."}
         </p>
-      )}
-      {question.explanation && (
-        <p className="mt-2 text-sm leading-relaxed text-[#4b5563]">
-          {question.explanation}
-        </p>
-      )}
+        {!correct && (
+          <p className="mt-1 text-sm text-[#0F172A]">
+            Correct answer: {correctText || "—"}
+          </p>
+        )}
+        {question.explanation && (
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+            {question.explanation}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -585,10 +637,7 @@ function Navigator({
   onJump: (i: number) => void;
 }) {
   return (
-    <div
-      className="rounded-xl border bg-white p-3 sm:p-4"
-      style={{ borderColor: TOKENS.border }}
-    >
+    <div className="rounded-2xl border border-slate-200/70 bg-white p-3 shadow-sm sm:p-4">
       <div className="flex flex-wrap gap-2">
         {test.questions.map((question, i) => {
           const isCurrent = i === current;
@@ -600,13 +649,13 @@ function Navigator({
               onClick={() => onJump(i)}
               aria-label={`Go to question ${i + 1}${done ? ", answered" : ""}`}
               aria-current={isCurrent ? "true" : undefined}
-              className={`${plexMono.className} flex h-9 w-9 items-center justify-center rounded-md border text-sm tabular-nums transition-colors`}
-              style={{
-                borderColor: isCurrent ? TOKENS.accent : TOKENS.border,
-                background: isCurrent ? "#FBF3E2" : done ? TOKENS.bg : "#fff",
-                color: TOKENS.text,
-                fontWeight: isCurrent || done ? 600 : 400,
-              }}
+              className={`flex size-9 items-center justify-center rounded-xl border font-mono text-sm tabular-nums transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${
+                isCurrent
+                  ? "border-brand-600 bg-brand-600 font-semibold text-white shadow-sm"
+                  : done
+                    ? "border-brand-200 bg-brand-50 font-semibold text-brand-700 hover:border-brand-300"
+                    : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+              }`}
             >
               {i + 1}
             </button>
@@ -646,39 +695,36 @@ function ConfirmSubmit({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgb(27 33 48 / 0.45)" }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-title"
       onClick={onCancel}
     >
       <div
-        className="w-full max-w-sm rounded-xl border bg-white p-6 shadow-lg"
-        style={{ borderColor: TOKENS.border }}
+        className="w-full max-w-sm rounded-3xl border border-slate-200/70 bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h2
           id="confirm-title"
-          className={`${sora.className} text-lg font-semibold`}
-          style={{ color: TOKENS.text }}
+          className="font-display text-lg font-semibold text-[#0F172A]"
         >
           Submit test?
         </h2>
-        <p className="mt-2 text-sm" style={{ color: TOKENS.text }}>
+        <p className="mt-2 text-sm text-[#0F172A]">
           You answered{" "}
-          <span className={`${plexMono.className} tabular-nums`}>{answered}</span> of{" "}
-          <span className={`${plexMono.className} tabular-nums`}>{total}</span> questions.
+          <span className="font-mono tabular-nums">{answered}</span> of{" "}
+          <span className="font-mono tabular-nums">{total}</span> questions.
         </p>
         {unanswered > 0 && (
-          <p className="mt-1 text-sm text-[#6b7280]">
+          <p className="mt-1 text-sm text-slate-500">
             Unanswered questions can lower your score.
           </p>
         )}
         <div className="mt-5 flex justify-end gap-3">
           <SecondaryButton onClick={onCancel}>Cancel</SecondaryButton>
           <PrimaryButton ref={confirmRef} onClick={onConfirm}>
-            Submit Test
+            Submit test
           </PrimaryButton>
         </div>
       </div>
@@ -707,34 +753,44 @@ function PracticeSummary({
     attempted.length > 0
       ? Math.round((correctCount / attempted.length) * 100)
       : 0;
+  const tone =
+    pct >= 80 ? "text-success" : pct >= 50 ? "text-brand-600" : "text-error";
 
   return (
-    <div className="space-y-5" style={{ color: TOKENS.text }}>
-      <div
-        className="rounded-xl border bg-white p-6 text-center"
-        style={{ borderColor: TOKENS.border }}
-      >
-        <p className="text-sm text-[#6b7280]">Practice complete · {test.title}</p>
-        <p className={`${plexMono.className} mt-2 text-4xl font-semibold tabular-nums`}>
-          {correctCount} / {attempted.length}
-        </p>
-        <p className={`${plexMono.className} mt-1 text-lg font-semibold tabular-nums`} style={{ color: TOKENS.info }}>
-          {pct}% correct
-        </p>
-        <p className="mt-2 text-sm text-[#6b7280]">
-          Practice runs are not saved or graded.
-        </p>
+    <div className="mx-auto max-w-3xl space-y-5 text-[#0F172A]">
+      <div className="overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-card">
+        <div className="flex flex-col items-center bg-brand-600 px-6 py-8 text-center text-white">
+          <span className="flex size-14 items-center justify-center rounded-2xl bg-white/10">
+            <CheckCircle2 className="size-8 text-accent-400" />
+          </span>
+          <p className="mt-3 text-sm text-brand-100">
+            Practice complete · {test.title}
+          </p>
+          <p className="mt-2 font-mono text-4xl font-bold tabular-nums">
+            {correctCount} / {attempted.length}
+          </p>
+        </div>
+        <div className="px-6 py-5 text-center">
+          <p className={`font-mono text-2xl font-bold tabular-nums ${tone}`}>
+            {pct}% correct
+          </p>
+          <p className="mt-1.5 text-sm text-slate-500">
+            Practice runs are not saved or graded.
+          </p>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        <PrimaryButton onClick={onRestart}>Practise again</PrimaryButton>
-        <a
+      <div className="flex flex-wrap justify-center gap-3">
+        <PrimaryButton onClick={onRestart}>
+          <RotateCcw className="size-4" />
+          Practise again
+        </PrimaryButton>
+        <Link
           href="/practice"
-          className="inline-flex min-h-[44px] items-center justify-center rounded-lg border px-4 text-sm font-medium sm:min-h-0 sm:py-2"
-          style={{ borderColor: TOKENS.border, color: TOKENS.text }}
+          className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:min-h-0 sm:py-2.5"
         >
           Back to practice
-        </a>
+        </Link>
       </div>
     </div>
   );
@@ -745,27 +801,29 @@ function PracticeSummary({
 // ----------------------------------------------------------------------------
 
 const buttonBase =
-  "inline-flex min-h-[44px] items-center justify-center rounded-lg px-5 text-sm font-medium transition-colors disabled:opacity-45 disabled:pointer-events-none sm:min-h-0 sm:py-2.5";
+  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-2 disabled:opacity-45 disabled:pointer-events-none disabled:active:scale-100 sm:min-h-0 sm:py-2.5";
 
 function PrimaryButton({
   ref,
+  className = "",
   ...props
 }: React.ComponentProps<"button"> & { ref?: React.Ref<HTMLButtonElement> }) {
   return (
     <button
       ref={ref}
-      className={`${buttonBase} text-white hover:opacity-90`}
-      style={{ background: TOKENS.text }}
+      className={`${buttonBase} bg-brand-600 text-white shadow-sm hover:bg-brand-700 hover:shadow-card-hover ${className}`}
       {...props}
     />
   );
 }
 
-function SecondaryButton(props: React.ComponentProps<"button">) {
+function SecondaryButton({
+  className = "",
+  ...props
+}: React.ComponentProps<"button">) {
   return (
     <button
-      className={`${buttonBase} border bg-white hover:bg-[#F3F2EE]`}
-      style={{ borderColor: TOKENS.border, color: TOKENS.text }}
+      className={`${buttonBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 ${className}`}
       {...props}
     />
   );
