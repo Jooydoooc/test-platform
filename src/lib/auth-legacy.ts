@@ -17,7 +17,7 @@ interface Account {
 const SESSION_KEY = "tp.session";
 
 const ACCOUNTS: Account[] = [
-  { username: "teacher", password: "teach123", name: "Tara Teacher", role: "teacher" },
+  { username: "admin", password: "teach123", name: "Tara Admin", role: "teacher" },
   { username: "student", password: "study123", name: "Sam Student", role: "student" },
 ];
 

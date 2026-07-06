@@ -163,7 +163,7 @@ function SettingsCard() {
     <Card className="space-y-4">
       <h2 className="font-semibold">Notifications</h2>
 
-      <Field label="Notifications chat id (teacher / admin)">
+      <Field label="Notifications chat id (admin)">
         <input
           className={inputClass}
           value={cfg.notifyChatId}

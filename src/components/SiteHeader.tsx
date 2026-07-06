@@ -127,7 +127,7 @@ export function SiteHeader() {
                 {user.role === "teacher" && (
                   <MenuItem render={<Link href="/admin" />}>
                     <SlidersHorizontalIcon />
-                    Teacher tools
+                    Admin
                   </MenuItem>
                 )}
                 <MenuSeparator />

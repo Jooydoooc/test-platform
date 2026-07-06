@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
+import { ArrowRight, SlidersHorizontal, Sparkles } from "lucide-react";
 import { Card, LinkButton } from "@/components/ui";
 import { BookIcon } from "@/components/icons";
 import { bookOf, categoryOf, useTests } from "@/lib/store";
@@ -35,10 +37,53 @@ export default function BooksPage() {
         </p>
       </div>
 
+      {/* Practice + Vocabulary live here (not in the top nav). */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <QuickCard
+          href="/practice"
+          icon={<SlidersHorizontal className="size-5" />}
+          title="Practice"
+          desc="Work through exercises one at a time with instant feedback."
+        />
+        <QuickCard
+          href="/lexora/vocab"
+          icon={<Sparkles className="size-5" />}
+          title="Vocabulary"
+          desc="Practise word sets — definitions, translations, and gap-fill."
+        />
+      </div>
+
       {byCategory.map(({ cat, books, count }) => (
         <CategorySection key={cat} cat={cat} books={books} count={count} />
       ))}
     </div>
+  );
+}
+
+function QuickCard({
+  href,
+  icon,
+  title,
+  desc,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <Link href={href} className="group block focus-visible:outline-none">
+      <Card className="flex h-full items-center gap-3 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-brand-300 group-hover:shadow-card-hover group-focus-visible:border-brand-400 group-focus-visible:ring-2 group-focus-visible:ring-brand-500/30">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/15">
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-semibold text-slate-900">{title}</h2>
+          <p className="text-sm text-slate-600">{desc}</p>
+        </div>
+        <ArrowRight className="size-5 shrink-0 text-brand-600 transition-transform group-hover:translate-x-0.5" />
+      </Card>
+    </Link>
   );
 }
 

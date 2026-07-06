@@ -260,7 +260,7 @@ export default function DashboardPage() {
             <LinkCard
               href="/admin"
               icon={<SlidersIcon />}
-              title="Teacher tools"
+              title="Admin tools"
               desc="Manage students, content, and integrations."
               accent
             />

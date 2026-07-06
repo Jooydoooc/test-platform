@@ -13,7 +13,7 @@ export default function AdminPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Admin</h1>
         <p className="text-sm text-slate-600">
-          Teacher tools for managing content and integrations.
+          Admin tools for managing content and integrations.
         </p>
       </div>
 

@@ -80,7 +80,7 @@ export default function Home() {
             href="/books"
             icon={<BookIcon />}
             title="Books & vocabulary"
-            desc="Textbook-based practice and vocabulary sets chosen by your teacher, organised by level."
+            desc="Textbook-based practice and vocabulary sets chosen by your admin, organised by level."
           />
           <ActionCard
             href="/dashboard"
@@ -98,7 +98,7 @@ export default function Home() {
             <ActionCard
               href="/admin"
               icon={<SlidersIcon />}
-              title="Teacher tools"
+              title="Admin tools"
               desc="Manage students and groups, upload tasks and tests, and track class progress."
               accent
             />
