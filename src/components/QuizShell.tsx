@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, RotateCcw, X } from "lucide-react";
 import { Card, LinkButton, ProgressBar } from "@/components/ui";
-import { createClient } from "@/lib/supabase/client";
-import { useSession } from "@/lib/auth";
-import type { WordRow } from "@/lib/database.types";
+import {
+  getVocabWords,
+  saveVocabProgress,
+  type VocabWord,
+} from "@/lib/vocab-store";
 import {
   QUIZ_CONFIG,
   type McExerciseType,
@@ -27,16 +29,14 @@ function shuffle<T>(input: readonly T[]): T[] {
   return a;
 }
 
-function fieldValue(w: WordRow, field: WordField): string {
+function fieldValue(w: VocabWord, field: WordField): string {
   if (field === "word") return w.word;
   if (field === "translation_uz") return w.translation_uz;
   return w.definition_en;
 }
 
-function examplesOf(w: WordRow): string[] {
-  return Array.isArray(w.examples)
-    ? (w.examples.filter((e) => typeof e === "string") as string[])
-    : [];
+function examplesOf(w: VocabWord): string[] {
+  return Array.isArray(w.examples) ? w.examples : [];
 }
 
 /** Replace whole-word occurrences of `word` in `sentence` with a blank. */
@@ -51,7 +51,7 @@ function blankOut(sentence: string, word: string): string {
 }
 
 /** Prefer an example that actually contains the word; blank it. */
-function blankedExample(w: WordRow): string {
+function blankedExample(w: VocabWord): string {
   const examples = examplesOf(w);
   if (examples.length === 0) return "_____";
   const withWord = examples.filter((e) =>
@@ -72,9 +72,9 @@ type Question = {
  * Pick `count` words. If the unit has enough, sample without repeats; otherwise
  * allow repeats but never the same word twice in a row.
  */
-function pickWords(words: WordRow[], count: number): WordRow[] {
+function pickWords(words: VocabWord[], count: number): VocabWord[] {
   if (words.length >= count) return shuffle(words).slice(0, count);
-  const out: WordRow[] = [];
+  const out: VocabWord[] = [];
   let lastId: string | null = null;
   while (out.length < count) {
     const candidates = words.filter((w) => w.id !== lastId);
@@ -86,8 +86,8 @@ function pickWords(words: WordRow[], count: number): WordRow[] {
 }
 
 /** Build a fresh, fully re-shuffled question set from the unit's words. */
-function buildQuestions(words: WordRow[], config: QuizConfig): Question[] {
-  const answerOf = (w: WordRow) => fieldValue(w, config.answerField);
+function buildQuestions(words: VocabWord[], config: QuizConfig): Question[] {
+  const answerOf = (w: VocabWord) => fieldValue(w, config.answerField);
   return pickWords(words, config.questionCount).map((w, i) => {
     const correct = answerOf(w);
     // Distractors: distinct answer-field values from other words.
@@ -128,30 +128,19 @@ export function QuizShell({
   unitTitle?: string;
 }) {
   const config = QUIZ_CONFIG[exerciseType];
-  const { user } = useSession();
 
-  const [words, setWords] = useState<WordRow[]>([]);
+  const [words, setWords] = useState<VocabWord[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
   const [score, setScore] = useState(0);
 
-  // Fetch the unit's words once.
+  // Load the unit's words from the local store (client-only: reads localStorage
+  // conventions via the store, so it runs in an effect after mount).
   useEffect(() => {
-    const supabase = createClient();
-    let active = true;
-    (async () => {
-      const { data, error } = await supabase
-        .from("words")
-        .select("*")
-        .eq("unit_id", unitId);
-      if (!active) return;
-      if (error) {
-        setPhase("error");
-        return;
-      }
-      const rows = (data ?? []) as WordRow[];
+    try {
+      const rows = getVocabWords(unitId);
       setWords(rows);
       if (rows.length < 4) {
         setPhase("not-enough");
@@ -159,10 +148,9 @@ export function QuizShell({
       }
       setQuestions(buildQuestions(rows, config));
       setPhase("quiz");
-    })();
-    return () => {
-      active = false;
-    };
+    } catch {
+      setPhase("error");
+    }
   }, [unitId, config]);
 
   const restart = useCallback(() => {
@@ -220,7 +208,6 @@ export function QuizShell({
         total={questions.length}
         unitId={unitId}
         exerciseType={exerciseType}
-        userId={user?.id}
         onRetry={restart}
       />
     );
@@ -361,50 +348,29 @@ function Results({
   total,
   unitId,
   exerciseType,
-  userId,
   onRetry,
 }: {
   score: number;
   total: number;
   unitId: string;
   exerciseType: McExerciseType;
-  userId?: string;
   onRetry: () => void;
 }) {
   const pct = total > 0 ? Math.round((score / total) * 100) : 0;
   const savedRef = useRef(false);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">(
-    "idle",
-  );
+  const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
 
-  // Log one user_progress row on mount, with an incremented attempt_number.
+  // Log one progress row on mount, with an incremented attempt_number.
   useEffect(() => {
     if (savedRef.current) return; // guard React strict-mode double-invoke
     savedRef.current = true;
-    if (!userId) return; // no session -> nothing to log
-    const supabase = createClient();
-    (async () => {
-      setSaveState("saving");
-      const { data: prior } = await supabase
-        .from("user_progress")
-        .select("attempt_number")
-        .eq("user_id", userId)
-        .eq("unit_id", unitId)
-        .eq("exercise_type", exerciseType)
-        .order("attempt_number", { ascending: false })
-        .limit(1);
-      const nextAttempt = (prior?.[0]?.attempt_number ?? 0) + 1;
-      const { error } = await supabase.from("user_progress").insert({
-        user_id: userId,
-        unit_id: unitId,
-        exercise_type: exerciseType,
-        score,
-        total,
-        attempt_number: nextAttempt,
-      });
-      setSaveState(error ? "error" : "saved");
-    })();
-  }, [userId, unitId, exerciseType, score, total]);
+    try {
+      saveVocabProgress(unitId, exerciseType, score, total);
+      setSaveState("saved");
+    } catch {
+      setSaveState("error");
+    }
+  }, [unitId, exerciseType, score, total]);
 
   const tone = pct >= 80 ? "success" : pct >= 50 ? "brand" : "error";
 

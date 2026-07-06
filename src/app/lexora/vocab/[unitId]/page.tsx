@@ -1,36 +1,23 @@
+"use client";
+
+import { use } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
 import { QUIZ_CONFIG, type McExerciseType } from "@/lib/vocab";
+import { getVocabUnit } from "@/lib/vocab-store";
 
 // Unit vocab hub — entry point + "Back to unit" target for the MC exercises.
 // Learn Cards / Sentence Order / Sentence Making will be added here later,
-// consuming the same `words` table.
-export default async function VocabUnitPage({
+// consuming the same vocab data.
+export default function VocabUnitPage({
   params,
 }: {
   params: Promise<{ unitId: string }>;
 }) {
-  const { unitId } = await params;
-
-  let unitTitle: string | undefined;
-  let wordCount: number | null = null;
-  try {
-    const supabase = await createClient();
-    const [{ data: unit }, { count }] = await Promise.all([
-      supabase.from("units").select("title").eq("id", unitId).single(),
-      supabase
-        .from("words")
-        .select("id", { count: "exact", head: true })
-        .eq("unit_id", unitId),
-    ]);
-    unitTitle = unit?.title ?? undefined;
-    wordCount = count ?? null;
-  } catch {
-    // ignore — render with fallbacks
-  }
-
+  const { unitId } = use(params);
+  const unit = getVocabUnit(unitId);
+  const wordCount = unit?.words.length ?? 0;
   const exercises = Object.values(QUIZ_CONFIG);
 
   return (
@@ -38,13 +25,11 @@ export default async function VocabUnitPage({
       <header className="space-y-1">
         <p className="text-sm font-medium text-slate-500">Vocabulary practice</p>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          {unitTitle ?? "Unit"}
+          {unit?.title ?? "Unit"}
         </h1>
-        {wordCount !== null && (
-          <p className="text-sm text-slate-600">
-            {wordCount} {wordCount === 1 ? "word" : "words"} in this unit
-          </p>
-        )}
+        <p className="text-sm text-slate-600">
+          {wordCount} {wordCount === 1 ? "word" : "words"} in this unit
+        </p>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2">

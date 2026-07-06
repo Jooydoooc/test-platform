@@ -35,6 +35,7 @@ export function SiteHeader() {
     { href: "/practice", label: "Practice" },
     { href: "/tests", label: "Tests" },
     { href: "/books", label: "Books" },
+    { href: "/lexora/vocab", label: "Vocabulary" },
     { href: "/dashboard", label: "Dashboard" },
     { href: "/leaderboard", label: "Leaderboard" },
     ...(user?.role === "teacher" ? [{ href: "/admin", label: "Admin" }] : []),
