@@ -36,11 +36,11 @@ export function SiteHeader() {
     { href: "/tests", label: "Tests" },
     { href: "/books", label: "Books" },
     { href: "/leaderboard", label: "Leaderboard" },
-    ...(user?.role === "teacher" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
-  // Teachers ARE the admins in v1; show it as an icon, never the word.
+  // Teachers ARE the admins in v1 (Admin lives in the account menu, not the nav).
   const isAdmin = user?.role === "teacher";
+  const initial = user?.name.trim().charAt(0).toUpperCase() || "?";
 
   function signOut() {
     setOpen(false);
@@ -92,16 +92,15 @@ export function SiteHeader() {
                 render={
                   <button
                     type="button"
-                    aria-label="Account menu"
-                    className="group flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-slate-600 outline-none transition-colors hover:bg-slate-100 hover:text-slate-900 data-[popup-open]:bg-slate-100 data-[popup-open]:text-slate-900"
+                    aria-label={`Account menu for ${user.name}`}
+                    className="group flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1.5 text-sm text-slate-600 outline-none transition-colors hover:bg-slate-100 hover:text-slate-900 data-[popup-open]:bg-slate-100 data-[popup-open]:text-slate-900"
                   >
-                    {user.name}
-                    {isAdmin && (
-                      <ShieldCheckIcon
-                        className="size-4 text-brand-600"
-                        aria-label="Admin"
-                      />
-                    )}
+                    <span
+                      aria-hidden
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white"
+                    >
+                      {initial}
+                    </span>
                     <ChevronDownIcon className="size-4 opacity-60 transition-transform group-data-[popup-open]:rotate-180" />
                   </button>
                 }
