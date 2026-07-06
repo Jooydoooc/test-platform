@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { QuizShell, isMcExerciseType } from "@/components/QuizShell";
+import { QuizShell } from "@/components/QuizShell";
+import { isMcExerciseType } from "@/lib/vocab";
 
 // /lexora/vocab/:unitId/:exerciseType — renders the config-driven QuizShell.
 export default async function VocabExercisePage({

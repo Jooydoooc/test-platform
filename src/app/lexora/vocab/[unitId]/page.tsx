@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
-import { QUIZ_CONFIG, type McExerciseType } from "@/components/QuizShell";
+import { QUIZ_CONFIG, type McExerciseType } from "@/lib/vocab";
 
 // Unit vocab hub — entry point + "Back to unit" target for the MC exercises.
 // Learn Cards / Sentence Order / Sentence Making will be added here later,
