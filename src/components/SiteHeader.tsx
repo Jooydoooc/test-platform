@@ -7,6 +7,7 @@ import {
   ChevronDownIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  ShieldCheckIcon,
   SlidersHorizontalIcon,
   TrophyIcon,
 } from "lucide-react";
@@ -32,14 +33,14 @@ export function SiteHeader() {
 
   const navItems = [
     { href: "/", label: "Home" },
-    { href: "/practice", label: "Practice" },
     { href: "/tests", label: "Tests" },
     { href: "/books", label: "Books" },
-    { href: "/lexora/vocab", label: "Vocabulary" },
-    { href: "/dashboard", label: "Dashboard" },
     { href: "/leaderboard", label: "Leaderboard" },
     ...(user?.role === "teacher" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
+
+  // Teachers ARE the admins in v1; show it as an icon, never the word.
+  const isAdmin = user?.role === "teacher";
 
   function signOut() {
     setOpen(false);
@@ -95,9 +96,12 @@ export function SiteHeader() {
                     className="group flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-slate-600 outline-none transition-colors hover:bg-slate-100 hover:text-slate-900 data-[popup-open]:bg-slate-100 data-[popup-open]:text-slate-900"
                   >
                     {user.name}
-                    <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
-                      {user.role}
-                    </span>
+                    {isAdmin && (
+                      <ShieldCheckIcon
+                        className="size-4 text-brand-600"
+                        aria-label="Admin"
+                      />
+                    )}
                     <ChevronDownIcon className="size-4 opacity-60 transition-transform group-data-[popup-open]:rotate-180" />
                   </button>
                 }
@@ -193,9 +197,12 @@ export function SiteHeader() {
                 @{user.username}
               </p>
             </div>
-            <span className="ms-auto shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium capitalize text-brand-700 ring-1 ring-inset ring-brand-600/15">
-              {user.role}
-            </span>
+            {isAdmin && (
+              <ShieldCheckIcon
+                className="ms-auto size-5 shrink-0 text-brand-600"
+                aria-label="Admin"
+              />
+            )}
           </div>
 
           <ul className="space-y-1">
