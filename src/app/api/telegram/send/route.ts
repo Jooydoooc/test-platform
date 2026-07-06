@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminChatId, isConfigured, sendMessage } from "@/lib/telegram";
+import { getServerUser, isTeacherRole } from "@/lib/auth-server";
+import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 
 interface SendBody {
   /** Explicit chat/channel id or @username. */
@@ -13,6 +15,48 @@ interface SendBody {
 // Single send endpoint used by every feature (notify-on-submit, broadcast,
 // student result, test message). The token never leaves the server.
 export async function POST(req: Request) {
+  // Authorization is enforced HERE, in the handler — NOT via path-prefix
+  // middleware. This route lives at /api/telegram/send, which is outside every
+  // TEACHER_PREFIX, and middleware is skipped entirely when Supabase is
+  // disabled; relying on it would leave this bot relay open to the internet.
+  //
+  // Fail closed. Without Supabase there is no server-side identity at all
+  // (legacy/localStorage mode authenticates only in the browser), so we cannot
+  // verify a teacher and must refuse rather than relay for anyone.
+  if (!SUPABASE_ENABLED) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Sending is disabled without server authentication (Supabase not configured).",
+      },
+      { status: 503 },
+    );
+  }
+
+  // Only a signed-in teacher/admin may relay a message through the bot.
+  let user: Awaited<ReturnType<typeof getServerUser>>;
+  try {
+    user = await getServerUser();
+  } catch {
+    return NextResponse.json(
+      { ok: false, error: "Authentication required." },
+      { status: 401 },
+    );
+  }
+  if (!user) {
+    return NextResponse.json(
+      { ok: false, error: "Authentication required." },
+      { status: 401 },
+    );
+  }
+  if (!isTeacherRole(user.role)) {
+    return NextResponse.json(
+      { ok: false, error: "Teacher access required." },
+      { status: 403 },
+    );
+  }
+
   if (!isConfigured()) {
     return NextResponse.json(
       { ok: false, error: "Bot token not configured on the server." },
