@@ -8,6 +8,16 @@
 -- (RANKING_AND_MOTIVATION.md).
 --
 -- Placement results are excluded (excluded_from_progress = false).
+--
+-- KNOWN v1 SIMPLIFICATION — avg_accuracy is a mean over result_skill_scores
+-- rows, NOT a per-result average. A MIXED test fans out to up to 5-6 skill rows
+-- per attempt while a single-skill test yields 1, so a test's weight in the
+-- average scales with how many skills it scored (a student doing mostly mixed
+-- tests is weighted differently per-test than one doing single-skill tests).
+-- results_count is per-result (count distinct r.id), only the accuracy has this
+-- quirk. RANKING_AND_MOTIVATION.md actually calls for "per skill or overall"
+-- leaderboards; when that UI is built, switch to a per-result average or a
+-- skill-scoped metric rather than this single blended number.
 
 create or replace function group_leaderboard()
 returns table (
