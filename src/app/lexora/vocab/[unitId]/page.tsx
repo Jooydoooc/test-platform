@@ -6,6 +6,7 @@ import { ArrowRight } from "lucide-react";
 import { Card } from "@/components/ui";
 import { QUIZ_CONFIG, type McExerciseType } from "@/lib/vocab";
 import { getVocabUnit } from "@/lib/vocab-store";
+import { useTests } from "@/lib/store";
 
 // Unit vocab hub — entry point + "Back to unit" target for the MC exercises.
 // Learn Cards / Sentence Order / Sentence Making will be added here later,
@@ -17,6 +18,10 @@ export default function VocabUnitPage({
 }) {
   const { unitId } = use(params);
   const unit = getVocabUnit(unitId);
+  // Units opened from the Books section are keyed by their test id and may not
+  // have a seeded vocab set yet — fall back to the test's title so the page
+  // still names the unit rather than showing a generic placeholder.
+  const testTitle = useTests().find((t) => t.id === unitId)?.title;
   const wordCount = unit?.words.length ?? 0;
   const exercises = Object.values(QUIZ_CONFIG);
 
@@ -25,7 +30,7 @@ export default function VocabUnitPage({
       <header className="space-y-1">
         <p className="text-sm font-medium text-slate-500">Vocabulary practice</p>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          {unit?.title ?? "Unit"}
+          {unit?.title ?? testTitle ?? "Unit"}
         </h1>
         <p className="text-sm text-slate-600">
           {wordCount} {wordCount === 1 ? "word" : "words"} in this unit

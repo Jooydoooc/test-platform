@@ -139,7 +139,15 @@ function CategorySection({
                         {t.questions.length === 1 ? "" : "s"}
                       </p>
                     </div>
-                    <div className="flex shrink-0 gap-2">
+                    <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                      <LinkButton
+                        href={`/lexora/vocab/${t.id}`}
+                        variant="ghost"
+                        className="gap-1.5 px-3"
+                      >
+                        <Sparkles className="size-4" />
+                        Vocabulary
+                      </LinkButton>
                       <LinkButton
                         href={`/practice/${t.id}`}
                         variant="secondary"
