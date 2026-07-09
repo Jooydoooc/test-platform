@@ -180,7 +180,9 @@ export default function TestsPage() {
   const [duration, setDuration] =
     useState<(typeof DURATION_OPTS)[number]>("All");
   const [sort, setSort] = useState<(typeof SORT_OPTS)[number]>("Newest");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Collapsed by default on small screens so the category list doesn't push the
+  // tests down; it's always shown as a side rail from lg up.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // ---- dashboard stats ----
   const dash = useMemo(() => {
@@ -297,10 +299,10 @@ export default function TestsPage() {
         <div className="relative">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-brand-100 ring-1 ring-inset ring-white/20">
             <Sparkles className="h-3.5 w-3.5" />
-            Lexora Test Center
+            Lexora
           </span>
           <h1 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Lexora Test Center
+            Lexora
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-brand-100/90 sm:text-[15px]">
             Choose your next challenge, improve your weak skills, and track your
@@ -334,14 +336,15 @@ export default function TestsPage() {
       {/* ============ Search + filter bar ============ */}
       <Card className="!p-3 sm:!p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/25">
+          <div className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/25 sm:min-h-0">
             <Search className="h-4 w-4 shrink-0 text-slate-400" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search tests by title or description…"
               aria-label="Search tests"
-              className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              // text-base on mobile stops iOS Safari zooming in on focus.
+              className="w-full bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-400 sm:text-sm"
             />
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -375,15 +378,15 @@ export default function TestsPage() {
         </div>
       </Card>
 
-      {/* ============ 3-column workspace ============ */}
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[248px_1fr_300px]">
-        {/* -------- Sidebar -------- */}
-        <div className="xl:sticky xl:top-6">
+      {/* ============ Workspace: category rail + (tests / progress) ============ */}
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[210px_minmax(0,1fr)]">
+        {/* -------- Category rail (slim, on the side from lg up) -------- */}
+        <div className="lg:sticky lg:top-6">
           <button
             type="button"
             onClick={() => setSidebarOpen((v) => !v)}
             aria-expanded={sidebarOpen}
-            className="mb-2 flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-card xl:hidden"
+            className="mb-2 flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-card lg:hidden"
           >
             <span className="flex items-center gap-2">
               <Menu className="h-4 w-4" />
@@ -396,7 +399,7 @@ export default function TestsPage() {
 
           <aside
             aria-label="Test groups"
-            className={`${sidebarOpen ? "block" : "hidden"} rounded-2xl border border-slate-200 bg-white p-3 shadow-card xl:block`}
+            className={`${sidebarOpen ? "block" : "hidden"} rounded-2xl border border-slate-200 bg-white p-2 shadow-card lg:block`}
           >
             <nav className="space-y-0.5">
               {TEST_GROUPS.map((g) => {
@@ -414,15 +417,15 @@ export default function TestsPage() {
                         setActiveLevel(null);
                       }}
                       aria-current={isActive ? "page" : undefined}
-                      className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${
+                      className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold transition ${
                         isActive
                           ? "bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-[0_8px_20px_-6px_rgba(90,63,202,0.55)]"
                           : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                       }`}
                     >
-                      <span className="flex min-w-0 items-center gap-2.5">
+                      <span className="flex min-w-0 items-center gap-2">
                         <span
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
                             isActive
                               ? "bg-white/20 text-white"
                               : "bg-brand-50 text-brand-600"
@@ -475,6 +478,8 @@ export default function TestsPage() {
           </aside>
         </div>
 
+        {/* -------- Tests + progress panel (progress drops below the tests until xl) -------- */}
+        <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         {/* -------- Main: test cards -------- */}
         <main className="min-w-0">
           {noTestsAtAll ? (
@@ -607,6 +612,7 @@ export default function TestsPage() {
             </div>
           </Card>
         </aside>
+        </div>
       </div>
     </div>
   );
@@ -656,7 +662,8 @@ function FilterSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={label}
-        className="w-full appearance-none rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-700 outline-none transition-colors hover:border-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25"
+        // text-base + min-h on mobile: bigger tap target, no iOS zoom on focus.
+        className="min-h-[44px] w-full appearance-none rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-8 text-base font-medium text-slate-700 outline-none transition-colors hover:border-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 sm:min-h-0 sm:text-sm"
       >
         {options.map((o) => (
           <option key={o} value={o}>
