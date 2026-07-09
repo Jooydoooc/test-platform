@@ -25,7 +25,7 @@ type Tier = {
   slogan: string;
   min: number;
   span: number;
-  Icon: (props: { color: string }) => React.ReactElement;
+  Icon: () => React.ReactElement;
   from: string;
   to: string;
   text: string;
@@ -77,188 +77,278 @@ function shade(hex: string, amt: number): string {
 }
 
 /* ============================================================
-   Tier symbols — faceted, light-sourced metals & gems.
-   Each icon derives light/mid/dark planes from the tier colour
-   so the cut catches light like a real stone. White specular
-   accents add sparkle. Top-left is the light source throughout.
+   Rank badges — brushed-metal to cut-crystal shields.
+   Each badge is a self-contained shield SVG that catches a
+   top-left light. The shared #bevel + #innerShadow filters
+   (rendered once via <BadgeDefs/>) give real specular relief
+   and gemstone refraction. Restyled from a dark glass mock to
+   sit on the app's light surfaces. Top-left is the light source.
    ============================================================ */
-const BronzeIcon = ({ color }: { color: string }) => {
-  const hi = shade(color, 0.42),
-    lo = shade(color, -0.22),
-    deep = shade(color, -0.45);
+function BadgeDefs() {
   return (
-    <svg viewBox="0 0 48 48" width="72%" height="72%" aria-hidden="true">
-      <path d="M24 6 L40 11 V25 C40 33.5 32.5 39.5 24 43 C15.5 39.5 8 33.5 8 25 V11 Z" fill={deep} />
-      <path d="M24 9 L37 13 V25 C37 32 31 37 24 40 C17 37 11 32 11 25 V13 Z" fill={color} />
-      <path d="M24 9 L37 13 V25 C37 32 31 37 24 40 Z" fill={lo} />
-      <path d="M24 14 L26.6 19.4 L32.5 20.1 L28.2 24.2 L29.3 30 L24 27.1 L18.7 30 L19.8 24.2 L15.5 20.1 L21.4 19.4 Z" fill={hi} />
+    <svg width="0" height="0" aria-hidden="true" style={{ position: "absolute" }}>
+      <defs>
+        {/* realistic bevel: blurred alpha-based specular lighting */}
+        <filter id="bevel" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="2.2" result="blur" />
+          <feSpecularLighting in="blur" surfaceScale="4" specularConstant="0.85" specularExponent="14" lightingColor="#ffffff" result="spec">
+            <fePointLight x="-40" y="-60" z="90" />
+          </feSpecularLighting>
+          <feComposite in="spec" in2="SourceAlpha" operator="in" result="specClip" />
+          <feComposite in="SourceGraphic" in2="specClip" operator="arithmetic" k1="0" k2="1" k3="0.55" k4="0" />
+        </filter>
+        {/* glass gem inner refraction */}
+        <filter id="innerShadow" x="-40%" y="-40%" width="180%" height="180%">
+          <feOffset dx="0" dy="3" />
+          <feGaussianBlur stdDeviation="2.5" result="off" />
+          <feComposite in="SourceAlpha" in2="off" operator="out" result="inv" />
+          <feFlood floodColor="#000000" floodOpacity="0.35" />
+          <feComposite in2="inv" operator="in" />
+          <feComposite in2="SourceGraphic" operator="over" />
+        </filter>
+        {/* brushed metal grain */}
+        <filter id="grain" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.012 0.9" numOctaves="2" seed="7" result="noise" />
+          <feColorMatrix in="noise" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0" />
+        </filter>
+      </defs>
     </svg>
   );
-};
-const SilverIcon = ({ color }: { color: string }) => {
-  const hi = shade(color, 0.5),
-    lo = shade(color, -0.24),
-    deep = shade(color, -0.45);
-  return (
-    <svg viewBox="0 0 48 48" width="74%" height="74%" aria-hidden="true">
-      <polygon points="24,5 40,14.5 40,33.5 24,43 8,33.5 8,14.5" fill={deep} />
-      <polygon points="24,8 37,15.7 37,32.3 24,40 11,32.3 11,15.7" fill={color} />
-      <polygon points="24,8 37,15.7 37,32.3 24,40" fill={lo} />
-      <circle cx="24" cy="24" r="6.5" fill={hi} />
-      <ellipse cx="21.5" cy="21.5" rx="2.4" ry="1.5" fill="#fff" opacity="0.6" />
-    </svg>
-  );
-};
-const GoldIcon = ({ color }: { color: string }) => {
-  const hi = shade(color, 0.5),
-    lo = shade(color, -0.22),
-    deep = shade(color, -0.42);
-  return (
-    <svg viewBox="0 0 48 48" width="76%" height="76%" aria-hidden="true">
-      <circle cx="24" cy="24" r="17" fill={deep} />
-      <circle cx="24" cy="24" r="14.5" fill={color} />
-      <path d="M24 9.5 A14.5 14.5 0 0 1 24 38.5 Z" fill={lo} />
-      <path d="M24 13 L27 20.6 L35.1 21.2 L28.9 26.3 L30.9 34.2 L24 29.8 L17.1 34.2 L19.1 26.3 L12.9 21.2 L21 20.6 Z" fill={hi} />
-      <path d="M24 13 L27 20.6 L24 22 Z" fill="#fff" opacity="0.4" />
-    </svg>
-  );
-};
-const EmeraldIcon = ({ color }: { color: string }) => {
-  const hi = shade(color, 0.4),
-    tbl = shade(color, 0.18),
-    lo = shade(color, -0.24),
-    deep = shade(color, -0.42);
-  return (
-    <svg viewBox="0 0 48 48" width="70%" height="70%" aria-hidden="true">
-      <polygon points="15,10 33,10 40,17 40,31 33,38 15,38 8,31 8,17" fill={deep} />
-      <polygon points="16,12 32,12 38,18 38,30 32,36 16,36 10,30 10,18" fill={color} />
-      <polygon points="16,12 32,12 38,18 10,18" fill={hi} />
-      <polygon points="10,30 16,36 32,36 38,30" fill={lo} />
-      <rect x="15.5" y="18" width="17" height="12" fill={tbl} />
-      <rect x="15.5" y="18" width="17" height="12" fill="none" stroke="#fff" strokeWidth="0.8" opacity="0.3" />
-      <line x1="15.5" y1="23" x2="32.5" y2="23" stroke="#fff" strokeWidth="0.6" opacity="0.22" />
-    </svg>
-  );
-};
-const SapphireIcon = ({ color }: { color: string }) => {
-  const hi = shade(color, 0.42),
-    mid = shade(color, -0.1),
-    lo = shade(color, -0.28),
-    deep = shade(color, -0.45);
-  return (
-    <svg viewBox="0 0 48 48" width="74%" height="74%" aria-hidden="true">
-      <polygon points="24,8 41,37 7,37" fill={deep} />
-      <polygon points="24,10 39,36 9,36" fill={color} />
-      <polygon points="24,10 24,36 9,36" fill={lo} />
-      <polygon points="24,22 39,36 24,36" fill={mid} />
-      <polygon points="24,10 31,22 17,22" fill={hi} />
-      <polygon points="24,10 27.5,22 24,22" fill="#fff" opacity="0.25" />
-    </svg>
-  );
-};
-const AmethystIcon = ({ color }: { color: string }) => {
-  const hi = shade(color, 0.42),
-    lo = shade(color, -0.26),
-    deep = shade(color, -0.45);
-  return (
-    <svg viewBox="0 0 48 48" width="74%" height="74%" aria-hidden="true">
-      <path d="M24 6 C31.5 13 35 20 35 24 C35 28 31.5 35 24 42 C16.5 35 13 28 13 24 C13 20 16.5 13 24 6 Z" fill={deep} />
-      <path d="M24 8 C31 14.5 34 20.5 34 24 C34 27.5 31 33.5 24 40 C17 33.5 14 27.5 14 24 C14 20.5 17 14.5 24 8 Z" fill={color} />
-      <path d="M24 8 C31 14.5 34 20.5 34 24 C34 27.5 31 33.5 24 40 Z" fill={lo} />
-      <polygon points="24,8 30,24 18,24" fill={hi} />
-      <line x1="24" y1="8" x2="24" y2="40" stroke="#fff" strokeWidth="1" opacity="0.4" />
-      <line x1="14" y1="24" x2="34" y2="24" stroke="#fff" strokeWidth="0.8" opacity="0.25" />
-    </svg>
-  );
-};
-const RubyIcon = ({ color }: { color: string }) => {
-  const hi = shade(color, 0.4),
-    tbl = shade(color, 0.2),
-    ll = shade(color, -0.12),
-    lo = shade(color, -0.28),
-    deep = shade(color, -0.46);
-  return (
-    <svg viewBox="0 0 48 48" width="74%" height="74%" aria-hidden="true">
-      <polygon points="24,7 35,13 41,24 35,35 24,41 13,35 7,24 13,13" fill={deep} />
-      <polygon points="24,9 34,14.5 39,24 34,33.5 24,39 14,33.5 9,24 14,14.5" fill={color} />
-      <polygon points="24,9 14,14.5 9,24 24,24" fill={hi} />
-      <polygon points="24,9 34,14.5 39,24 24,24" fill={lo} />
-      <polygon points="9,24 24,24 24,39 14,33.5" fill={ll} />
-      <polygon points="39,24 24,24 24,39 34,33.5" fill={deep} />
-      <polygon points="24,17 30,24 24,31 18,24" fill={tbl} />
-      <circle cx="21" cy="21" r="1.6" fill="#fff" opacity="0.55" />
-    </svg>
-  );
-};
-const OnyxIcon = ({ color }: { color: string }) => {
-  const hi = shade(color, 0.55),
-    lo = shade(color, -0.2),
-    deep = shade(color, -0.5);
-  return (
-    <svg viewBox="0 0 48 48" width="74%" height="74%" aria-hidden="true">
-      <polygon points="17,8 31,8 40,17 40,31 31,40 17,40 8,31 8,17" fill={deep} />
-      <polygon points="17,10 31,10 38,17 38,31 31,38 17,38 10,31 10,17" fill={color} />
-      <polygon points="17,10 31,10 38,17 10,17" fill={hi} />
-      <polygon points="10,31 17,38 31,38 38,31" fill={lo} />
-      <ellipse cx="21" cy="18" rx="5.5" ry="2.6" fill="#fff" opacity="0.32" />
-    </svg>
-  );
-};
-const OpalIcon = ({ color }: { color: string }) => {
-  const hi = shade(color, 0.45),
-    lo = shade(color, -0.24),
-    deep = shade(color, -0.42);
-  return (
-    <svg viewBox="0 0 48 48" width="74%" height="74%" aria-hidden="true">
-      <path d="M24 6 C31.5 15 35 21 35 28 C35 34.5 29.5 41 24 41 C18.5 41 13 34.5 13 28 C13 21 16.5 15 24 6 Z" fill={deep} />
-      <path d="M24 8 C31 16 34 21.5 34 28 C34 34 29 39.5 24 39.5 C19 39.5 14 34 14 28 C14 21.5 17 16 24 8 Z" fill={color} />
-      <path d="M24 8 C31 16 34 21.5 34 28 C34 34 29 39.5 24 39.5 Z" fill={lo} />
-      <path d="M24 8 C28 13 30 17 30 22 L20 25 C19 18 21 13 24 8 Z" fill={hi} />
-      <circle cx="20" cy="26" r="2" fill="#f9a8d4" opacity="0.75" />
-      <circle cx="27" cy="31" r="1.6" fill="#fde68a" opacity="0.8" />
-      <circle cx="24" cy="19" r="1.5" fill="#a5f3fc" opacity="0.85" />
-      <circle cx="22" cy="33" r="1.3" fill="#c4b5fd" opacity="0.8" />
-      <circle cx="21.5" cy="17" r="1" fill="#fff" opacity="0.7" />
-    </svg>
-  );
-};
-const DiamondIcon = ({ color }: { color: string }) => {
-  const hi = shade(color, 0.55),
-    tbl = shade(color, 0.32),
-    mid = shade(color, -0.08),
-    lo = shade(color, -0.26),
-    deep = shade(color, -0.46);
-  return (
-    <svg viewBox="0 0 48 48" width="78%" height="78%" aria-hidden="true">
-      {/* crown */}
-      <polygon points="13,10 35,10 43,19 5,19" fill={color} />
-      <polygon points="13,10 20,19 5,19" fill={hi} />
-      <polygon points="35,10 43,19 28,19" fill={lo} />
-      <polygon points="20,19 28,19 30,10 18,10" fill={tbl} />
-      {/* pavilion */}
-      <polygon points="5,19 43,19 24,43" fill={deep} />
-      <polygon points="5,19 24,19 24,43" fill={mid} />
-      <polygon points="14,19 24,19 24,43" fill={lo} />
-      <line x1="5" y1="19" x2="43" y2="19" stroke="#fff" strokeWidth="1" opacity="0.4" />
-      {/* sparkle */}
-      <path d="M31 13 L32 15.4 L34.4 16.4 L32 17.4 L31 19.8 L30 17.4 L27.6 16.4 L30 15.4 Z" fill="#fff" opacity="0.85" />
-      <circle cx="21" cy="14.5" r="1.1" fill="#fff" opacity="0.7" />
-    </svg>
-  );
-};
+}
 
-/* min/span preserved from the original ladder — same thresholds, restyled. */
+const overlay = { mixBlendMode: "overlay" as const };
+
+const badgeSvg = { overflow: "visible" as const };
+
+const IronIcon = () => (
+  <svg viewBox="0 0 100 100" width="100%" height="100%" style={badgeSvg} aria-hidden="true">
+    <defs>
+      <linearGradient id="ironBody" x1="0.15" y1="0" x2="0.85" y2="1">
+        <stop offset="0%" stopColor="#7d828a" />
+        <stop offset="35%" stopColor="#4b4f56" />
+        <stop offset="70%" stopColor="#2c2e33" />
+        <stop offset="100%" stopColor="#1a1c1f" />
+      </linearGradient>
+      <linearGradient id="ironShine" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.55" />
+        <stop offset="45%" stopColor="#ffffff" stopOpacity="0" />
+      </linearGradient>
+      <clipPath id="ironClip">
+        <path d="M50 6 L80 19 L80 51 C80 72 67 85 50 93 C33 85 20 72 20 51 L20 19 Z" />
+      </clipPath>
+    </defs>
+    <path d="M50 6 L80 19 L80 51 C80 72 67 85 50 93 C33 85 20 72 20 51 L20 19 Z" fill="url(#ironBody)" stroke="#0e0f11" strokeWidth="1.6" filter="url(#bevel)" />
+    <rect x="15" y="5" width="70" height="90" filter="url(#grain)" clipPath="url(#ironClip)" opacity="0.4" style={overlay} />
+    <path d="M50 6 L80 19 L80 40 L20 40 L20 19 Z" fill="url(#ironShine)" opacity="0.7" />
+    <rect x="43" y="38" width="14" height="18" rx="2" fill="#0e0f11" opacity="0.55" />
+    <path d="M21 20 L21 50" stroke="#ffffff" strokeWidth="1" opacity="0.25" strokeLinecap="round" />
+    <ellipse cx="38" cy="24" rx="10" ry="5" fill="#ffffff" opacity="0.2" />
+  </svg>
+);
+
+const BronzeIcon = () => (
+  <svg viewBox="0 0 100 100" width="100%" height="100%" style={badgeSvg} aria-hidden="true">
+    <defs>
+      <linearGradient id="bronzeBody" x1="0.15" y1="0" x2="0.85" y2="1">
+        <stop offset="0%" stopColor="#e3a76a" />
+        <stop offset="30%" stopColor="#c17f42" />
+        <stop offset="65%" stopColor="#8f5726" />
+        <stop offset="100%" stopColor="#5c3a1f" />
+      </linearGradient>
+      <clipPath id="bronzeClip">
+        <path d="M50 6 L82 20 L82 52 C82 74 68 88 50 96 C32 88 18 74 18 52 L18 20 Z" />
+      </clipPath>
+    </defs>
+    <path d="M50 6 L82 20 L82 52 C82 74 68 88 50 96 C32 88 18 74 18 52 L18 20 Z" fill="url(#bronzeBody)" stroke="#43290f" strokeWidth="1.6" filter="url(#bevel)" />
+    <rect x="15" y="5" width="72" height="94" filter="url(#grain)" clipPath="url(#bronzeClip)" opacity="0.35" style={overlay} />
+    <path d="M50 6 L82 20 L82 42 L18 42 L18 20 Z" fill="#ffffff" opacity="0.16" />
+    <circle cx="50" cy="48" r="11" fill="#43290f" opacity="0.4" />
+    <circle cx="50" cy="48" r="11" fill="none" stroke="#f0c088" strokeWidth="1" opacity="0.5" />
+    <path d="M19 21 L19 51" stroke="#ffffff" strokeWidth="1" opacity="0.3" strokeLinecap="round" />
+    <ellipse cx="37" cy="22" rx="11" ry="5" fill="#ffffff" opacity="0.35" />
+  </svg>
+);
+
+const SilverIcon = () => (
+  <svg viewBox="0 0 100 100" width="100%" height="100%" style={badgeSvg} aria-hidden="true">
+    <defs>
+      <linearGradient id="silverBody" x1="0.15" y1="0" x2="0.85" y2="1">
+        <stop offset="0%" stopColor="#ffffff" />
+        <stop offset="30%" stopColor="#d7dde5" />
+        <stop offset="65%" stopColor="#9aa4b0" />
+        <stop offset="100%" stopColor="#5b6472" />
+      </linearGradient>
+      <clipPath id="silverClip">
+        <path d="M50 5 L84 20 L84 53 C84 76 69 90 50 97 C31 90 16 76 16 53 L16 20 Z" />
+      </clipPath>
+    </defs>
+    <path d="M50 5 L84 20 L84 53 C84 76 69 90 50 97 C31 90 16 76 16 53 L16 20 Z" fill="url(#silverBody)" stroke="#3d4450" strokeWidth="1.6" filter="url(#bevel)" />
+    <rect x="14" y="4" width="72" height="94" filter="url(#grain)" clipPath="url(#silverClip)" opacity="0.3" style={overlay} />
+    <path d="M50 16 L70 26 L70 52 C70 68 60 79 50 84 C40 79 30 68 30 52 L30 26 Z" fill="none" stroke="#3d4450" strokeWidth="1.4" opacity="0.55" />
+    <path d="M50 34 L58 46 L50 58 L42 46 Z" fill="#ffffff" opacity="0.65" />
+    <path d="M50 34 L58 46 L50 58 L42 46 Z" fill="none" stroke="#5b6472" strokeWidth="0.8" opacity="0.5" />
+    <path d="M17 21 L17 52" stroke="#ffffff" strokeWidth="1" opacity="0.35" strokeLinecap="round" />
+    <ellipse cx="38" cy="21" rx="12" ry="5.5" fill="#ffffff" opacity="0.5" />
+  </svg>
+);
+
+const GoldIcon = () => (
+  <svg viewBox="0 0 100 100" width="100%" height="100%" style={badgeSvg} aria-hidden="true">
+    <defs>
+      <linearGradient id="goldBody" x1="0.15" y1="0" x2="0.85" y2="1">
+        <stop offset="0%" stopColor="#fff2c2" />
+        <stop offset="28%" stopColor="#f4c95d" />
+        <stop offset="62%" stopColor="#c9922a" />
+        <stop offset="100%" stopColor="#8a6112" />
+      </linearGradient>
+      <radialGradient id="goldCore" cx="50%" cy="42%" r="55%">
+        <stop offset="0%" stopColor="#ffffff" />
+        <stop offset="55%" stopColor="#ffe08a" />
+        <stop offset="100%" stopColor="#c9922a" />
+      </radialGradient>
+      <clipPath id="goldClip">
+        <path d="M50 4 L86 21 L86 54 C86 77 70 91 50 98 C30 91 14 77 14 54 L14 21 Z" />
+      </clipPath>
+    </defs>
+    <path d="M50 4 L86 21 L86 54 C86 77 70 91 50 98 C30 91 14 77 14 54 L14 21 Z" fill="url(#goldBody)" stroke="#6b4a0d" strokeWidth="1.6" filter="url(#bevel)" />
+    <rect x="13" y="3" width="74" height="96" filter="url(#grain)" clipPath="url(#goldClip)" opacity="0.25" style={overlay} />
+    <path d="M50 30 L58 44 L50 58 L42 44 Z" fill="url(#goldCore)" />
+    <circle cx="50" cy="44" r="3" fill="#ffffff" opacity="0.9" />
+    <path d="M15 22 L15 53" stroke="#ffffff" strokeWidth="1" opacity="0.4" strokeLinecap="round" />
+    <ellipse cx="38" cy="20" rx="12" ry="5.5" fill="#ffffff" opacity="0.5" />
+  </svg>
+);
+
+const PlatinumIcon = () => (
+  <svg viewBox="0 0 100 100" width="100%" height="100%" style={badgeSvg} aria-hidden="true">
+    <defs>
+      <linearGradient id="platBody" x1="0.15" y1="0" x2="0.85" y2="1">
+        <stop offset="0%" stopColor="#e8fffb" />
+        <stop offset="30%" stopColor="#5fe3d6" />
+        <stop offset="65%" stopColor="#1f8a8a" />
+        <stop offset="100%" stopColor="#0f5c5c" />
+      </linearGradient>
+      <radialGradient id="platCore" cx="50%" cy="42%" r="60%">
+        <stop offset="0%" stopColor="#ffffff" />
+        <stop offset="55%" stopColor="#9bfff0" />
+        <stop offset="100%" stopColor="#1f8a8a" />
+      </radialGradient>
+    </defs>
+    <path d="M50 3 L88 21 L88 55 C88 78 71 92 50 99 C29 92 12 78 12 55 L12 21 Z" fill="url(#platBody)" stroke="#083f3f" strokeWidth="1.6" filter="url(#bevel)" />
+    <path d="M13 22 L13 54" stroke="#ffffff" strokeWidth="1" opacity="0.4" strokeLinecap="round" />
+    <polygon points="50,26 62,40 62,54 50,68 38,54 38,40" fill="url(#platCore)" filter="url(#innerShadow)" />
+    <polygon points="50,26 62,40 50,47 38,40" fill="#ffffff" opacity="0.55" />
+    <ellipse cx="38" cy="19" rx="12" ry="5.5" fill="#ffffff" opacity="0.5" />
+  </svg>
+);
+
+const DiamondIcon = () => (
+  <svg viewBox="0 0 100 100" width="100%" height="100%" style={badgeSvg} aria-hidden="true">
+    <defs>
+      <linearGradient id="diaBody" x1="0.15" y1="0" x2="0.85" y2="1">
+        <stop offset="0%" stopColor="#eaf3ff" />
+        <stop offset="30%" stopColor="#7fb1ff" />
+        <stop offset="65%" stopColor="#3454c9" />
+        <stop offset="100%" stopColor="#1b2e73" />
+      </linearGradient>
+      <radialGradient id="diaCore" cx="50%" cy="40%" r="65%">
+        <stop offset="0%" stopColor="#ffffff" />
+        <stop offset="50%" stopColor="#bfe0ff" />
+        <stop offset="100%" stopColor="#3454c9" />
+      </radialGradient>
+    </defs>
+    <path d="M50 2 L90 22 L90 56 C90 80 72 94 50 100 C28 94 10 80 10 56 L10 22 Z" fill="url(#diaBody)" stroke="#101c4a" strokeWidth="1.6" filter="url(#bevel)" />
+    <path d="M11 23 L11 55" stroke="#ffffff" strokeWidth="1" opacity="0.45" strokeLinecap="round" />
+    <polygon points="50,20 66,38 58,66 42,66 34,38" fill="url(#diaCore)" filter="url(#innerShadow)" />
+    <polygon points="50,20 66,38 50,48 34,38" fill="#ffffff" opacity="0.6" />
+    <line x1="50" y1="20" x2="50" y2="66" stroke="#101c4a" strokeWidth="0.9" opacity="0.4" />
+    <line x1="42" y1="38" x2="58" y2="38" stroke="#101c4a" strokeWidth="0.9" opacity="0.3" />
+    <ellipse cx="38" cy="18" rx="13" ry="6" fill="#ffffff" opacity="0.55" />
+  </svg>
+);
+
+const MasterIcon = () => (
+  <svg viewBox="0 0 100 100" width="100%" height="100%" style={badgeSvg} aria-hidden="true">
+    <defs>
+      <linearGradient id="masterBody" x1="0.15" y1="0" x2="0.85" y2="1">
+        <stop offset="0%" stopColor="#e6cfff" />
+        <stop offset="30%" stopColor="#9b4fd6" />
+        <stop offset="65%" stopColor="#5b1f8a" />
+        <stop offset="100%" stopColor="#33104f" />
+      </linearGradient>
+      <radialGradient id="masterCore" cx="50%" cy="45%" r="60%">
+        <stop offset="0%" stopColor="#ffffff" />
+        <stop offset="55%" stopColor="#c98bff" />
+        <stop offset="100%" stopColor="#5b1f8a" />
+      </radialGradient>
+    </defs>
+    <path d="M50 2 L92 22 L86 58 C82 82 66 96 50 100 C34 96 18 82 14 58 L8 22 Z" fill="url(#masterBody)" stroke="#240b3d" strokeWidth="1.6" filter="url(#bevel)" />
+    <path d="M9 23 L9 58" stroke="#ffffff" strokeWidth="1" opacity="0.4" strokeLinecap="round" />
+    <circle cx="50" cy="48" r="16" fill="url(#masterCore)" filter="url(#innerShadow)" />
+    <ellipse cx="45" cy="42" rx="6" ry="4" fill="#ffffff" opacity="0.55" />
+    <ellipse cx="38" cy="18" rx="13" ry="6" fill="#ffffff" opacity="0.45" />
+  </svg>
+);
+
+const GrandmasterIcon = () => (
+  <svg viewBox="0 0 100 100" width="100%" height="100%" style={badgeSvg} aria-hidden="true">
+    <defs>
+      <linearGradient id="gmBody" x1="0.15" y1="0" x2="0.85" y2="1">
+        <stop offset="0%" stopColor="#ffb0b8" />
+        <stop offset="30%" stopColor="#c22c3a" />
+        <stop offset="65%" stopColor="#7a1420" />
+        <stop offset="100%" stopColor="#3f0a10" />
+      </linearGradient>
+      <radialGradient id="gmCore" cx="50%" cy="45%" r="60%">
+        <stop offset="0%" stopColor="#ffffff" />
+        <stop offset="55%" stopColor="#ff5f6e" />
+        <stop offset="100%" stopColor="#7a1420" />
+      </radialGradient>
+    </defs>
+    <path d="M50 1 L94 22 L88 60 C83 85 65 98 50 101 C35 98 17 85 12 60 L6 22 Z" fill="url(#gmBody)" stroke="#2e0409" strokeWidth="1.6" filter="url(#bevel)" />
+    <path d="M7 23 L7 60" stroke="#ffffff" strokeWidth="1" opacity="0.4" strokeLinecap="round" />
+    <polygon points="50,28 62,42 62,58 50,72 38,58 38,42" fill="url(#gmCore)" filter="url(#innerShadow)" />
+    <polygon points="50,28 62,42 50,50 38,42" fill="#ffffff" opacity="0.5" />
+    <ellipse cx="38" cy="18" rx="13" ry="6" fill="#ffffff" opacity="0.4" />
+  </svg>
+);
+
+const ChallengerIcon = () => (
+  <svg viewBox="0 0 100 100" width="100%" height="100%" style={badgeSvg} aria-hidden="true">
+    <defs>
+      <linearGradient id="chalBody" x1="0.15" y1="0" x2="0.85" y2="1">
+        <stop offset="0%" stopColor="#fffbe6" />
+        <stop offset="28%" stopColor="#ffd76a" />
+        <stop offset="62%" stopColor="#c9891b" />
+        <stop offset="100%" stopColor="#7a5410" />
+      </linearGradient>
+      <radialGradient id="chalCore" cx="50%" cy="42%" r="65%">
+        <stop offset="0%" stopColor="#ffffff" />
+        <stop offset="50%" stopColor="#fff2c2" />
+        <stop offset="100%" stopColor="#c9891b" />
+      </radialGradient>
+    </defs>
+    <path d="M50 0 L96 22 L90 62 C85 88 65 99 50 102 C35 99 15 88 10 62 L4 22 Z" fill="url(#chalBody)" stroke="#5c3d0a" strokeWidth="1.6" filter="url(#bevel)" />
+    <path d="M5 23 L5 62" stroke="#ffffff" strokeWidth="1" opacity="0.45" strokeLinecap="round" />
+    <circle cx="50" cy="46" r="21" fill="url(#chalCore)" filter="url(#innerShadow)" />
+    <path d="M50 26 L50 66 M30 46 L70 46 M36 32 L64 60 M64 32 L36 60" stroke="#5c3d0a" strokeWidth="0.9" opacity="0.3" />
+    <ellipse cx="42" cy="34" rx="8" ry="5" fill="#ffffff" opacity="0.6" />
+    <ellipse cx="38" cy="17" rx="13" ry="6" fill="#ffffff" opacity="0.5" />
+  </svg>
+);
+
+/* Nine tiers: brushed metal (Iron→Gold) into cut crystal (Platinum→Challenger).
+   XP thresholds remapped from the previous ladder so ranks stay well-spread. */
 const TIERS: Tier[] = [
-  { key: "bronze", label: "Bronze", slogan: "Every climb starts here.", min: 0, span: 200, Icon: BronzeIcon, from: "#ffedd5", to: "#c2660c", text: "text-orange-800", badge: "bg-orange-100 text-orange-800" },
-  { key: "silver", label: "Silver", slogan: "You're picking up speed.", min: 200, span: 300, Icon: SilverIcon, from: "#f1f5f9", to: "#94a3b8", text: "text-slate-600", badge: "bg-slate-100 text-slate-600" },
-  { key: "gold", label: "Gold", slogan: "Time to shine.", min: 500, span: 400, Icon: GoldIcon, from: "#fef3c7", to: "#f59e0b", text: "text-amber-700", badge: "bg-amber-100 text-amber-800" },
-  { key: "emerald", label: "Emerald", slogan: "Rare company now.", min: 900, span: 500, Icon: EmeraldIcon, from: "#d1fae5", to: "#10b981", text: "text-emerald-700", badge: "bg-emerald-100 text-emerald-800" },
-  { key: "sapphire", label: "Sapphire", slogan: "Cool, sharp, consistent.", min: 1400, span: 600, Icon: SapphireIcon, from: "#dbeafe", to: "#3b82f6", text: "text-blue-700", badge: "bg-blue-100 text-blue-700" },
-  { key: "amethyst", label: "Amethyst", slogan: "Among the elite.", min: 2000, span: 800, Icon: AmethystIcon, from: "#ede9fe", to: "#8b5cf6", text: "text-violet-700", badge: "bg-violet-100 text-violet-700" },
-  { key: "ruby", label: "Ruby", slogan: "You're on fire.", min: 2800, span: 1000, Icon: RubyIcon, from: "#ffe4e6", to: "#e11d48", text: "text-rose-700", badge: "bg-rose-100 text-rose-700" },
-  { key: "onyx", label: "Onyx", slogan: "Forged under pressure.", min: 3800, span: 1200, Icon: OnyxIcon, from: "#e2e8f0", to: "#334155", text: "text-slate-700", badge: "bg-slate-200 text-slate-700" },
-  { key: "opal", label: "Opal", slogan: "One of a kind.", min: 5000, span: 1500, Icon: OpalIcon, from: "#ccfbf1", to: "#14b8a6", text: "text-teal-700", badge: "bg-teal-100 text-teal-700" },
-  { key: "diamond", label: "Diamond", slogan: "Unbreakable.", min: 6500, span: 1500, Icon: DiamondIcon, from: "#e0f2fe", to: "#38bdf8", text: "text-sky-600", badge: "bg-sky-100 text-sky-700" },
+  { key: "iron", label: "Iron", slogan: "Every climb starts here.", min: 0, span: 200, Icon: IronIcon, from: "#e5e7eb", to: "#4b4f56", text: "text-slate-500", badge: "bg-slate-100 text-slate-600" },
+  { key: "bronze", label: "Bronze", slogan: "Finding your footing.", min: 200, span: 300, Icon: BronzeIcon, from: "#fde9d3", to: "#c17f42", text: "text-orange-800", badge: "bg-orange-100 text-orange-800" },
+  { key: "silver", label: "Silver", slogan: "Picking up speed.", min: 500, span: 400, Icon: SilverIcon, from: "#eef2f6", to: "#9aa4b0", text: "text-slate-600", badge: "bg-slate-100 text-slate-600" },
+  { key: "gold", label: "Gold", slogan: "Time to shine.", min: 900, span: 500, Icon: GoldIcon, from: "#fdecc0", to: "#d9a021", text: "text-amber-700", badge: "bg-amber-100 text-amber-800" },
+  { key: "platinum", label: "Platinum", slogan: "Rare air now.", min: 1400, span: 600, Icon: PlatinumIcon, from: "#d3faf3", to: "#1f8a8a", text: "text-teal-700", badge: "bg-teal-100 text-teal-700" },
+  { key: "diamond", label: "Diamond", slogan: "Cut from something harder.", min: 2000, span: 800, Icon: DiamondIcon, from: "#dbe6ff", to: "#3454c9", text: "text-blue-700", badge: "bg-blue-100 text-blue-700" },
+  { key: "master", label: "Master", slogan: "Among the elite.", min: 2800, span: 1000, Icon: MasterIcon, from: "#ecdcff", to: "#7a35b8", text: "text-violet-700", badge: "bg-violet-100 text-violet-700" },
+  { key: "grandmaster", label: "Grandmaster", slogan: "Few ever reach this.", min: 3800, span: 1200, Icon: GrandmasterIcon, from: "#ffd9dd", to: "#c22c3a", text: "text-rose-700", badge: "bg-rose-100 text-rose-700" },
+  { key: "challenger", label: "Challenger", slogan: "The very top.", min: 5000, span: 1500, Icon: ChallengerIcon, from: "#fff2c2", to: "#d99a1e", text: "text-amber-600", badge: "bg-amber-100 text-amber-800" },
 ];
 const DIVISIONS = ["III", "II", "I"];
 
@@ -315,33 +405,17 @@ function getBadges(player: Player, pool: Player[]): Badge[] {
   return badges;
 }
 
-function Medallion({ tier, size = 52, dim = false }: { tier: Tier; size?: number; dim?: boolean }) {
+/* Renders a tier's shield badge at a given pixel size. */
+function Medallion({ tier, size = 52 }: { tier: Tier; size?: number }) {
   const Icon = tier.Icon;
   return (
     <div
       role="img"
-      aria-label={`${tier.label} rank medal`}
-      className="relative rounded-full flex items-center justify-center shrink-0 transition-transform"
-      style={{
-        width: size,
-        height: size,
-        background: dim
-          ? "#e2e8f0"
-          : `radial-gradient(circle at 34% 28%, #ffffff, ${tier.from} 52%, ${shade(tier.to, 0.35)} 100%)`,
-        boxShadow: dim
-          ? "inset 0 2px 3px rgba(0,0,0,0.06)"
-          : `inset 0 -3px 7px rgba(0,0,0,0.10), inset 0 2px 4px rgba(255,255,255,0.85), 0 3px 7px rgba(0,0,0,0.12), 0 0 0 1px ${tier.to}1f`,
-        opacity: dim ? 0.55 : 1,
-      }}
+      aria-label={`${tier.label} rank badge`}
+      className="shrink-0"
+      style={{ width: size, height: size, filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.28))" }}
     >
-      <Icon color={dim ? "#94a3b8" : tier.to} />
-      {!dim && (
-        <span
-          aria-hidden="true"
-          className="absolute inset-0 rounded-full pointer-events-none"
-          style={{ background: "radial-gradient(circle at 30% 24%, rgba(255,255,255,0.6), rgba(255,255,255,0) 46%)" }}
-        />
-      )}
+      <Icon />
     </div>
   );
 }
@@ -402,7 +476,7 @@ function TierCard({ tier, players, isCurrent }: { tier: Tier; players: PlayerWit
   return (
     <div className={`relative bg-white rounded-2xl p-4 flex flex-col items-center text-center transition-shadow hover:shadow-md ${isCurrent ? "border-2 border-indigo-300 ring-2 ring-indigo-100" : "border border-slate-100"}`}>
       {isCurrent && <span className="absolute -top-2 text-[10px] font-bold text-white bg-indigo-600 px-2 py-0.5 rounded-full shadow-sm">You&apos;re here</span>}
-      <Medallion tier={tier} size={54} />
+      <Medallion tier={tier} size={60} />
       <p className={`font-bold text-sm mt-2 ${tier.text}`}>{tier.label}</p>
       <p className="text-[11px] text-slate-400 italic mt-0.5 leading-snug min-h-[28px]">&quot;{tier.slogan}&quot;</p>
       <p className="text-[10px] font-medium text-slate-400 mt-0.5">{tier.min === 0 ? "Starting rank" : `${tier.min.toLocaleString()}+ xp`}</p>
@@ -432,6 +506,7 @@ export default function LeaderboardPage() {
   const [group, setGroup] = useState("All groups");
   const [period, setPeriod] = useState<Period>("total");
   const [showAll, setShowAll] = useState(false);
+  const [showTiers, setShowTiers] = useState(false);
   const groups = ["All groups", "Class A", "Class B"];
 
   const withXp = useMemo<PlayerWithXp[]>(
@@ -485,6 +560,11 @@ export default function LeaderboardPage() {
 
   const top3 = ranked.slice(0, 3);
 
+  // Collapsed rank journey: show up to the user's current tier (min 3) so "You're here" stays visible.
+  const myTierIdx = tierIndex(myTier);
+  const tierPreviewCount = Math.max(3, myTierIdx + 1);
+  const visibleTiers = showTiers ? TIERS : TIERS.slice(0, tierPreviewCount);
+
   const visible = showAll ? ranked : ranked.slice(0, PUBLIC_TOP_N);
   const meVisible = visible.some((p) => p.name === CURRENT_USER);
   const myListIdx = ranked.findIndex((p) => p.name === CURRENT_USER);
@@ -492,6 +572,8 @@ export default function LeaderboardPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
+      <BadgeDefs />
+
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-slate-800">Leaderboard</h1>
         <p className="text-sm text-slate-400 mt-1">Vocabulary practice · climb the ranks</p>
@@ -500,7 +582,7 @@ export default function LeaderboardPage() {
       {/* Your Progress Card */}
       <div className="relative bg-indigo-600 rounded-2xl px-5 py-5 mb-5 text-white overflow-hidden">
         <div className="flex items-center gap-4 mb-2">
-          <div className="bg-white/15 rounded-full p-1 shrink-0">
+          <div className="bg-white/15 rounded-2xl p-1.5 shrink-0">
             <Medallion tier={myTier} size={48} />
           </div>
           <div className="flex-1 min-w-0">
@@ -606,12 +688,19 @@ export default function LeaderboardPage() {
       </div>
 
       {/* Rank Journey */}
-      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1 px-1">Rank journey</p>
+      <div className="flex items-center justify-between mb-1 px-1">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Rank journey</p>
+        {TIERS.length > tierPreviewCount && (
+          <button onClick={() => setShowTiers((v) => !v)} className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
+            {showTiers ? "Show fewer" : `Show all tiers (${TIERS.length})`}
+          </button>
+        )}
+      </div>
       <p className="flex items-center gap-1 text-[11px] text-slate-400 mb-2 px-1">
-        <Info className="w-3 h-3 shrink-0" aria-hidden="true" /> Your rank comes from all-time XP and never drops.
+        <Info className="w-3 h-3 shrink-0" aria-hidden="true" /> Brushed metal to cut crystal — your rank comes from all-time XP and never drops.
       </p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
-        {TIERS.map((tier) => (
+        {visibleTiers.map((tier) => (
           <TierCard key={tier.key} tier={tier} players={byTier[tier.key]} isCurrent={tier.key === myTier.key} />
         ))}
       </div>
