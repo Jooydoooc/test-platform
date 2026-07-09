@@ -468,8 +468,20 @@ function RankRow({ player, rank, isMe, pool }: { player: PlayerWithXp; rank: num
   );
 }
 
-/* Compact side-panel row for one tier — de-emphasised so the standings stay the focus. */
-function TierListItem({ tier, count, isCurrent }: { tier: Tier; count: number; isCurrent: boolean }) {
+/* Compact side-panel row for one tier — de-emphasised so the standings stay the focus.
+   Each tier has three steps (divisions III → II → I); `stepsDone` (0–3) reflects the
+   viewer's progress, with the current step ring-highlighted on their own tier. */
+function TierListItem({
+  tier,
+  count,
+  isCurrent,
+  stepsDone,
+}: {
+  tier: Tier;
+  count: number;
+  isCurrent: boolean;
+  stepsDone: number;
+}) {
   return (
     <div className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${isCurrent ? "bg-indigo-50 ring-1 ring-indigo-200" : "hover:bg-slate-50"}`}>
       <Medallion tier={tier} size={30} />
@@ -478,7 +490,27 @@ function TierListItem({ tier, count, isCurrent }: { tier: Tier; count: number; i
           {tier.label}
           {isCurrent && <span className="ml-1 text-[9px] font-semibold uppercase tracking-wide text-indigo-600">· you</span>}
         </p>
-        <p className="text-[10px] text-slate-400">{tier.min === 0 ? "Starting rank" : `${tier.min.toLocaleString()}+ xp`}</p>
+        <div className="mt-1 flex gap-1">
+          {DIVISIONS.map((d, i) => {
+            const done = i < stepsDone;
+            const current = isCurrent && i === stepsDone - 1;
+            return (
+              <span
+                key={d}
+                title={`${tier.label} division ${d}`}
+                className={`flex-1 rounded text-center text-[9px] font-bold leading-4 ${
+                  current
+                    ? "bg-indigo-600 text-white"
+                    : done
+                      ? tier.badge
+                      : "bg-slate-100 text-slate-300"
+                }`}
+              >
+                {d}
+              </span>
+            );
+          })}
+        </div>
       </div>
       <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${count > 0 ? tier.badge : "bg-slate-50 text-slate-300"}`}>{count}</span>
     </div>
@@ -530,6 +562,8 @@ export default function LeaderboardPage() {
   // Rank + division are pinned to ALL-TIME XP — a student is never demoted by the period toggle.
   const myTier = tierFor(me.xpTotal);
   const myDiv = divisionInfo(me.xpTotal, myTier);
+  const myTierIdx = tierIndex(myTier);
+  const myDivIdx = DIVISIONS.indexOf(myDiv.label); // 0 = III (entry) … 2 = I (top of tier)
   const lessonsToNextDiv = myDiv.xpToNext ? Math.max(1, Math.ceil(myDiv.xpToNext / XP_PER_LESSON)) : null;
   const lessonPhrase =
     lessonsToNextDiv == null
@@ -703,11 +737,23 @@ export default function LeaderboardPage() {
 
         <div className="bg-white rounded-2xl border border-slate-100 p-3">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-1">Rank journey</p>
-          <p className="text-[11px] text-slate-400 px-1 mb-2">Brushed metal to cut crystal — rank comes from all-time XP and never drops.</p>
+          <p className="text-[11px] text-slate-400 px-1 mb-2">Each tier has three steps (III → II → I) · rank comes from all-time XP and never drops.</p>
           <div className="space-y-0.5">
-            {TIERS.map((tier) => (
-              <TierListItem key={tier.key} tier={tier} count={byTier[tier.key].length} isCurrent={tier.key === myTier.key} />
-            ))}
+            {TIERS.map((tier) => {
+              const ti = tierIndex(tier);
+              const isCurrent = tier.key === myTier.key;
+              // Steps cleared: whole tier if below yours, your current division if it's yours, none if above.
+              const stepsDone = ti < myTierIdx ? 3 : isCurrent ? myDivIdx + 1 : 0;
+              return (
+                <TierListItem
+                  key={tier.key}
+                  tier={tier}
+                  count={byTier[tier.key].length}
+                  isCurrent={isCurrent}
+                  stepsDone={stepsDone}
+                />
+              );
+            })}
           </div>
         </div>
       </aside>
