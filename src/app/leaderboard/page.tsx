@@ -474,29 +474,28 @@ function RankRow({ player, rank, isMe, pool }: { player: PlayerWithXp; rank: num
 function TierCard({ tier, players, isCurrent }: { tier: Tier; players: PlayerWithXp[]; isCurrent: boolean }) {
   const sorted = [...players].sort((a, b) => b.xpTotal - a.xpTotal);
   return (
-    <div className={`relative bg-white rounded-2xl p-4 flex flex-col items-center text-center transition-shadow hover:shadow-md ${isCurrent ? "border-2 border-indigo-300 ring-2 ring-indigo-100" : "border border-slate-100"}`}>
+    <div className={`relative bg-white rounded-xl p-3 flex flex-col items-center text-center transition-shadow hover:shadow-md ${isCurrent ? "border-2 border-indigo-300 ring-2 ring-indigo-100" : "border border-slate-100"}`}>
       {isCurrent && <span className="absolute -top-2 text-[10px] font-bold text-white bg-indigo-600 px-2 py-0.5 rounded-full shadow-sm">You&apos;re here</span>}
-      <Medallion tier={tier} size={60} />
-      <p className={`font-bold text-sm mt-2 ${tier.text}`}>{tier.label}</p>
-      <p className="text-[11px] text-slate-400 italic mt-0.5 leading-snug min-h-[28px]">&quot;{tier.slogan}&quot;</p>
+      <Medallion tier={tier} size={40} />
+      <p className={`font-bold text-sm mt-1.5 ${tier.text}`}>{tier.label}</p>
       <p className="text-[10px] font-medium text-slate-400 mt-0.5">{tier.min === 0 ? "Starting rank" : `${tier.min.toLocaleString()}+ xp`}</p>
-      <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold mt-2 ${tier.badge}`}>
+      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold mt-1.5 ${tier.badge}`}>
         {sorted.length} {sorted.length === 1 ? "student" : "students"}
       </span>
-      <div className="mt-3 flex items-center -space-x-2 min-h-[28px]">
+      <div className="mt-2 flex items-center -space-x-1.5 min-h-[20px]">
         {sorted.length > 0 ? (
           sorted.slice(0, 4).map((p) => (
-            <div key={p.name} title={p.name} className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white ring-2 ring-white" style={{ background: tier.to }}>
+            <div key={p.name} title={p.name} className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white ring-2 ring-white" style={{ background: tier.to }}>
               {initials(p.name)}
             </div>
           ))
         ) : (
           <div className="flex items-center gap-1 text-amber-500">
-            <Sparkles className="w-3.5 h-3.5 animate-pulse" aria-hidden="true" />
-            <p className="text-[11px] font-medium">Be the first here!</p>
+            <Sparkles className="w-3 h-3" aria-hidden="true" />
+            <p className="text-[10px] font-medium">Be first!</p>
           </div>
         )}
-        {sorted.length > 4 && <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold bg-slate-100 text-slate-500 ring-2 ring-white">+{sorted.length - 4}</div>}
+        {sorted.length > 4 && <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold bg-slate-100 text-slate-500 ring-2 ring-white">+{sorted.length - 4}</div>}
       </div>
     </div>
   );
@@ -699,7 +698,7 @@ export default function LeaderboardPage() {
       <p className="flex items-center gap-1 text-[11px] text-slate-400 mb-2 px-1">
         <Info className="w-3 h-3 shrink-0" aria-hidden="true" /> Brushed metal to cut crystal — your rank comes from all-time XP and never drops.
       </p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-3 gap-2.5 mb-6">
         {visibleTiers.map((tier) => (
           <TierCard key={tier.key} tier={tier} players={byTier[tier.key]} isCurrent={tier.key === myTier.key} />
         ))}
