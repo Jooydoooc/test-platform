@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Card, LinkButton, ProgressBar } from "@/components/ui";
 import { ArrowIcon, LogOutIcon, SlidersIcon, TrophyIcon } from "@/components/icons";
 import { logout, useSession } from "@/lib/auth";
-import { useAttempts } from "@/lib/store";
-import type { Attempt } from "@/lib/types";
+import { groupOf, useAttempts, useTests } from "@/lib/store";
+import { TEST_GROUPS, type Attempt } from "@/lib/types";
 
 function pct(a: Attempt): number {
   return a.maxScore > 0 ? a.score / a.maxScore : 0;
@@ -15,10 +15,14 @@ function pct(a: Attempt): number {
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
+// The six trainable skills — every test group except the Level Tests bucket.
+const SKILL_GROUPS = TEST_GROUPS.filter((g) => g !== "Level Tests");
+
 export default function DashboardPage() {
   const { user, loading } = useSession();
   const router = useRouter();
   const attempts = useAttempts();
+  const tests = useTests();
 
   // This user's own completed tests (attempts are stored by taker name).
   const mine = useMemo(() => {
@@ -52,6 +56,27 @@ export default function DashboardPage() {
       [...mine].sort((a, b) => b.submittedAt - a.submittedAt).slice(0, 8),
     [mine],
   );
+
+  // Per-skill mastery: the user's average best score across each group's tests.
+  const skillProgress = useMemo(() => {
+    const bestByTest = new Map<string, number>();
+    for (const a of mine) {
+      const p = pct(a) * 100;
+      bestByTest.set(a.testId, Math.max(bestByTest.get(a.testId) ?? 0, p));
+    }
+    return SKILL_GROUPS.map((g) => {
+      const inGroup = tests.filter((t) => groupOf(t) === g);
+      const done = inGroup.filter((t) => bestByTest.has(t.id));
+      const avg =
+        done.length > 0
+          ? Math.round(
+              done.reduce((s, t) => s + (bestByTest.get(t.id) ?? 0), 0) /
+                done.length,
+            )
+          : 0;
+      return { group: g, total: inGroup.length, done: done.length, avg };
+    });
+  }, [tests, mine]);
 
   // AuthGate handles the redirect for signed-out users; render nothing meanwhile.
   if (loading || !user) return null;
@@ -193,6 +218,45 @@ export default function DashboardPage() {
             <Stat label="Tests taken" value={stats.tests} />
           </div>
         )}
+      </section>
+
+      {/* Skill progress */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold text-slate-900">Skill progress</h2>
+        <Card>
+          <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+            {skillProgress.map((s) => {
+              const name = s.group.replace(" Tests", "");
+              return (
+                <div key={s.group}>
+                  <div className="mb-1.5 flex items-center justify-between text-sm">
+                    <span className="font-medium text-slate-700">{name}</span>
+                    <span className="tabular-nums text-slate-500">
+                      {s.done > 0 ? (
+                        <>
+                          <span className="font-semibold text-slate-700">
+                            {s.avg}%
+                          </span>
+                          <span className="ml-1.5 text-xs text-slate-400">
+                            {s.done}/{s.total}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-xs text-slate-400">
+                          Not started
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <ProgressBar
+                    value={s.avg}
+                    tone={s.avg >= 80 ? "success" : s.avg >= 40 ? "brand" : "amber"}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </Card>
       </section>
 
       {/* Recent results */}

@@ -60,7 +60,6 @@ export const TEST_GROUPS = [
   "Reading Tests",
   "Listening Tests",
   "Writing Tests",
-  "Speaking Tests",
 ] as const;
 export type TestGroup = (typeof TEST_GROUPS)[number];
 
