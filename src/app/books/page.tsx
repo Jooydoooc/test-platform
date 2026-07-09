@@ -1,13 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpen, SlidersHorizontal, Sparkles } from "lucide-react";
 import { Card, LinkButton } from "@/components/ui";
 import { BookIcon } from "@/components/icons";
 import { bookOf, categoryOf, useTests } from "@/lib/store";
 import { CATEGORIES, orderBooks, type Category } from "@/lib/types";
 import type { Test } from "@/lib/types";
+import { listBooks } from "@/lib/books-client";
+import {
+  BOOK_CONTENT_TYPES,
+  CONTENT_TYPE_LABELS,
+  isQuestionBook,
+} from "@/lib/books";
+import type { BookRow } from "@/lib/database.types";
 
 export default function BooksPage() {
   const tests = useTests().filter((t) => t.questions.length > 0);
@@ -49,14 +56,79 @@ export default function BooksPage() {
           href="/lexora/vocab"
           icon={<Sparkles className="size-5" />}
           title="Vocabulary"
-          desc="Practise word sets — definitions, translations, and gap-fill."
+          desc="Read texts and double-tap words to save and learn them."
         />
       </div>
+
+      <UploadedBooks />
 
       {byCategory.map(({ cat, books, count }) => (
         <CategorySection key={cat} cat={cat} books={books} count={count} />
       ))}
     </div>
+  );
+}
+
+// Books uploaded by admins (Supabase), grouped by content category. Hidden when
+// there are none or Supabase isn't configured.
+function UploadedBooks() {
+  const [books, setBooks] = useState<BookRow[]>([]);
+
+  useEffect(() => {
+    listBooks()
+      .then(setBooks)
+      .catch(() => setBooks([]));
+  }, []);
+
+  if (books.length === 0) return null;
+
+  const groups = BOOK_CONTENT_TYPES.map((ct) => ({
+    ct,
+    items: books.filter((b) => b.content_type === ct),
+  })).filter((g) => g.items.length > 0);
+
+  return (
+    <section className="space-y-5">
+      <h2 className="text-lg font-semibold text-slate-900">Uploaded books</h2>
+      {groups.map(({ ct, items }) => (
+        <div key={ct} className="space-y-2">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            {CONTENT_TYPE_LABELS[ct]}
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {items.map((b) => {
+              const questions = isQuestionBook(b.content_type);
+              return (
+                <Link
+                  key={b.id}
+                  href={questions ? `/books/practice/${b.id}` : `/books/read/${b.id}`}
+                  className="group block focus-visible:outline-none"
+                >
+                  <Card className="flex h-full items-center justify-between gap-3 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-brand-300 group-hover:shadow-card-hover">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/15">
+                        {questions ? (
+                          <SlidersHorizontal className="size-4" />
+                        ) : (
+                          <BookOpen className="size-4" />
+                        )}
+                      </span>
+                      <p className="min-w-0 truncate font-semibold text-slate-900">
+                        {b.title}
+                      </p>
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-600">
+                      {questions ? "Practise" : "Read"}
+                      <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -139,15 +211,7 @@ function CategorySection({
                         {t.questions.length === 1 ? "" : "s"}
                       </p>
                     </div>
-                    <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                      <LinkButton
-                        href={`/lexora/vocab/${t.id}`}
-                        variant="ghost"
-                        className="gap-1.5 px-3"
-                      >
-                        <Sparkles className="size-4" />
-                        Vocabulary
-                      </LinkButton>
+                    <div className="flex shrink-0 gap-2">
                       <LinkButton
                         href={`/practice/${t.id}`}
                         variant="secondary"

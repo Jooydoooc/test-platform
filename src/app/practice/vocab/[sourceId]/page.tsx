@@ -1,47 +1,66 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, BookOpen } from "lucide-react";
 import { Card } from "@/components/ui";
 import { QUIZ_CONFIG, type McExerciseType } from "@/lib/vocab";
-import { getVocabUnit } from "@/lib/vocab-store";
-import { useTests } from "@/lib/store";
+import {
+  getCollectedWords,
+  getReadingPassage,
+  getSourceTitle,
+} from "@/lib/vocab-store";
 
-// Unit vocab hub — entry point + "Back to unit" target for the MC exercises.
-// Learn Cards / Sentence Order / Sentence Making will be added here later,
-// consuming the same vocab data.
-export default function VocabUnitPage({
+// Vocabulary practice hub — the drills for one saved word set (a reading
+// passage the student has collected words from).
+export default function VocabPracticePage({
   params,
 }: {
-  params: Promise<{ unitId: string }>;
+  params: Promise<{ sourceId: string }>;
 }) {
-  const { unitId } = use(params);
-  const unit = getVocabUnit(unitId);
-  // Units opened from the Books section are keyed by their test id and may not
-  // have a seeded vocab set yet — fall back to the test's title so the page
-  // still names the unit rather than showing a generic placeholder.
-  const testTitle = useTests().find((t) => t.id === unitId)?.title;
-  const wordCount = unit?.words.length ?? 0;
+  const { sourceId } = use(params);
+  // Seeded passages live under /lexora/vocab/read; uploaded books under /books/read.
+  const isSeeded = Boolean(getReadingPassage(sourceId));
+  const readHref = isSeeded
+    ? `/lexora/vocab/read/${sourceId}`
+    : `/books/read/${sourceId}`;
   const exercises = Object.values(QUIZ_CONFIG);
+
+  // Title + collected count are client-only (localStorage).
+  const [title, setTitle] = useState("Saved words");
+  const [wordCount, setWordCount] = useState(0);
+  useEffect(() => {
+    setTitle(getSourceTitle(sourceId));
+    setWordCount(getCollectedWords(sourceId).length);
+  }, [sourceId]);
 
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <p className="text-sm font-medium text-slate-500">Vocabulary practice</p>
+        <p className="text-sm font-medium text-slate-500">
+          Practice · Vocabulary
+        </p>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          {unit?.title ?? testTitle ?? "Unit"}
+          {title}
         </h1>
         <p className="text-sm text-slate-600">
-          {wordCount} {wordCount === 1 ? "word" : "words"} in this unit
+          {wordCount} saved {wordCount === 1 ? "word" : "words"} in this set.
         </p>
       </header>
+
+      <Link
+        href={readHref}
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+      >
+        <BookOpen className="size-4" />
+        Add more words from the text
+      </Link>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {exercises.map((ex) => (
           <ExerciseLink
             key={ex.exerciseType}
-            unitId={unitId}
+            sourceId={sourceId}
             type={ex.exerciseType}
             label={ex.label}
             caption={ex.caption}
@@ -53,19 +72,19 @@ export default function VocabUnitPage({
 }
 
 function ExerciseLink({
-  unitId,
+  sourceId,
   type,
   label,
   caption,
 }: {
-  unitId: string;
+  sourceId: string;
   type: McExerciseType;
   label: string;
   caption: string;
 }) {
   return (
     <Link
-      href={`/lexora/vocab/${unitId}/${type}`}
+      href={`/practice/vocab/${sourceId}/${type}`}
       className="group block focus-visible:outline-none"
     >
       <Card className="flex h-full items-center justify-between gap-3 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-brand-300 group-hover:shadow-card-hover group-focus-visible:border-brand-400 group-focus-visible:ring-2 group-focus-visible:ring-brand-500/30">

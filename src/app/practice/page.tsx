@@ -12,11 +12,13 @@ import {
   GraduationCap,
   ListChecks,
   Search,
+  Sparkles,
   Sprout,
   Target,
   X,
 } from "lucide-react";
 import { LinkButton, ProgressBar } from "@/components/ui";
+import { useCollections } from "@/lib/vocab-store";
 import {
   bookOf,
   categoryOf,
@@ -90,6 +92,7 @@ export default function PracticePage() {
   const tests = useTests().filter((t) => t.questions.length > 0);
   const attempts = useAttempts();
   const { user } = useSession();
+  const collections = useCollections();
 
   // ---- preserved business logic (unchanged behaviour) ----
   const [category, setCategory] = useState<Category>(DEFAULT_CATEGORY);
@@ -247,6 +250,9 @@ export default function PracticePage() {
         <StatCard emoji="📚" label="Questions" value={stats.questions} />
       </section>
 
+      {/* ---------- my vocabulary (saved words → drills) ---------- */}
+      <MyVocabulary collections={collections} />
+
       {/* ---------- level navigation cards ---------- */}
       <section aria-label="Learning levels" className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
@@ -347,6 +353,82 @@ export default function PracticePage() {
         </div>
       )}
     </div>
+  );
+}
+
+/* ------------------------- my vocabulary ------------------------------- */
+
+function MyVocabulary({
+  collections,
+}: {
+  collections: { passageId: string; title: string; wordCount: number }[];
+}) {
+  return (
+    <section aria-label="My vocabulary" className="space-y-3">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          My vocabulary
+        </h2>
+        <Link
+          href="/lexora/vocab"
+          className="text-xs font-medium text-brand-600 hover:text-brand-700"
+        >
+          Read &amp; collect →
+        </Link>
+      </div>
+
+      {collections.length === 0 ? (
+        <Link
+          href="/lexora/vocab"
+          className="group block focus-visible:outline-none"
+        >
+          <div className="flex items-center gap-3 rounded-3xl border border-dashed border-slate-200 bg-white/60 px-5 py-6 transition group-hover:border-brand-300 group-hover:bg-white">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-500">
+              <Sparkles className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold text-[#0F172A]">
+                No saved words yet
+              </p>
+              <p className="text-sm text-slate-600">
+                Read a text in Vocabulary and double-tap words to practise them
+                here.
+              </p>
+            </div>
+            <ArrowRight className="ml-auto size-5 shrink-0 text-brand-600 transition-transform group-hover:translate-x-0.5" />
+          </div>
+        </Link>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {collections.map((c) => (
+            <Link
+              key={c.passageId}
+              href={`/practice/vocab/${c.passageId}`}
+              className="group flex flex-col rounded-3xl border border-slate-200/70 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 motion-reduce:hover:translate-y-0"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="font-semibold leading-snug text-[#0F172A]">
+                  {c.title}
+                </h3>
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+                  <Sparkles className="size-4" />
+                </span>
+              </div>
+              <div className="mt-4 flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-500">
+                  {c.wordCount} saved {c.wordCount === 1 ? "word" : "words"}
+                  {c.wordCount < 4 && " · need 4+"}
+                </span>
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600">
+                  Practise
+                  <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

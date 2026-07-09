@@ -334,8 +334,8 @@ function Notice({
         <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
         <p className="text-sm text-slate-600">{body}</p>
         <div className="pt-1">
-          <LinkButton href={`/lexora/vocab/${unitId}`} variant="secondary">
-            Back to unit
+          <LinkButton href={`/practice/vocab/${unitId}`} variant="secondary">
+            Back to word set
           </LinkButton>
         </div>
       </Card>
@@ -400,8 +400,8 @@ function Results({
             <RotateCcw className="size-4" />
             Retry
           </button>
-          <LinkButton href={`/lexora/vocab/${unitId}`} variant="secondary">
-            Back to unit
+          <LinkButton href={`/practice/vocab/${unitId}`} variant="secondary">
+            Back to word set
           </LinkButton>
         </div>
 

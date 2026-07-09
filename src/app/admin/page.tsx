@@ -33,10 +33,15 @@ export default function AdminPage() {
           </span>
           <h2 className="text-lg font-semibold text-slate-900">Authoring</h2>
           <p className="flex-1 text-sm text-slate-600">
-            Create and edit tests, assign them to a book and level, and build
-            question banks.
+            Create and edit tests, upload categorized books (Vocabulary,
+            Grammar, Reading, Articles), and build question banks.
           </p>
-          <LinkButton href="/author">Manage tests</LinkButton>
+          <div className="flex gap-2">
+            <LinkButton href="/author">Manage tests</LinkButton>
+            <LinkButton href="/author/upload" variant="secondary">
+              Upload book
+            </LinkButton>
+          </div>
         </Card>
 
         <Card className="flex flex-col gap-3">

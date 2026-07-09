@@ -33,7 +33,12 @@ export default function AuthorPage() {
             Manage your tests and question banks.
           </p>
         </div>
-        <Button onClick={createTest}>+ New test</Button>
+        <div className="flex shrink-0 gap-2">
+          <LinkButton href="/author/upload" variant="secondary">
+            Upload book
+          </LinkButton>
+          <Button onClick={createTest}>+ New test</Button>
+        </div>
       </div>
 
       {tests.length === 0 ? (

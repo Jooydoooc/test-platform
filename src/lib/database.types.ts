@@ -49,6 +49,7 @@ export type TestSkillScope =
   | "MIXED";
 export type TestPurpose = "UNIT" | "MONTHLY" | "PLACEMENT" | "CUSTOM";
 export type ResultStatus = "COMPLETED" | "PENDING_REVIEW";
+export type BookContentType = "VOCABULARY" | "GRAMMAR" | "READING" | "ARTICLES";
 
 type Timestamps = { created_at: string; updated_at: string };
 
@@ -187,6 +188,47 @@ export type UserProgressRow = {
   completed_at: string;
 };
 
+// Uploaded books (migration 0005).
+export type BookRow = {
+  id: string;
+  title: string;
+  content_type: BookContentType;
+  level: Level | null;
+  description: string;
+  source_filename: string | null;
+  source_path: string | null;
+  created_by: string;
+} & Timestamps;
+
+export type BookQuestionRow = {
+  id: string;
+  book_id: string;
+  order: number;
+  format: QuestionFormat;
+  prompt: string;
+  choices: Json; // string[] at runtime
+  correct: Json; // string[] at runtime
+  points: number;
+};
+
+export type BookPassageRow = {
+  id: string;
+  book_id: string;
+  title: string;
+  body: string;
+  order: number;
+};
+
+export type BookGlossaryRow = {
+  id: string;
+  book_id: string;
+  word: string;
+  definition_en: string;
+  translation_uz: string;
+  example: string;
+  part_of_speech: string | null;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -203,6 +245,10 @@ export interface Database {
       units: Table<UnitRow>;
       words: Table<WordRow>;
       user_progress: Table<UserProgressRow>;
+      books: Table<BookRow>;
+      book_questions: Table<BookQuestionRow>;
+      book_passages: Table<BookPassageRow>;
+      book_glossary: Table<BookGlossaryRow>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -226,6 +272,7 @@ export interface Database {
       test_skill_scope: TestSkillScope;
       test_purpose: TestPurpose;
       result_status: ResultStatus;
+      book_content_type: BookContentType;
     };
     CompositeTypes: Record<string, never>;
   };
