@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { ChevronDown, Flame, Trophy, Sparkles, Info } from "lucide-react";
+import { ChevronDown, Flame, Trophy } from "lucide-react";
 
 const CURRENT_USER = "Leo";
 const XP_PER_LESSON = 60; // rough estimate used only to phrase "complete N more lessons"
@@ -361,9 +361,6 @@ function xpFor(player: Player, period: Period): number {
   return period === "week" ? player.xpWeek : period === "month" ? player.xpMonth : player.xpTotal;
 }
 
-function initials(name: string): string {
-  return name.slice(0, 2).toUpperCase();
-}
 function tierFor(xp: number): Tier {
   return [...TIERS].reverse().find((t) => xp >= t.min) || TIERS[0];
 }
@@ -471,32 +468,19 @@ function RankRow({ player, rank, isMe, pool }: { player: PlayerWithXp; rank: num
   );
 }
 
-function TierCard({ tier, players, isCurrent }: { tier: Tier; players: PlayerWithXp[]; isCurrent: boolean }) {
-  const sorted = [...players].sort((a, b) => b.xpTotal - a.xpTotal);
+/* Compact side-panel row for one tier — de-emphasised so the standings stay the focus. */
+function TierListItem({ tier, count, isCurrent }: { tier: Tier; count: number; isCurrent: boolean }) {
   return (
-    <div className={`relative bg-white rounded-xl p-3 flex flex-col items-center text-center transition-shadow hover:shadow-md ${isCurrent ? "border-2 border-indigo-300 ring-2 ring-indigo-100" : "border border-slate-100"}`}>
-      {isCurrent && <span className="absolute -top-2 text-[10px] font-bold text-white bg-indigo-600 px-2 py-0.5 rounded-full shadow-sm">You&apos;re here</span>}
-      <Medallion tier={tier} size={40} />
-      <p className={`font-bold text-sm mt-1.5 ${tier.text}`}>{tier.label}</p>
-      <p className="text-[10px] font-medium text-slate-400 mt-0.5">{tier.min === 0 ? "Starting rank" : `${tier.min.toLocaleString()}+ xp`}</p>
-      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold mt-1.5 ${tier.badge}`}>
-        {sorted.length} {sorted.length === 1 ? "student" : "students"}
-      </span>
-      <div className="mt-2 flex items-center -space-x-1.5 min-h-[20px]">
-        {sorted.length > 0 ? (
-          sorted.slice(0, 4).map((p) => (
-            <div key={p.name} title={p.name} className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white ring-2 ring-white" style={{ background: tier.to }}>
-              {initials(p.name)}
-            </div>
-          ))
-        ) : (
-          <div className="flex items-center gap-1 text-amber-500">
-            <Sparkles className="w-3 h-3" aria-hidden="true" />
-            <p className="text-[10px] font-medium">Be first!</p>
-          </div>
-        )}
-        {sorted.length > 4 && <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold bg-slate-100 text-slate-500 ring-2 ring-white">+{sorted.length - 4}</div>}
+    <div className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${isCurrent ? "bg-indigo-50 ring-1 ring-indigo-200" : "hover:bg-slate-50"}`}>
+      <Medallion tier={tier} size={30} />
+      <div className="min-w-0 flex-1">
+        <p className={`text-xs font-bold leading-tight ${tier.text}`}>
+          {tier.label}
+          {isCurrent && <span className="ml-1 text-[9px] font-semibold uppercase tracking-wide text-indigo-600">· you</span>}
+        </p>
+        <p className="text-[10px] text-slate-400">{tier.min === 0 ? "Starting rank" : `${tier.min.toLocaleString()}+ xp`}</p>
       </div>
+      <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${count > 0 ? tier.badge : "bg-slate-50 text-slate-300"}`}>{count}</span>
     </div>
   );
 }
@@ -505,7 +489,6 @@ export default function LeaderboardPage() {
   const [group, setGroup] = useState("All groups");
   const [period, setPeriod] = useState<Period>("total");
   const [showAll, setShowAll] = useState(false);
-  const [showTiers, setShowTiers] = useState(false);
   const groups = ["All groups", "Class A", "Class B"];
 
   const withXp = useMemo<PlayerWithXp[]>(
@@ -559,18 +542,13 @@ export default function LeaderboardPage() {
 
   const top3 = ranked.slice(0, 3);
 
-  // Collapsed rank journey: show up to the user's current tier (min 3) so "You're here" stays visible.
-  const myTierIdx = tierIndex(myTier);
-  const tierPreviewCount = Math.max(3, myTierIdx + 1);
-  const visibleTiers = showTiers ? TIERS : TIERS.slice(0, tierPreviewCount);
-
   const visible = showAll ? ranked : ranked.slice(0, PUBLIC_TOP_N);
   const meVisible = visible.some((p) => p.name === CURRENT_USER);
   const myListIdx = ranked.findIndex((p) => p.name === CURRENT_USER);
   const myRow = myListIdx >= 0 ? ranked[myListIdx] : null;
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <BadgeDefs />
 
       <div className="mb-5">
@@ -578,6 +556,9 @@ export default function LeaderboardPage() {
         <p className="text-sm text-slate-400 mt-1">Vocabulary practice · climb the ranks</p>
       </div>
 
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6 lg:items-start">
+      {/* MAIN COLUMN — the students' current standings are the focus */}
+      <div className="min-w-0">
       {/* Your Progress Card */}
       <div className="relative bg-indigo-600 rounded-2xl px-5 py-5 mb-5 text-white overflow-hidden">
         <div className="flex items-center gap-4 mb-2">
@@ -674,36 +655,6 @@ export default function LeaderboardPage() {
         </div>
       </div>
 
-      {/* Class comparison */}
-      <div className="flex gap-3 mb-6">
-        <div className="flex-1 bg-white rounded-xl border border-slate-100 px-3 py-2">
-          <p className="text-[11px] text-slate-400">Class A average</p>
-          <p className="text-sm font-bold text-indigo-600">{classAvg.A.toLocaleString()} xp</p>
-        </div>
-        <div className="flex-1 bg-white rounded-xl border border-slate-100 px-3 py-2">
-          <p className="text-[11px] text-slate-400">Class B average</p>
-          <p className="text-sm font-bold text-teal-600">{classAvg.B.toLocaleString()} xp</p>
-        </div>
-      </div>
-
-      {/* Rank Journey */}
-      <div className="flex items-center justify-between mb-1 px-1">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Rank journey</p>
-        {TIERS.length > tierPreviewCount && (
-          <button onClick={() => setShowTiers((v) => !v)} className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
-            {showTiers ? "Show fewer" : `Show all tiers (${TIERS.length})`}
-          </button>
-        )}
-      </div>
-      <p className="flex items-center gap-1 text-[11px] text-slate-400 mb-2 px-1">
-        <Info className="w-3 h-3 shrink-0" aria-hidden="true" /> Brushed metal to cut crystal — your rank comes from all-time XP and never drops.
-      </p>
-      <div className="grid grid-cols-3 gap-2.5 mb-6">
-        {visibleTiers.map((tier) => (
-          <TierCard key={tier.key} tier={tier} players={byTier[tier.key]} isCurrent={tier.key === myTier.key} />
-        ))}
-      </div>
-
       {/* Standings */}
       <div className="flex items-center justify-between mb-2 px-1">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Standings</p>
@@ -731,6 +682,37 @@ export default function LeaderboardPage() {
           Only the top {PUBLIC_TOP_N} are shown publicly. You always see your own position.
         </p>
       )}
+      </div>
+      {/* end main column */}
+
+      {/* SIDE PANEL — rank ladder + class context, tucked out of the way (drops below standings on mobile) */}
+      <aside className="mt-6 lg:mt-0 lg:sticky lg:top-6 space-y-4">
+        <div className="bg-white rounded-2xl border border-slate-100 p-3">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-2">Class averages</p>
+          <div className="flex gap-2">
+            <div className="flex-1 rounded-xl bg-slate-50 px-3 py-2">
+              <p className="text-[11px] text-slate-400">Class A</p>
+              <p className="text-sm font-bold text-indigo-600">{classAvg.A.toLocaleString()} xp</p>
+            </div>
+            <div className="flex-1 rounded-xl bg-slate-50 px-3 py-2">
+              <p className="text-[11px] text-slate-400">Class B</p>
+              <p className="text-sm font-bold text-teal-600">{classAvg.B.toLocaleString()} xp</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-100 p-3">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-1">Rank journey</p>
+          <p className="text-[11px] text-slate-400 px-1 mb-2">Brushed metal to cut crystal — rank comes from all-time XP and never drops.</p>
+          <div className="space-y-0.5">
+            {TIERS.map((tier) => (
+              <TierListItem key={tier.key} tier={tier} count={byTier[tier.key].length} isCurrent={tier.key === myTier.key} />
+            ))}
+          </div>
+        </div>
+      </aside>
+      </div>
+      {/* end grid */}
     </div>
   );
 }
