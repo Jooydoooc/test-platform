@@ -1,5 +1,6 @@
 "use client";
 
+import { Users } from "lucide-react";
 import { Card, LinkButton } from "@/components/ui";
 import { PencilIcon, SendIcon } from "@/components/icons";
 import { useTests } from "@/lib/store";
@@ -27,6 +28,20 @@ export default function AdminPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
+        <Card className="flex flex-col gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/15">
+            <Users className="size-5" />
+          </span>
+          <h2 className="text-lg font-semibold text-slate-900">Students</h2>
+          <p className="flex-1 text-sm text-slate-600">
+            Full control over every account: search the roster, change roles and
+            groups, review each student&apos;s performance, or remove accounts.
+          </p>
+          <div>
+            <LinkButton href="/admin/students">Manage students</LinkButton>
+          </div>
+        </Card>
+
         <Card className="flex flex-col gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/15">
             <PencilIcon />
