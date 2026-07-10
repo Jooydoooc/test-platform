@@ -12,6 +12,7 @@ import {
   type Test,
   type TestGroup,
 } from "./types";
+import { ESSENTIAL_WORDS_BOOK1 } from "./data/essential-words";
 
 const TESTS_KEY = "tp.tests";
 const ATTEMPTS_KEY = "tp.attempts";
@@ -43,138 +44,21 @@ function write<T>(key: string, value: T): void {
 }
 
 // ---- built-in vocabulary practice: 4000 Essential English Words, Book 1 ----
-// Official target words + definitions for Units 1–5 (20 words each). Each unit
-// becomes its own practice test of word→meaning multiple-choice questions.
+// Word data comes from the shared source (src/lib/data/essential-words.ts) so
+// these quiz tests and the vocab drills never drift. Each unit becomes its own
+// practice test of word→meaning multiple-choice questions.
 
 type VocabWord = { w: string; pos: string; def: string };
 
-const EEW1_BOOK1: { unit: number; words: VocabWord[] }[] = [
-  {
-    unit: 1,
-    words: [
-      { w: "agree", pos: "v.", def: "to have the same opinion or belief as another person" },
-      { w: "alcohol", pos: "n.", def: "a type of drink that can make people drunk" },
-      { w: "arrive", pos: "v.", def: "to get somewhere" },
-      { w: "August", pos: "n.", def: "the eighth month of the year" },
-      { w: "boat", pos: "n.", def: "a vehicle that moves across water" },
-      { w: "breakfast", pos: "n.", def: "the morning meal" },
-      { w: "camera", pos: "n.", def: "a piece of equipment that takes pictures" },
-      { w: "capital", pos: "n.", def: "a city where a country’s government is based" },
-      { w: "catch", pos: "v.", def: "to grab or get something" },
-      { w: "duck", pos: "n.", def: "a small water bird" },
-      { w: "enjoy", pos: "v.", def: "to like something" },
-      { w: "invite", pos: "v.", def: "to ask someone to come to a place or event" },
-      { w: "love", pos: "v.", def: "to like something or someone a lot" },
-      { w: "month", pos: "n.", def: "one of 12 periods of time in one year" },
-      { w: "travel", pos: "v.", def: "to go to a faraway place on vacation or business" },
-      { w: "typical", pos: "adj.", def: "it is normal, or something that usually happens" },
-      { w: "visit", pos: "v.", def: "to go and spend time in another place or see another person" },
-      { w: "weather", pos: "n.", def: "the temperature and the state of the outdoors" },
-      { w: "week", pos: "n.", def: "a period of time that is seven days long" },
-      { w: "wine", pos: "n.", def: "an alcoholic drink made from grapes" },
-    ],
-  },
-  {
-    unit: 2,
-    words: [
-      { w: "adventure", pos: "n.", def: "a fun or exciting thing that you do" },
-      { w: "approach", pos: "v.", def: "to move close to it" },
-      { w: "carefully", pos: "adv.", def: "with great attention, especially to detail or safety" },
-      { w: "chemical", pos: "n.", def: "something that scientists use in chemistry" },
-      { w: "create", pos: "v.", def: "to make something new" },
-      { w: "evil", pos: "adj.", def: "something or someone bad or cruel, not good" },
-      { w: "experiment", pos: "n.", def: "a test that you do to see what will happen" },
-      { w: "kill", pos: "v.", def: "to make them die" },
-      { w: "laboratory", pos: "n.", def: "a room where a scientist works" },
-      { w: "laugh", pos: "n.", def: "the sound made when someone is happy or a funny thing occurs" },
-      { w: "loud", pos: "adj.", def: "strong and very easy to hear" },
-      { w: "nervous", pos: "adj.", def: "they think something bad will happen" },
-      { w: "noise", pos: "n.", def: "an unpleasant sound" },
-      { w: "project", pos: "n.", def: "a type of work that you do for school or a job" },
-      { w: "scare", pos: "v.", def: "to make them feel afraid" },
-      { w: "secret", pos: "n.", def: "something that you do not tell other people" },
-      { w: "shout", pos: "v.", def: "to say something loudly" },
-      { w: "smell", pos: "v.", def: "to use your nose to sense it" },
-      { w: "terrible", pos: "adj.", def: "it is very bad" },
-      { w: "worse", pos: "adj.", def: "it is of poorer quality than another thing" },
-    ],
-  },
-  {
-    unit: 3,
-    words: [
-      { w: "alien", pos: "n.", def: "a creature from a different world" },
-      { w: "among", pos: "prep.", def: "they are all around you" },
-      { w: "chart", pos: "n.", def: "a list of information" },
-      { w: "cloud", pos: "n.", def: "a group of water drops in the sky" },
-      { w: "describe", pos: "v.", def: "to say or write what someone or something is like" },
-      { w: "ever", pos: "adv.", def: "at any time" },
-      { w: "fail", pos: "v.", def: "you do not succeed in what you try to do" },
-      { w: "grade", pos: "n.", def: "a score or mark given to someone’s work" },
-      { w: "instead", pos: "adv.", def: "in place of" },
-      { w: "library", pos: "n.", def: "a place where you go to read books" },
-      { w: "photograph", pos: "n.", def: "a representation of a person or scene in the form of a print" },
-      { w: "planet", pos: "n.", def: "a large round thing in space" },
-      { w: "report", pos: "n.", def: "something someone writes for school or work" },
-      { w: "several", pos: "adj.", def: "more than two but not many" },
-      { w: "shape", pos: "n.", def: "the arrangement of its sides and surfaces" },
-      { w: "solve", pos: "v.", def: "to find an answer to it" },
-      { w: "suddenly", pos: "adv.", def: "it happens quickly and unexpectedly" },
-      { w: "suppose", pos: "v.", def: "to guess" },
-      { w: "understand", pos: "v.", def: "you need to know what it means" },
-      { w: "view", pos: "v.", def: "to look at something" },
-    ],
-  },
-  {
-    unit: 4,
-    words: [
-      { w: "appropriate", pos: "adj.", def: "it is right or normal" },
-      { w: "avoid", pos: "v.", def: "to stay away from it" },
-      { w: "behave", pos: "v.", def: "to act in a particular way, especially to be good" },
-      { w: "calm", pos: "adj.", def: "they do not get excited or upset" },
-      { w: "concern", pos: "n.", def: "a feeling of worry" },
-      { w: "content", pos: "adj.", def: "to be happy and not want more" },
-      { w: "expect", pos: "v.", def: "to happen, you believe it will happen" },
-      { w: "frequently", pos: "adv.", def: "it happens often" },
-      { w: "habit", pos: "n.", def: "a thing that you do often" },
-      { w: "instruct", pos: "v.", def: "to teach" },
-      { w: "issue", pos: "n.", def: "an important topic" },
-      { w: "none", pos: "pron.", def: "not any of something" },
-      { w: "patient", pos: "adj.", def: "they don’t become angry or upset easily" },
-      { w: "positive", pos: "adj.", def: "it is good" },
-      { w: "punish", pos: "v.", def: "to make someone suffer for breaking the rules or laws" },
-      { w: "represent", pos: "v.", def: "to speak or act for a person or group" },
-      { w: "shake", pos: "v.", def: "to move back and forth or up and down quickly" },
-      { w: "spread", pos: "v.", def: "to move out to cover a larger area" },
-      { w: "stroll", pos: "v.", def: "to walk slowly and calmly" },
-      { w: "village", pos: "n.", def: "a very small town" },
-    ],
-  },
-  {
-    unit: 5,
-    words: [
-      { w: "active", pos: "adj.", def: "they move a lot or have a lot of things to do" },
-      { w: "adult", pos: "n.", def: "a person who is more than 18 years old" },
-      { w: "age", pos: "n.", def: "how many years someone has lived" },
-      { w: "bad", pos: "adj.", def: "it is not good" },
-      { w: "balance", pos: "n.", def: "when two or more things are equal" },
-      { w: "bike", pos: "n.", def: "a vehicle with two wheels powered by a human" },
-      { w: "choose", pos: "v.", def: "to pick something or make a decision" },
-      { w: "doctor", pos: "n.", def: "a person who studies medicine and helps sick people" },
-      { w: "during", pos: "prep.", def: "while the event was happening" },
-      { w: "football", pos: "n.", def: "a sport with eleven members and an oval-shaped ball" },
-      { w: "fun", pos: "adj.", def: "it is enjoyable" },
-      { w: "game", pos: "n.", def: "an activity where people compete against each other" },
-      { w: "heart", pos: "n.", def: "an organ that keeps the body alive" },
-      { w: "golf", pos: "n.", def: "a sport with clubs and a small white ball" },
-      { w: "increase", pos: "v.", def: "to make something larger" },
-      { w: "life", pos: "n.", def: "the time when a person is alive" },
-      { w: "kilometer", pos: "n.", def: "a unit of measurement that is 1,000 meters" },
-      { w: "often", pos: "adv.", def: "when something happens many times" },
-      { w: "plenty", pos: "pron.", def: "there is a lot of it" },
-      { w: "weight", pos: "n.", def: "how heavy something or someone is" },
-    ],
-  },
-];
+const EEW1_BOOK1: { unit: number; words: VocabWord[] }[] =
+  ESSENTIAL_WORDS_BOOK1.map((u) => ({
+    unit: u.unit,
+    words: u.words.map((word) => ({
+      w: word.word,
+      pos: word.part_of_speech,
+      def: word.definition_en,
+    })),
+  }));
 
 // Build one practice test per unit. For each word we ask for its meaning and
 // draw three distractor definitions from other words in the same unit. Choices

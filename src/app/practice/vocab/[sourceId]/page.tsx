@@ -4,35 +4,49 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, BookOpen } from "lucide-react";
 import { Card } from "@/components/ui";
-import { QUIZ_CONFIG, type McExerciseType } from "@/lib/vocab";
 import {
-  getCollectedWords,
+  ALL_EXERCISE_ORDER,
+  INTERACTIVE_CONFIG,
+  QUIZ_CONFIG,
+  isMcExerciseType,
+  type AnyExerciseType,
+} from "@/lib/vocab";
+import {
   getReadingPassage,
   getSourceTitle,
+  getVocabUnit,
+  getVocabWords,
 } from "@/lib/vocab-store";
 
-// Vocabulary practice hub — the drills for one saved word set (a reading
-// passage the student has collected words from).
+// Vocabulary practice hub — the drills for one word set. A word set is either a
+// built-in book unit (fixed words) or a text the student collected words from.
 export default function VocabPracticePage({
   params,
 }: {
   params: Promise<{ sourceId: string }>;
 }) {
   const { sourceId } = use(params);
-  // Seeded passages live under /lexora/vocab/read; uploaded books under /books/read.
-  const isSeeded = Boolean(getReadingPassage(sourceId));
-  const readHref = isSeeded
+  const isUnit = Boolean(getVocabUnit(sourceId));
+  const isSeededPassage = Boolean(getReadingPassage(sourceId));
+  // Only collected-word sets (passages / uploaded books) let you add more.
+  const readHref = isSeededPassage
     ? `/lexora/vocab/read/${sourceId}`
     : `/books/read/${sourceId}`;
-  const exercises = Object.values(QUIZ_CONFIG);
 
-  // Title + collected count are client-only (localStorage).
-  const [title, setTitle] = useState("Saved words");
+  // Title + word count are client-only (localStorage / unit lookup).
+  const [title, setTitle] = useState("Word set");
   const [wordCount, setWordCount] = useState(0);
   useEffect(() => {
     setTitle(getSourceTitle(sourceId));
-    setWordCount(getCollectedWords(sourceId).length);
+    setWordCount(getVocabWords(sourceId).length);
   }, [sourceId]);
+
+  const exercises = ALL_EXERCISE_ORDER.map((type) => {
+    const cfg = isMcExerciseType(type)
+      ? QUIZ_CONFIG[type]
+      : INTERACTIVE_CONFIG[type];
+    return { type, label: cfg.label, caption: cfg.caption };
+  });
 
   return (
     <div className="space-y-6">
@@ -44,24 +58,27 @@ export default function VocabPracticePage({
           {title}
         </h1>
         <p className="text-sm text-slate-600">
-          {wordCount} saved {wordCount === 1 ? "word" : "words"} in this set.
+          {wordCount} {wordCount === 1 ? "word" : "words"} in this set · pick an
+          exercise below.
         </p>
       </header>
 
-      <Link
-        href={readHref}
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
-      >
-        <BookOpen className="size-4" />
-        Add more words from the text
-      </Link>
+      {!isUnit && (
+        <Link
+          href={readHref}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          <BookOpen className="size-4" />
+          Add more words from the text
+        </Link>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         {exercises.map((ex) => (
           <ExerciseLink
-            key={ex.exerciseType}
+            key={ex.type}
             sourceId={sourceId}
-            type={ex.exerciseType}
+            type={ex.type}
             label={ex.label}
             caption={ex.caption}
           />
@@ -78,7 +95,7 @@ function ExerciseLink({
   caption,
 }: {
   sourceId: string;
-  type: McExerciseType;
+  type: AnyExerciseType;
   label: string;
   caption: string;
 }) {
