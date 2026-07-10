@@ -20,8 +20,9 @@ import {
 } from "lucide-react";
 import { Badge, Button, Card, LinkButton, ProgressBar } from "@/components/ui";
 import { logout, useSession } from "@/lib/auth";
-import { groupOf, maxScore, useAttempts, useTests } from "@/lib/store";
-import { TEST_GROUPS, type Attempt, type Test } from "@/lib/types";
+import { groupOf, useAttempts, useTests } from "@/lib/store";
+import { computeXp, levelFor } from "@/lib/xp";
+import { TEST_GROUPS, type Attempt } from "@/lib/types";
 
 const DAY = 86_400_000;
 
@@ -31,26 +32,6 @@ function pct(a: Attempt): number {
 
 // The trainable skills — every test group except the Level Tests bucket.
 const SKILL_GROUPS = TEST_GROUPS.filter((g) => g !== "Level Tests");
-
-// XP ladder — level thresholds by lifetime XP (mirrors the Tests centre).
-const LEVELS = [
-  { name: "Beginner", min: 0 },
-  { name: "Elementary", min: 200 },
-  { name: "Pre-IELTS", min: 600 },
-  { name: "IELTS Intro", min: 1200 },
-  { name: "IELTS Graduate", min: 2200 },
-] as const;
-
-function levelFor(xp: number) {
-  let idx = 0;
-  for (let i = 0; i < LEVELS.length; i++) if (xp >= LEVELS[i].min) idx = i;
-  const cur = LEVELS[idx];
-  const next = LEVELS[idx + 1] ?? null;
-  const progress = next
-    ? Math.round(((xp - cur.min) / (next.min - cur.min)) * 100)
-    : 100;
-  return { name: cur.name, next, progress, toNext: next ? next.min - xp : 0 };
-}
 
 /** Distinct-day streak ending today or yesterday, plus the longest run ever. */
 function streaks(dates: number[]): { current: number; longest: number } {
@@ -137,12 +118,8 @@ export default function DashboardPage() {
         ? Math.round((pcts.reduce((s, p) => s + p, 0) / pcts.length) * 100)
         : 0;
     const best = pcts.length > 0 ? Math.round(Math.max(...pcts) * 100) : 0;
-    // Lifetime XP: best% of each attempted test × that test's XP weight.
-    let xp = 0;
-    for (const [testId, bestPct] of bestByTest) {
-      const t = testById.get(testId);
-      if (t) xp += Math.round((bestPct / 100) * maxScore(t) * 20);
-    }
+    // Lifetime XP — shared with the top-bar pill so the two never disagree.
+    const xp = computeXp(mine, tests);
     const s = streaks(mine.map((a) => a.submittedAt));
     return {
       count: mine.length,
@@ -153,7 +130,7 @@ export default function DashboardPage() {
       streak: s.current,
       longest: s.longest,
     };
-  }, [mine, bestByTest, testById]);
+  }, [mine, tests, bestByTest]);
 
   const level = levelFor(stats.xp);
 

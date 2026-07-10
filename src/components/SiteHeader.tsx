@@ -11,6 +11,7 @@ import {
   ShieldCheckIcon,
   SlidersHorizontalIcon,
   TrophyIcon,
+  ZapIcon,
 } from "lucide-react";
 import {
   Menu,
@@ -20,9 +21,11 @@ import {
   MenuTrigger,
 } from "@/components/ui/menu";
 import { logout, useSession } from "@/lib/auth";
+import { useStudentXp } from "@/lib/xp";
 
 export function SiteHeader() {
   const { user } = useSession();
+  const { xp, level } = useStudentXp();
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -41,6 +44,7 @@ export function SiteHeader() {
 
   // Teachers ARE the admins in v1 (Admin lives in the account menu, not the nav).
   const isAdmin = user?.role === "teacher";
+  const isStudent = user?.role === "student";
   const initial = user?.name.trim().charAt(0).toUpperCase() || "?";
 
   function signOut() {
@@ -86,6 +90,8 @@ export function SiteHeader() {
               ))}
             </nav>
           )}
+
+          {isStudent && <XpPill xp={xp} levelName={level.name} progress={level.progress} />}
 
           {user ? (
             <Menu>
@@ -155,8 +161,11 @@ export function SiteHeader() {
           )}
         </div>
 
-        {/* Mobile / tablet: hamburger toggle (or inline Sign in when logged out) */}
-        <div className="lg:hidden">
+        {/* Mobile / tablet: XP pill + hamburger (or inline Sign in when logged out) */}
+        <div className="flex items-center gap-2 lg:hidden">
+          {user && isStudent && (
+            <XpPill xp={xp} levelName={level.name} progress={level.progress} compact />
+          )}
           {user ? (
             <button
               type="button"
@@ -258,6 +267,36 @@ export function SiteHeader() {
         </nav>
       )}
     </header>
+  );
+}
+
+// Persistent XP indicator — students see their progress on every page. Links to
+// the dashboard so tapping it jumps to the full breakdown. `compact` drops the
+// "XP" label for the tighter mobile bar.
+function XpPill({
+  xp,
+  levelName,
+  progress,
+  compact = false,
+}: {
+  xp: number;
+  levelName: string;
+  progress: number;
+  compact?: boolean;
+}) {
+  return (
+    <Link
+      href="/dashboard"
+      aria-label={`${xp.toLocaleString()} XP, ${levelName}, ${progress}% to next level`}
+      title={`${levelName} · ${progress}% to next level`}
+      className="group inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 py-1 pl-1 pr-2.5 text-sm font-semibold text-brand-700 transition-colors hover:border-brand-300 hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+    >
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-sm">
+        <ZapIcon className="size-3.5" />
+      </span>
+      <span className="tabular-nums">{xp.toLocaleString()}</span>
+      {!compact && <span className="text-xs font-medium text-brand-500">XP</span>}
+    </Link>
   );
 }
 
