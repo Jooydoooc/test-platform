@@ -60,6 +60,7 @@ export function TestTaker({
   const [error, setError] = useState<string | null>(null);
   const [resultId, setResultId] = useState<string | undefined>();
   const [expAwarded, setExpAwarded] = useState(0);
+  const [newBadges, setNewBadges] = useState<string[]>([]);
 
   // Forward-only: index only ever increases; past questions are locked.
   const [index, setIndex] = useState(0);
@@ -82,6 +83,7 @@ export function TestTaker({
     }
     setResultId(res.resultId);
     setExpAwarded(res.expAwarded ?? 0);
+    setNewBadges(res.newBadges ?? []);
     setPhase("finished");
   }, [testId, responses]);
 
@@ -171,6 +173,11 @@ export function TestTaker({
             ? `You earned ${expAwarded} EXP.`
             : "Your answers were recorded."}
         </p>
+        {newBadges.length > 0 && (
+          <p className="mt-1 text-sm font-medium text-amber-700">
+            New badge{newBadges.length > 1 ? "s" : ""}: {newBadges.join(", ")}
+          </p>
+        )}
         <Link
           href={resultId ? `/results?r=${resultId}` : "/tests"}
           className="mt-4 inline-block text-sm font-semibold text-brand-600 hover:text-brand-700"

@@ -111,6 +111,22 @@ export type PointsLedgerRow = {
   created_at: string;
 };
 
+export type BadgeRow = {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  skill_area: SkillArea | null;
+  threshold: number;
+};
+
+export type BadgeUnlockRow = {
+  id: string;
+  student_id: string;
+  badge_id: string;
+  unlocked_at: string;
+};
+
 export type QuestionRow = {
   id: string;
   task_id: string;
@@ -253,6 +269,8 @@ export interface Database {
       results: Table<ResultRow>;
       result_skill_scores: Table<ResultSkillScoreRow>;
       points_ledger: Table<PointsLedgerRow>;
+      badges: Table<BadgeRow>;
+      badge_unlocks: Table<BadgeUnlockRow>;
       units: Table<UnitRow>;
       words: Table<WordRow>;
       user_progress: Table<UserProgressRow>;

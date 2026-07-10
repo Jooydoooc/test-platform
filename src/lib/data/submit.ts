@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getServerUser } from "@/lib/auth-server";
 import { gradeQuestion } from "@/lib/data/grading";
 import { awardTestExp } from "@/lib/data/exp";
+import { evaluateAndUnlockBadges } from "@/lib/data/badges";
 import type { SkillArea } from "@/lib/database.types";
 
 export interface SubmitResult {
@@ -13,6 +14,8 @@ export interface SubmitResult {
   pendingReview?: boolean;
   /** EXP granted for this test (0 for placement/re-submit/no-score). */
   expAwarded?: number;
+  /** Names of badges unlocked by this submission (empty when none). */
+  newBadges?: string[];
   error?: string;
 }
 
@@ -158,5 +161,20 @@ export async function submitAttempt(
     );
   }
 
-  return { ok: true, resultId: result.id, pendingReview: anyPending, expAwarded };
+  // Badges reuse the shared catalog/rule; best-effort so a failure never blocks
+  // the result.
+  let newBadges: string[] = [];
+  try {
+    newBadges = await evaluateAndUnlockBadges(user.id);
+  } catch {
+    newBadges = [];
+  }
+
+  return {
+    ok: true,
+    resultId: result.id,
+    pendingReview: anyPending,
+    expAwarded,
+    newBadges,
+  };
 }
