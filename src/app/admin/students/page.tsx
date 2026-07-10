@@ -6,12 +6,14 @@ import {
   AlertCircle,
   ArrowLeft,
   Loader2,
+  Plus,
   Search,
   Trash2,
   Users,
   X,
 } from "lucide-react";
 import { Badge, Button, Card, inputClass } from "@/components/ui";
+import { LEVEL_OPTIONS } from "@/lib/books";
 import {
   MANAGEABLE_ROLES,
   type GroupOption,
@@ -19,12 +21,13 @@ import {
   type StudentSummary,
 } from "@/lib/admin-students";
 import {
+  createGroup,
   deleteStudent,
   fetchStudentDetail,
   fetchStudents,
   updateStudent,
 } from "@/lib/admin-client";
-import type { Role } from "@/lib/database.types";
+import type { Level, Role } from "@/lib/database.types";
 
 const DAY = 86_400_000;
 
@@ -61,6 +64,7 @@ export default function AdminStudentsPage() {
   const [groupFilter, setGroupFilter] = useState<string>("All"); // "All" | groupId | "none"
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showNewGroup, setShowNewGroup] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -116,12 +120,20 @@ export default function AdminStudentsPage() {
           <ArrowLeft className="size-4" />
           Admin
         </Link>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
-          Students
-        </h1>
-        <p className="text-sm text-slate-600">
-          Full control over every account — roles, groups, and performance.
-        </p>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              Students
+            </h1>
+            <p className="text-sm text-slate-600">
+              Full control over every account — roles, groups, and performance.
+            </p>
+          </div>
+          <Button variant="secondary" onClick={() => setShowNewGroup(true)}>
+            <Plus className="size-4" />
+            New group
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -238,6 +250,121 @@ export default function AdminStudentsPage() {
           onChanged={load}
         />
       )}
+
+      {showNewGroup && (
+        <NewGroupModal onClose={() => setShowNewGroup(false)} onCreated={load} />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Modal: create a group.
+// ---------------------------------------------------------------------------
+
+function NewGroupModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [level, setLevel] = useState<Level>(LEVEL_OPTIONS[0].value);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function create() {
+    if (!name.trim()) {
+      setErr("Group name is required.");
+      return;
+    }
+    setSaving(true);
+    setErr(null);
+    try {
+      await createGroup(name.trim(), level);
+      await onCreated();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not create the group.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">New group</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="inline-flex size-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        {err && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <AlertCircle className="size-4 shrink-0" />
+            {err}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">
+              Name
+            </span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. B2 Evening"
+              autoFocus
+              className={inputClass}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">
+              Level
+            </span>
+            <select
+              value={level}
+              onChange={(e) => setLevel(e.target.value as Level)}
+              className={inputClass}
+            >
+              {LEVEL_OPTIONS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-5 flex gap-2">
+          <Button variant="secondary" onClick={onClose} className="flex-1">
+            Cancel
+          </Button>
+          <Button onClick={create} disabled={saving} className="flex-1">
+            {saving ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Creating…
+              </>
+            ) : (
+              "Create group"
+            )}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

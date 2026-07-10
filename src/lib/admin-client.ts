@@ -4,10 +4,12 @@
 // server; these just surface the JSON (and throw a readable error on failure).
 
 import type {
+  GroupOption,
   StudentDetail,
   StudentListResponse,
   UpdateStudentPayload,
 } from "@/lib/admin-students";
+import type { Level } from "@/lib/database.types";
 
 async function readError(res: Response): Promise<string> {
   try {
@@ -47,4 +49,18 @@ export async function updateStudent(
 export async function deleteStudent(id: string): Promise<void> {
   const res = await fetch(`/api/admin/students/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function createGroup(
+  name: string,
+  level: Level,
+): Promise<GroupOption> {
+  const res = await fetch("/api/admin/groups", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, level }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const body = (await res.json()) as { group: GroupOption };
+  return body.group;
 }
