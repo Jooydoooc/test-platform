@@ -4,12 +4,15 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getServerUser } from "@/lib/auth-server";
 import { gradeQuestion } from "@/lib/data/grading";
+import { awardTestExp } from "@/lib/data/attempts";
 import type { SkillArea } from "@/lib/database.types";
 
 export interface SubmitResult {
   ok: boolean;
   resultId?: string;
   pendingReview?: boolean;
+  /** EXP granted for this test (0 for placement/re-submit/no-score). */
+  expAwarded?: number;
   error?: string;
 }
 
@@ -36,9 +39,33 @@ export async function submitAttempt(
     .single();
   if (testErr || !test) return { ok: false, error: "Test not found." };
 
-  // Answer keys are needed for grading -> read with the service role (never sent
-  // to the client). Scoped to this test's tasks.
+  // The single attempt must already exist (created by startAttempt). This is the
+  // anti-cheat gate: no fresh attempt is minted here, and a re-submit is refused
+  // so EXP is never granted twice.
   const admin = createAdminClient();
+  const { data: attemptRow } = await admin
+    .from("attempts")
+    .select("id, submitted_at")
+    .eq("student_id", user.id)
+    .eq("test_id", testId)
+    .maybeSingle();
+  if (!attemptRow) {
+    return { ok: false, error: "Start the test before submitting." };
+  }
+  if (attemptRow.submitted_at) {
+    const { data: prior } = await admin
+      .from("results")
+      .select("id, status")
+      .eq("attempt_id", attemptRow.id)
+      .maybeSingle();
+    return {
+      ok: true,
+      resultId: prior?.id,
+      pendingReview: prior?.status === "PENDING_REVIEW",
+      expAwarded: 0,
+    };
+  }
+
   const { data: items } = await admin
     .from("test_items")
     .select("task_id")
@@ -54,17 +81,12 @@ export async function submitAttempt(
     return { ok: false, error: "Test has no questions." };
   }
 
-  // Create the attempt.
-  const { data: attempt, error: aErr } = await admin
+  // Finalize the student's existing in-progress attempt.
+  const attempt = { id: attemptRow.id };
+  await admin
     .from("attempts")
-    .insert({
-      student_id: user.id,
-      test_id: testId,
-      submitted_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
-  if (aErr || !attempt) return { ok: false, error: "Could not save attempt." };
+    .update({ submitted_at: new Date().toISOString() })
+    .eq("id", attempt.id);
 
   // Grade every question; accumulate per-skill tallies (never blended).
   const perSkill = new Map<SkillArea, { correct: number; total: number }>();
@@ -118,5 +140,23 @@ export async function submitAttempt(
     await admin.from("result_skill_scores").insert(skillRows);
   }
 
-  return { ok: true, resultId: result.id, pendingReview: anyPending };
+  // EXP: score-proportional across all questions, granted once. Placement tests
+  // are diagnostic and excluded. Pending (AI-graded) answers count as not-yet-
+  // correct here; the EXP reflects the auto-graded portion at submit time.
+  let expAwarded = 0;
+  if (test.purpose !== "PLACEMENT") {
+    let correct = 0;
+    let total = 0;
+    for (const t of perSkill.values()) {
+      correct += t.correct;
+      total += t.total;
+    }
+    expAwarded = await awardTestExp(
+      user.id,
+      testId,
+      total > 0 ? correct / total : 0,
+    );
+  }
+
+  return { ok: true, resultId: result.id, pendingReview: anyPending, expAwarded };
 }

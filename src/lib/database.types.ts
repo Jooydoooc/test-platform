@@ -85,6 +85,7 @@ export type TestRow = {
   level: Level | null;
   group_id: string | null;
   time_limit_sec: number | null;
+  share_token: string;
   created_by: string;
 } & Timestamps;
 
@@ -100,6 +101,15 @@ export type TaskRow = {
   time_limit_sec: number | null;
   created_by: string;
 } & Timestamps;
+
+export type PointsLedgerRow = {
+  id: string;
+  student_id: string;
+  reason: string;
+  points: number;
+  unique_key: string | null;
+  created_at: string;
+};
 
 export type QuestionRow = {
   id: string;
@@ -242,6 +252,7 @@ export interface Database {
       attempt_answers: Table<AttemptAnswerRow>;
       results: Table<ResultRow>;
       result_skill_scores: Table<ResultSkillScoreRow>;
+      points_ledger: Table<PointsLedgerRow>;
       units: Table<UnitRow>;
       words: Table<WordRow>;
       user_progress: Table<UserProgressRow>;
