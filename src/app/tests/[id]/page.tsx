@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Card, Field, inputClass } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
 import { QuestionRunner, type SubmitMeta } from "@/components/QuestionRunner";
 import {
   bookOf,
@@ -13,7 +13,7 @@ import {
   saveAttempt,
   uid,
 } from "@/lib/store";
-import { LEVELS, type Level, type Question, type Test } from "@/lib/types";
+import { type Question, type Test } from "@/lib/types";
 import { loadConfig, sendMessage } from "@/lib/telegram-client";
 import { useSession } from "@/lib/auth";
 
@@ -77,10 +77,9 @@ export default function TakeTestPage({
   const [test, setTest] = useState<Test | null>(null);
   const [phase, setPhase] = useState<Phase>("start");
 
-  // Name comes from the signed-in student's profile — no need to ask for it.
+  // Identity comes from the signed-in student's profile — the start screen
+  // never asks for name, group, or level.
   const takerName = user?.name?.trim() || "Anonymous";
-  const [group, setGroup] = useState("");
-  const [level, setLevel] = useState<Level | "">("");
 
   const [finalAnswers, setFinalAnswers] = useState<Answers>({});
   const [timedOut, setTimedOut] = useState(false);
@@ -104,8 +103,6 @@ export default function TakeTestPage({
       testId: test!.id,
       testTitle: test!.title,
       takerName,
-      group: group.trim() || undefined,
-      level: level || undefined,
       answers,
       score,
       maxScore: total,
@@ -113,7 +110,7 @@ export default function TakeTestPage({
       timeTakenSec: meta.timeTakenSec,
       timedOut: meta.timedOut || undefined,
     });
-    void notifyTelegram(test!, takerName, score, total, group.trim(), level);
+    void notifyTelegram(test!, takerName, score, total, "", "");
     setFinalAnswers(answers);
     setTimedOut(meta.timedOut);
     setPhase("done");
@@ -161,31 +158,6 @@ export default function TakeTestPage({
             : " · Untimed"}
         </p>
       </div>
-
-      <Card className="grid gap-4 sm:grid-cols-2">
-        <Field label="Group">
-          <input
-            className={inputClass}
-            value={group}
-            onChange={(e) => setGroup(e.target.value)}
-            placeholder="e.g. Class A"
-          />
-        </Field>
-        <Field label="Level">
-          <select
-            className={inputClass}
-            value={level}
-            onChange={(e) => setLevel(e.target.value as Level | "")}
-          >
-            <option value="">—</option>
-            {LEVELS.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </Card>
 
       <Button onClick={() => setPhase("running")}>Start test</Button>
     </div>
