@@ -7,6 +7,7 @@ import {
   ChevronDownIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  Share2Icon,
   ShieldCheckIcon,
   SlidersHorizontalIcon,
   TrophyIcon,
@@ -124,10 +125,16 @@ export function SiteHeader() {
                   Leaderboard
                 </MenuItem>
                 {user.role === "teacher" && (
-                  <MenuItem render={<Link href="/admin" />}>
-                    <SlidersHorizontalIcon />
-                    Admin
-                  </MenuItem>
+                  <>
+                    <MenuItem render={<Link href="/tests/links" />}>
+                      <Share2Icon />
+                      Share tests
+                    </MenuItem>
+                    <MenuItem render={<Link href="/admin" />}>
+                      <SlidersHorizontalIcon />
+                      Admin
+                    </MenuItem>
+                  </>
                 )}
                 <MenuSeparator />
                 <MenuItem variant="destructive" onClick={signOut}>
@@ -220,6 +227,22 @@ export function SiteHeader() {
                 </Link>
               </li>
             ))}
+            {isAdmin && (
+              <li>
+                <Link
+                  href="/tests/links"
+                  onClick={() => setOpen(false)}
+                  className={`flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors ${
+                    isActive("/tests/links")
+                      ? "bg-brand-50 font-medium text-brand-700"
+                      : "text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  <Share2Icon className="size-4" />
+                  Share tests
+                </Link>
+              </li>
+            )}
           </ul>
 
           <div className="my-2 h-px bg-slate-200" />
