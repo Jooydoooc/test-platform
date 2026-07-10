@@ -227,13 +227,9 @@ function CategorySection({
                               ? `/practice/vocab/${vocabId}`
                               : `/practice/${t.id}`
                           }
-                          variant="secondary"
-                          className="px-3"
+                          className="px-4"
                         >
                           {vocabId ? "Exercises" : "Practise"}
-                        </LinkButton>
-                        <LinkButton href={`/tests/${t.id}`} className="px-3">
-                          Take
                         </LinkButton>
                       </div>
                     </li>
