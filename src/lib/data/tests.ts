@@ -29,6 +29,28 @@ export interface TestQuestion {
   points: number;
 }
 
+export interface TestShareLink {
+  id: string;
+  title: string;
+  token: string;
+}
+
+// Teacher-facing: tests with their share tokens, for building /t/<token> links.
+// RLS lets any signed-in user read tests; callers must gate this to teachers.
+export async function listTestShareLinks(): Promise<TestShareLink[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("tests")
+    .select("id, title, share_token")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((t) => ({
+    id: t.id,
+    title: t.title,
+    token: t.share_token,
+  }));
+}
+
 export async function listTests(): Promise<TestSummary[]> {
   const supabase = await createClient();
   const { data, error } = await supabase

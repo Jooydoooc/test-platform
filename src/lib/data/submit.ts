@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getServerUser } from "@/lib/auth-server";
 import { gradeQuestion } from "@/lib/data/grading";
-import { awardTestExp } from "@/lib/data/attempts";
+import { awardTestExp } from "@/lib/data/exp";
 import type { SkillArea } from "@/lib/database.types";
 
 export interface SubmitResult {
