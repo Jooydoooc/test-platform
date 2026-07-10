@@ -15,6 +15,7 @@ import {
 } from "@/lib/store";
 import { LEVELS, type Level, type Question, type Test } from "@/lib/types";
 import { loadConfig, sendMessage } from "@/lib/telegram-client";
+import { useSession } from "@/lib/auth";
 
 type Answers = Record<string, string[]>;
 
@@ -72,10 +73,12 @@ export default function TakeTestPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const { user } = useSession();
   const [test, setTest] = useState<Test | null>(null);
   const [phase, setPhase] = useState<Phase>("start");
 
-  const [name, setName] = useState("");
+  // Name comes from the signed-in student's profile — no need to ask for it.
+  const takerName = user?.name?.trim() || "Anonymous";
   const [group, setGroup] = useState("");
   const [level, setLevel] = useState<Level | "">("");
 
@@ -96,7 +99,6 @@ export default function TakeTestPage({
   function handleSubmit(answers: Answers, meta: SubmitMeta) {
     const score = gradeTest(test!, answers);
     const total = maxScore(test!);
-    const takerName = name.trim() || "Anonymous";
     saveAttempt({
       id: uid(),
       testId: test!.id,
@@ -123,7 +125,7 @@ export default function TakeTestPage({
       <Results
         test={test}
         answers={finalAnswers}
-        name={name.trim() || "Anonymous"}
+        name={takerName}
         timedOut={timedOut}
       />
     );
@@ -160,15 +162,7 @@ export default function TakeTestPage({
         </p>
       </div>
 
-      <Card className="grid gap-4 sm:grid-cols-3">
-        <Field label="Your name">
-          <input
-            className={inputClass}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Optional"
-          />
-        </Field>
+      <Card className="grid gap-4 sm:grid-cols-2">
         <Field label="Group">
           <input
             className={inputClass}
