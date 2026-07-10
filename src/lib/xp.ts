@@ -7,9 +7,11 @@
 // award best% × (test's total points × 20). Retaking to improve raises XP;
 // re-taking without beating your best does not.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSession } from "@/lib/auth";
 import { maxScore, useAttempts, useTests } from "@/lib/store";
+import { createClient } from "@/lib/supabase/client";
+import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 import type { Attempt, Test } from "@/lib/types";
 
 export const XP_LEVELS = [
@@ -54,12 +56,50 @@ export function computeXp(mine: Attempt[], tests: Test[]): number {
   return xp;
 }
 
-/** Reactive XP + level for the signed-in user. */
+/**
+ * Reactive XP + level for the signed-in student.
+ *
+ * Source of truth is the real backend: the sum of the student's own
+ * `points_ledger` rows (server-graded tests award EXP there). Students can read
+ * their own ledger under RLS, so this is a direct client read. When Supabase
+ * isn't configured (the localStorage prototype), it falls back to computing EXP
+ * from local attempts so the prototype keeps working.
+ */
 export function useStudentXp(): { xp: number; level: LevelInfo } {
   const { user } = useSession();
   const attempts = useAttempts();
   const tests = useTests();
+  const [realXp, setRealXp] = useState<number | null>(null);
+
+  const isStudent = user?.role === "student";
+
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !isStudent || !user?.id) {
+      setRealXp(null);
+      return;
+    }
+    const supabase = createClient();
+    let active = true;
+    supabase
+      .from("points_ledger")
+      .select("points")
+      .eq("student_id", user.id)
+      .then(({ data }) => {
+        if (active) {
+          setRealXp((data ?? []).reduce((sum, r) => sum + r.points, 0));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [isStudent, user?.id]);
+
   return useMemo(() => {
+    // Real backend EXP when available; otherwise the local prototype estimate.
+    if (SUPABASE_ENABLED) {
+      const xp = realXp ?? 0;
+      return { xp, level: levelFor(xp) };
+    }
     if (!user) return { xp: 0, level: levelFor(0) };
     const name = user.name.trim().toLowerCase();
     const mine = attempts.filter(
@@ -67,5 +107,5 @@ export function useStudentXp(): { xp: number; level: LevelInfo } {
     );
     const xp = computeXp(mine, tests);
     return { xp, level: levelFor(xp) };
-  }, [user, attempts, tests]);
+  }, [realXp, user, attempts, tests]);
 }
