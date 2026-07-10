@@ -446,13 +446,13 @@ function RankRow({ player, rank, isMe, pool }: { player: PlayerWithXp; rank: num
   const tier = player.tier;
   const badges = getBadges(player, pool);
   return (
-    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isMe ? "bg-indigo-50" : "hover:bg-slate-50"}`}>
+    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isMe ? "bg-brand-50" : "hover:bg-slate-50"}`}>
       <span className={`text-sm font-bold w-7 text-center shrink-0 ${rank <= 3 ? "text-slate-700" : "text-slate-400"}`}>#{rank}</span>
       <Medallion tier={tier} size={32} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <p className={`text-sm truncate ${isMe ? "font-semibold text-indigo-700" : "font-medium text-slate-700"}`}>{player.name}</p>
-          {isMe && <span className="text-[10px] bg-indigo-600 text-white px-1.5 py-0.5 rounded-full font-semibold">you</span>}
+          <p className={`text-sm truncate ${isMe ? "font-semibold text-brand-700" : "font-medium text-slate-700"}`}>{player.name}</p>
+          {isMe && <span className="text-[10px] bg-brand-600 text-white px-1.5 py-0.5 rounded-full font-semibold">you</span>}
           {badges.map((b) => (
             <span key={b.label} role="img" aria-label={b.label} title={b.label} className="text-xs">
               {b.emoji}
@@ -483,12 +483,12 @@ function TierListItem({
   stepsDone: number;
 }) {
   return (
-    <div className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${isCurrent ? "bg-indigo-50 ring-1 ring-indigo-200" : "hover:bg-slate-50"}`}>
+    <div className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${isCurrent ? "bg-brand-50 ring-1 ring-brand-200" : "hover:bg-slate-50"}`}>
       <Medallion tier={tier} size={30} />
       <div className="min-w-0 flex-1">
         <p className={`text-xs font-bold leading-tight ${tier.text}`}>
           {tier.label}
-          {isCurrent && <span className="ml-1 text-[9px] font-semibold uppercase tracking-wide text-indigo-600">· you</span>}
+          {isCurrent && <span className="ml-1 text-[9px] font-semibold uppercase tracking-wide text-brand-600">· you</span>}
         </p>
         <div className="mt-1 flex gap-1">
           {DIVISIONS.map((d, i) => {
@@ -500,7 +500,7 @@ function TierListItem({
                 title={`${tier.label} division ${d}`}
                 className={`flex-1 rounded text-center text-[9px] font-bold leading-4 ${
                   current
-                    ? "bg-indigo-600 text-white"
+                    ? "bg-brand-600 text-white"
                     : done
                       ? tier.badge
                       : "bg-slate-100 text-slate-300"
@@ -585,28 +585,42 @@ export default function LeaderboardPage() {
     <div className="max-w-5xl mx-auto">
       <BadgeDefs />
 
-      <div className="mb-5">
-        <h1 className="text-2xl font-bold text-slate-800">Leaderboard</h1>
-        <p className="text-sm text-slate-400 mt-1">Vocabulary practice · climb the ranks</p>
-      </div>
+      {/* Premium gradient hero — matches Tests + Dashboard */}
+      <header className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-brand-900 to-brand-800 p-6 text-white shadow-card-hover sm:p-8 mb-6">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-500/30 blur-3xl motion-reduce:hidden" />
+        <div className="pointer-events-none absolute -bottom-28 left-16 h-64 w-64 rounded-full bg-amber-400/10 blur-3xl motion-reduce:hidden" />
+        <div className="relative">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-brand-100 ring-1 ring-inset ring-white/20">
+            <Trophy className="h-3.5 w-3.5" />
+            Leaderboard
+          </span>
+          <h1 className="mt-4 text-2xl font-extrabold tracking-tight sm:text-3xl">
+            Climb the ranks
+          </h1>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-brand-100/90">
+            Earn XP from vocabulary practice, hold your streak, and rise through
+            the tiers against your classmates.
+          </p>
+        </div>
+      </header>
 
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6 lg:items-start">
       {/* MAIN COLUMN — the students' current standings are the focus */}
       <div className="min-w-0">
       {/* Your Progress Card */}
-      <div className="relative bg-indigo-600 rounded-2xl px-5 py-5 mb-5 text-white overflow-hidden">
+      <div className="relative bg-brand-600 rounded-2xl px-5 py-5 mb-5 text-white overflow-hidden">
         <div className="flex items-center gap-4 mb-2">
           <div className="bg-white/15 rounded-2xl p-1.5 shrink-0">
             <Medallion tier={myTier} size={48} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm text-indigo-100">
+            <p className="text-sm text-brand-100">
               You are <span className="font-bold text-white">#{myRank}</span> {scope}
             </p>
             <p className="text-xl font-black leading-tight">
               {myTier.label} {myDiv.label} · {me.xpTotal.toLocaleString()} xp
             </p>
-            <p className="text-xs text-indigo-200 italic mt-0.5">&quot;{myTier.slogan}&quot;</p>
+            <p className="text-xs text-brand-200 italic mt-0.5">&quot;{myTier.slogan}&quot;</p>
           </div>
           {me.streak > 0 && (
             <div className="flex items-center gap-1 bg-white/15 rounded-lg px-2.5 py-1.5 shrink-0" title={`${me.streak}-day streak`}>
@@ -627,12 +641,12 @@ export default function LeaderboardPage() {
           <div className="h-full bg-white rounded-full transition-all duration-700 ease-out" style={{ width: `${myDiv.progressPct}%` }} />
         </div>
 
-        <p className="text-xs text-indigo-100 mt-2">
+        <p className="text-xs text-brand-100 mt-2">
           {myDiv.nextLabel ? `You are ${proximityWord} ${myDiv.nextLabel}. Complete ${lessonPhrase} to get there.` : "Top rank reached — hold your ground."}
         </p>
 
         {personAbove && (
-          <p className="text-xs text-indigo-100 mt-1">
+          <p className="text-xs text-brand-100 mt-1">
             <span className="font-semibold text-white">{xpToPass.toLocaleString()} xp</span> to pass {personAbove.name} {scope}
           </p>
         )}
@@ -665,7 +679,7 @@ export default function LeaderboardPage() {
               role="tab"
               aria-selected={period === p.key}
               onClick={() => setPeriod(p.key)}
-              className={`text-xs sm:text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${period === p.key ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`text-xs sm:text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${period === p.key ? "bg-white text-brand-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
             >
               {p.label}
             </button>
@@ -693,12 +707,12 @@ export default function LeaderboardPage() {
       <div className="flex items-center justify-between mb-2 px-1">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Standings</p>
         {ranked.length > PUBLIC_TOP_N && (
-          <button onClick={() => setShowAll((v) => !v)} className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
+          <button onClick={() => setShowAll((v) => !v)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
             {showAll ? "Show top 5" : `Show all (${ranked.length})`}
           </button>
         )}
       </div>
-      <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-50 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-card divide-y divide-slate-100 overflow-hidden">
         {visible.map((p, i) => (
           <RankRow key={p.name} player={p} rank={i + 1} isMe={p.name === CURRENT_USER} pool={withXp} />
         ))}
@@ -721,12 +735,12 @@ export default function LeaderboardPage() {
 
       {/* SIDE PANEL — rank ladder + class context, tucked out of the way (drops below standings on mobile) */}
       <aside className="mt-6 lg:mt-0 lg:sticky lg:top-6 space-y-4">
-        <div className="bg-white rounded-2xl border border-slate-100 p-3">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-3">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-2">Class averages</p>
           <div className="flex gap-2">
             <div className="flex-1 rounded-xl bg-slate-50 px-3 py-2">
               <p className="text-[11px] text-slate-400">Class A</p>
-              <p className="text-sm font-bold text-indigo-600">{classAvg.A.toLocaleString()} xp</p>
+              <p className="text-sm font-bold text-brand-600">{classAvg.A.toLocaleString()} xp</p>
             </div>
             <div className="flex-1 rounded-xl bg-slate-50 px-3 py-2">
               <p className="text-[11px] text-slate-400">Class B</p>
@@ -735,7 +749,7 @@ export default function LeaderboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 p-3">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-3">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-1">Rank journey</p>
           <p className="text-[11px] text-slate-400 px-1 mb-2">Each tier has three steps (III → II → I) · rank comes from all-time XP and never drops.</p>
           <div className="space-y-0.5">
