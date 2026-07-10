@@ -10,3 +10,6 @@ out
 *.tsbuildinfo
 
 .claude/
+
+# Supabase DB password (local record only — never commit)
+.supabase-db-password.txt
