@@ -9,6 +9,7 @@ import { bookOf, categoryOf, useTests } from "@/lib/store";
 import { CATEGORIES, orderBooks, type Category } from "@/lib/types";
 import type { Test } from "@/lib/types";
 import { listBooks } from "@/lib/books-client";
+import { vocabUnitIdForTest } from "@/lib/vocab-store";
 import {
   BOOK_CONTENT_TYPES,
   CONTENT_TYPE_LABELS,
@@ -197,37 +198,47 @@ function CategorySection({
                 </span>
               </div>
               <ul className="divide-y divide-slate-100">
-                {tests.map((t) => (
-                  <li
-                    key={t.id}
-                    className="flex items-center justify-between gap-4 py-2.5"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-800">
-                        {t.title}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {t.questions.length} question
-                        {t.questions.length === 1 ? "" : "s"}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 gap-2">
-                      <LinkButton
-                        href={`/practice/${t.id}`}
-                        variant="secondary"
-                        className="px-3"
-                      >
-                        Practise
-                      </LinkButton>
-                      <LinkButton
-                        href={`/tests/${t.id}`}
-                        className="px-3"
-                      >
-                        Take
-                      </LinkButton>
-                    </div>
-                  </li>
-                ))}
+                {tests.map((t) => {
+                  // Vocabulary units open the full 8-exercise hub (translation,
+                  // definition, gap-fill, matching…); other units keep the
+                  // single-run practice.
+                  const vocabId = vocabUnitIdForTest(t.id);
+                  return (
+                    <li
+                      key={t.id}
+                      className="flex items-center justify-between gap-4 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-800">
+                          {t.title}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {vocabId
+                            ? "8 exercises"
+                            : `${t.questions.length} question${
+                                t.questions.length === 1 ? "" : "s"
+                              }`}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <LinkButton
+                          href={
+                            vocabId
+                              ? `/practice/vocab/${vocabId}`
+                              : `/practice/${t.id}`
+                          }
+                          variant="secondary"
+                          className="px-3"
+                        >
+                          {vocabId ? "Exercises" : "Practise"}
+                        </LinkButton>
+                        <LinkButton href={`/tests/${t.id}`} className="px-3">
+                          Take
+                        </LinkButton>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </Card>
           ))}

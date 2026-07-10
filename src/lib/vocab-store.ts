@@ -138,6 +138,20 @@ export function getVocabUnit(unitId: string): VocabUnit | undefined {
 }
 
 /**
+ * The 8-exercise vocab-practice source id for a Books unit, if that unit is a
+ * built-in vocabulary unit. Books seeds these as MCQ tests (`eew1-unit-N`) while
+ * the drills key them as `eew1-uN`; both come from the same word data, so this
+ * bridges a Books unit to its full exercise set. Returns null for non-vocab
+ * units (grammar/reading), which have no word list to drill.
+ */
+export function vocabUnitIdForTest(testId: string): string | null {
+  const m = /^eew1-unit-(\d+)$/.exec(testId);
+  if (!m) return null;
+  const unitId = `eew1-u${m[1]}`;
+  return getVocabUnit(unitId) ? unitId : null;
+}
+
+/**
  * Words for a drill source. Seeded units return their fixed list; a reading
  * passage returns the words the student has collected from it. This lets the
  * shared QuizShell drive both without changes.
