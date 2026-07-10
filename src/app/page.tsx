@@ -15,7 +15,7 @@ import { useSession } from "@/lib/auth";
 
 export default function Home() {
   const { user } = useSession();
-  const isTeacher = user?.role === "teacher";
+  const isAdmin = user?.role === "admin";
   const firstName = user?.name.split(" ")[0];
 
   return (
@@ -94,7 +94,7 @@ export default function Home() {
             title="Leaderboard"
             desc="See where you stand against your classmates and stay motivated to climb the ranks."
           />
-          {isTeacher && (
+          {isAdmin && (
             <ActionCard
               href="/admin"
               icon={<SlidersIcon />}

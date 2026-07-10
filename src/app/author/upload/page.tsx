@@ -143,7 +143,7 @@ export default function UploadBookPage() {
     formTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  if (user?.role !== "teacher") {
+  if (user?.role !== "admin") {
     return (
       <Card>
         <p className="text-sm text-slate-600">

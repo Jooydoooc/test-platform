@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth";
 
 const PUBLIC_PATHS = ["/login"];
-const TEACHER_PATHS = ["/author", "/telegram", "/admin"];
+const ADMIN_PATHS = ["/author", "/telegram", "/admin"];
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useSession();
@@ -13,11 +13,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const isPublic = PUBLIC_PATHS.includes(pathname);
-  const needsTeacher = TEACHER_PATHS.some((p) => pathname.startsWith(p));
+  const needsAdmin = ADMIN_PATHS.some((p) => pathname.startsWith(p));
   const denied =
     !loading &&
     !isPublic &&
-    (!user || (needsTeacher && user.role !== "teacher"));
+    (!user || (needsAdmin && user.role !== "admin"));
 
   useEffect(() => {
     if (loading || isPublic || !denied) return;

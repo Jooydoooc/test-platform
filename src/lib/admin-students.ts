@@ -4,7 +4,7 @@
 
 import type { Role, SkillArea } from "@/lib/database.types";
 
-export const MANAGEABLE_ROLES: Role[] = ["STUDENT", "TEACHER", "ADMIN"];
+export const MANAGEABLE_ROLES: Role[] = ["STUDENT", "ADMIN"];
 
 /** One row in the admin roster. */
 export interface StudentSummary {

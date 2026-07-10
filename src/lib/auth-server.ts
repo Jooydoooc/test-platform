@@ -38,6 +38,8 @@ export async function getServerUser(): Promise<ServerUser | null> {
   };
 }
 
-export function isTeacherRole(role: DbRole): boolean {
-  return role === "TEACHER" || role === "ADMIN";
+// Elevated (admin) access. TEACHER is retired but the enum value lingers, so we
+// still treat any legacy TEACHER row as admin until it is migrated.
+export function isAdminRole(role: DbRole): boolean {
+  return role === "ADMIN" || role === "TEACHER";
 }

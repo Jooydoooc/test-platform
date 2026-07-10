@@ -6,7 +6,7 @@ import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 // instead of it. RLS still guards direct data access; this just keeps
 // unauthenticated/underprivileged users from loading protected pages.
 const PUBLIC_PREFIXES = ["/login", "/auth"];
-const TEACHER_PREFIXES = ["/author", "/admin", "/telegram"];
+const ADMIN_PREFIXES = ["/author", "/admin", "/telegram"];
 
 export async function middleware(request: NextRequest) {
   // Not configured -> skip Supabase entirely and let the client-side AuthGate
@@ -26,15 +26,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const needsTeacher = TEACHER_PREFIXES.some((p) => pathname.startsWith(p));
-  if (needsTeacher) {
+  const needsAdmin = ADMIN_PREFIXES.some((p) => pathname.startsWith(p));
+  if (needsAdmin) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .single();
-    const isTeacher = profile?.role === "TEACHER" || profile?.role === "ADMIN";
-    if (!isTeacher) {
+    const isAdmin = profile?.role === "ADMIN" || profile?.role === "TEACHER";
+    if (!isAdmin) {
       const url = request.nextUrl.clone();
       url.pathname = "/tests";
       return NextResponse.redirect(url);

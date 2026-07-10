@@ -33,7 +33,7 @@ begin
   on conflict (id) do nothing;
 
   -- The on_auth_user_created trigger creates profiles; set roles/names here.
-  update profiles set role = 'TEACHER', first_name = 'Tara', last_name = 'Teacher'
+  update profiles set role = 'ADMIN', first_name = 'Tara', last_name = 'Teacher'
     where id = teacher_id;
   update profiles set role = 'STUDENT', first_name = 'Sam', last_name = 'Student'
     where id = student_id;

@@ -6,10 +6,14 @@ import { useRouter } from "next/navigation";
 import {
   Award,
   BookOpen,
+  BookText,
   Compass,
   Flame,
+  Headphones,
   LogOut,
   Medal,
+  Mic,
+  PenLine,
   Sparkles,
   Star,
   Target,
@@ -18,6 +22,13 @@ import {
   Trophy,
   Zap,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  BADGE_CATALOG,
+  isBadgeEarned,
+  type BadgeCounts,
+  type BadgeSkill,
+} from "@/lib/badges";
 import { Badge, Button, Card, LinkButton, ProgressBar } from "@/components/ui";
 import { logout, useSession } from "@/lib/auth";
 import { groupOf, useAttempts, useTests } from "@/lib/store";
@@ -32,6 +43,18 @@ function pct(a: Attempt): number {
 
 // The trainable skills — every test group except the Level Tests bucket.
 const SKILL_GROUPS = TEST_GROUPS.filter((g) => g !== "Level Tests");
+
+// Plain icons per badge code (NO-AI-STYLE: no emoji in system UI).
+const BADGE_ICON: Record<string, LucideIcon> = {
+  grammar_starter: BookOpen,
+  vocabulary_builder: Sparkles,
+  reading_climber: BookText,
+  listening_focus: Headphones,
+  writing_voice: PenLine,
+  speaking_confidence: Mic,
+  streak_7: Flame,
+  unit_master: Trophy,
+};
 
 /** Distinct-day streak ending today or yesterday, plus the longest run ever. */
 function streaks(dates: number[]): { current: number; longest: number } {
@@ -201,10 +224,24 @@ export default function DashboardPage() {
     return mine.filter((a) => Math.floor(a.submittedAt / DAY) === today).length;
   }, [mine]);
 
-  const achievements = useMemo(
-    () => computeAchievements(stats, skillProgress),
-    [stats, skillProgress],
-  );
+  // Feed the shared badge evaluator from data we already compute. Writing/
+  // Speaking (no localStorage tests) and unit_master (no unit tracking) stay
+  // locked until the Supabase engine supplies them — same catalog either way.
+  const badges = useMemo(() => {
+    const skillTests: Partial<Record<BadgeSkill, number>> = {};
+    for (const s of skillProgress) {
+      if (s.done > 0) skillTests[s.label.toUpperCase() as BadgeSkill] = s.done;
+    }
+    const counts: BadgeCounts = {
+      skillTests,
+      streakDays: stats.longest,
+      unitsMastered: 0,
+    };
+    return BADGE_CATALOG.map((def) => ({
+      def,
+      earned: isBadgeEarned(def, counts),
+    }));
+  }, [skillProgress, stats.longest]);
 
   const recent = useMemo(
     () => [...mine].sort((a, b) => b.submittedAt - a.submittedAt).slice(0, 6),
@@ -483,48 +520,50 @@ export default function DashboardPage() {
               </div>
             </Card>
 
-            {/* Achievements */}
+            {/* Badges */}
             <Card className="!p-5">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
                   <Medal className="h-4 w-4 text-amber-500" />
-                  Achievements
+                  Badges
                 </h2>
                 <span className="text-xs font-semibold text-slate-500">
-                  {achievements.filter((a) => a.unlocked).length}/
-                  {achievements.length}
+                  {badges.filter((b) => b.earned).length}/{badges.length}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {achievements.map((a) => (
-                  <div
-                    key={a.title}
-                    title={a.desc}
-                    className={`flex items-center gap-2.5 rounded-xl border p-2.5 ${
-                      a.unlocked
-                        ? "border-amber-200 bg-amber-50"
-                        : "border-slate-200 bg-slate-50 opacity-60"
-                    }`}
-                  >
-                    <span
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-lg ${
-                        a.unlocked
-                          ? "bg-amber-100"
-                          : "bg-slate-100 grayscale"
+                {badges.map(({ def, earned }) => {
+                  const Icon = BADGE_ICON[def.code] ?? Medal;
+                  return (
+                    <div
+                      key={def.code}
+                      title={def.description}
+                      className={`flex items-center gap-2.5 rounded-xl border p-2.5 ${
+                        earned
+                          ? "border-amber-200 bg-amber-50"
+                          : "border-slate-200 bg-slate-50 opacity-60"
                       }`}
                     >
-                      {a.emoji}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-bold text-slate-800">
-                        {a.title}
-                      </p>
-                      <p className="truncate text-[11px] text-slate-500">
-                        {a.desc}
-                      </p>
+                      <span
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                          earned
+                            ? "bg-amber-100 text-amber-600"
+                            : "bg-slate-100 text-slate-400"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-bold text-slate-800">
+                          {def.name}
+                        </p>
+                        <p className="truncate text-[11px] text-slate-500">
+                          {def.description}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </Card>
           </div>
@@ -798,81 +837,3 @@ function BoardRow({
   );
 }
 
-// ---- achievements (computed from local stats) ----
-
-type Achievement = {
-  title: string;
-  desc: string;
-  emoji: string;
-  unlocked: boolean;
-};
-
-function computeAchievements(
-  stats: {
-    count: number;
-    avg: number;
-    best: number;
-    tests: number;
-    streak: number;
-    longest: number;
-  },
-  skills: { done: number }[],
-): Achievement[] {
-  const skillsTouched = skills.filter((s) => s.done > 0).length;
-  return [
-    {
-      title: "First Steps",
-      desc: "Complete a test",
-      emoji: "🌱",
-      unlocked: stats.count >= 1,
-    },
-    {
-      title: "Sharpshooter",
-      desc: "Score 90%+",
-      emoji: "🎯",
-      unlocked: stats.best >= 90,
-    },
-    {
-      title: "Perfectionist",
-      desc: "Score 100%",
-      emoji: "💎",
-      unlocked: stats.best >= 100,
-    },
-    {
-      title: "On Fire",
-      desc: "7-day streak",
-      emoji: "🔥",
-      unlocked: stats.longest >= 7,
-    },
-    {
-      title: "Dedicated",
-      desc: "10 attempts",
-      emoji: "⚡",
-      unlocked: stats.count >= 10,
-    },
-    {
-      title: "All-Rounder",
-      desc: "3+ skills tried",
-      emoji: "🧭",
-      unlocked: skillsTouched >= 3,
-    },
-    {
-      title: "High Achiever",
-      desc: "80%+ average",
-      emoji: "🏆",
-      unlocked: stats.avg >= 80 && stats.count >= 3,
-    },
-    {
-      title: "Marathoner",
-      desc: "25 attempts",
-      emoji: "🏅",
-      unlocked: stats.count >= 25,
-    },
-    {
-      title: "Scholar",
-      desc: "5 tests mastered",
-      emoji: "📚",
-      unlocked: stats.tests >= 5,
-    },
-  ];
-}

@@ -49,6 +49,8 @@ function fullName(s: { firstName: string; lastName: string; email: string }) {
 
 const ROLE_TONE: Record<Role, "brand" | "amber" | "neutral"> = {
   ADMIN: "brand",
+  // TEACHER is retired but remains in the DB enum; map any lingering rows so the
+  // Record stays exhaustive over the enum.
   TEACHER: "amber",
   STUDENT: "neutral",
 };
@@ -103,7 +105,6 @@ export default function AdminStudentsPage() {
     return {
       total: students.length,
       students: students.filter((s) => s.role === "STUDENT").length,
-      teachers: students.filter((s) => s.role === "TEACHER").length,
       admins: students.filter((s) => s.role === "ADMIN").length,
     };
   }, [students]);
@@ -136,10 +137,9 @@ export default function AdminStudentsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-3 gap-3">
         <Stat label="Everyone" value={counts.total} />
         <Stat label="Students" value={counts.students} />
-        <Stat label="Teachers" value={counts.teachers} />
         <Stat label="Admins" value={counts.admins} />
       </div>
 

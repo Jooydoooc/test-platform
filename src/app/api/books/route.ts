@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerUser, isTeacherRole } from "@/lib/auth-server";
+import { getServerUser, isAdminRole } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 import {
@@ -32,9 +32,9 @@ export async function POST(req: Request) {
       { status: 401 },
     );
   }
-  if (!isTeacherRole(user.role)) {
+  if (!isAdminRole(user.role)) {
     return NextResponse.json(
-      { ok: false, error: "Teacher access required." },
+      { ok: false, error: "Admin access required." },
       { status: 403 },
     );
   }

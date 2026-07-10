@@ -1,7 +1,7 @@
 // Shared auth types used by both the Supabase and legacy (localStorage) auth
-// implementations. App-facing role stays lowercase so existing checks
-// (`user.role === "teacher"`) keep working. Teacher/Admin merge -> "teacher".
-export type Role = "teacher" | "student";
+// implementations. App-facing role stays lowercase (`user.role === "admin"`).
+// The platform has exactly two roles: admin (all elevated duties) and student.
+export type Role = "admin" | "student";
 
 export interface User {
   name: string;

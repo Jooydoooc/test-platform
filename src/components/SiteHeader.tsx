@@ -42,8 +42,8 @@ export function SiteHeader() {
     { href: "/leaderboard", label: "Leaderboard" },
   ];
 
-  // Teachers ARE the admins in v1 (Admin lives in the account menu, not the nav).
-  const isAdmin = user?.role === "teacher";
+  // Admins get the elevated surface (Admin lives in the account menu, not the nav).
+  const isAdmin = user?.role === "admin";
   const isStudent = user?.role === "student";
   const initial = user?.name.trim().charAt(0).toUpperCase() || "?";
 
@@ -130,7 +130,7 @@ export function SiteHeader() {
                   <TrophyIcon />
                   Leaderboard
                 </MenuItem>
-                {user.role === "teacher" && (
+                {user.role === "admin" && (
                   <>
                     <MenuItem render={<Link href="/tests/links" />}>
                       <Share2Icon />

@@ -1,15 +1,15 @@
 import { redirect } from "next/navigation";
 import { Card } from "@/components/ui";
-import { getServerUser, isTeacherRole } from "@/lib/auth-server";
+import { getServerUser, isAdminRole } from "@/lib/auth-server";
 import { listTestShareLinks } from "@/lib/data/tests";
 import { CopyLink } from "./CopyLink";
 
-// Teacher-only: share links for every test. Students open /t/<token>, sign in,
+// Admin-only: share links for every test. Students open /t/<token>, sign in,
 // and get one graded attempt that earns EXP by score.
 export default async function TestLinksPage() {
   const user = await getServerUser();
   if (!user) redirect("/login?next=/tests/links");
-  if (!isTeacherRole(user.role)) redirect("/tests");
+  if (!isAdminRole(user.role)) redirect("/tests");
 
   const links = await listTestShareLinks();
 

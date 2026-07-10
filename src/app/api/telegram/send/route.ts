@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminChatId, isConfigured, sendMessage } from "@/lib/telegram";
-import { getServerUser, isTeacherRole } from "@/lib/auth-server";
+import { getServerUser, isAdminRole } from "@/lib/auth-server";
 import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 
 interface SendBody {
@@ -17,12 +17,12 @@ interface SendBody {
 export async function POST(req: Request) {
   // Authorization is enforced HERE, in the handler — NOT via path-prefix
   // middleware. This route lives at /api/telegram/send, which is outside every
-  // TEACHER_PREFIX, and middleware is skipped entirely when Supabase is
+  // ADMIN_PREFIX, and middleware is skipped entirely when Supabase is
   // disabled; relying on it would leave this bot relay open to the internet.
   //
   // Fail closed. Without Supabase there is no server-side identity at all
   // (legacy/localStorage mode authenticates only in the browser), so we cannot
-  // verify a teacher and must refuse rather than relay for anyone.
+  // verify an admin and must refuse rather than relay for anyone.
   if (!SUPABASE_ENABLED) {
     return NextResponse.json(
       {
@@ -50,9 +50,9 @@ export async function POST(req: Request) {
       { status: 401 },
     );
   }
-  if (!isTeacherRole(user.role)) {
+  if (!isAdminRole(user.role)) {
     return NextResponse.json(
-      { ok: false, error: "Teacher access required." },
+      { ok: false, error: "Admin access required." },
       { status: 403 },
     );
   }
