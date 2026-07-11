@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, RotateCcw, X } from "lucide-react";
 import { Card, LinkButton, ProgressBar } from "@/components/ui";
+import { awardVocabTestExp } from "@/lib/data/activity-exp";
 import {
   getVocabWords,
   saveVocabProgress,
@@ -122,10 +123,16 @@ export function QuizShell({
   unitId,
   exerciseType,
   unitTitle,
+  test = false,
+  labelOverride,
 }: {
   unitId: string;
   exerciseType: McExerciseType;
   unitTitle?: string;
+  // Test mode: a graded skills test that awards EXP on completion (once per
+  // unit). Practice mode (default) awards nothing.
+  test?: boolean;
+  labelOverride?: string;
 }) {
   const config = QUIZ_CONFIG[exerciseType];
 
@@ -209,6 +216,8 @@ export function QuizShell({
         unitId={unitId}
         exerciseType={exerciseType}
         onRetry={restart}
+        test={test}
+        labelOverride={labelOverride}
       />
     );
   }
@@ -223,7 +232,7 @@ export function QuizShell({
         <div className="flex items-center justify-between text-sm text-slate-500">
           <span className="font-medium text-slate-700">
             {unitTitle ? `${unitTitle} · ` : ""}
-            {config.label}
+            {labelOverride ?? config.label}
           </span>
           <span className="font-mono tabular-nums">
             Question {index + 1} / {questions.length}
@@ -349,16 +358,21 @@ function Results({
   unitId,
   exerciseType,
   onRetry,
+  test = false,
+  labelOverride,
 }: {
   score: number;
   total: number;
   unitId: string;
   exerciseType: McExerciseType;
   onRetry: () => void;
+  test?: boolean;
+  labelOverride?: string;
 }) {
   const pct = total > 0 ? Math.round((score / total) * 100) : 0;
   const savedRef = useRef(false);
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
+  const [earnedXp, setEarnedXp] = useState<number | null>(null);
 
   // Log one progress row on mount, with an incremented attempt_number.
   useEffect(() => {
@@ -370,7 +384,13 @@ function Results({
     } catch {
       setSaveState("error");
     }
-  }, [unitId, exerciseType, score, total]);
+    // Skills test awards EXP once per unit (server-deduped). Practice awards none.
+    if (test) {
+      awardVocabTestExp(unitId, score, total)
+        .then((xp) => setEarnedXp(xp))
+        .catch(() => setEarnedXp(0));
+    }
+  }, [unitId, exerciseType, score, total, test]);
 
   const tone = pct >= 80 ? "success" : pct >= 50 ? "brand" : "error";
 
@@ -379,7 +399,7 @@ function Results({
       <Card className="space-y-5 text-center">
         <div>
           <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
-            {QUIZ_CONFIG[exerciseType].label}
+            {labelOverride ?? QUIZ_CONFIG[exerciseType].label}
           </p>
           <p className="mt-2 font-mono text-5xl font-bold tabular-nums text-slate-900">
             {pct}%
@@ -390,6 +410,14 @@ function Results({
         </div>
 
         <ProgressBar value={pct} tone={tone} />
+
+        {test && earnedXp !== null && (
+          <p className="text-sm font-semibold text-brand-600">
+            {earnedXp > 0
+              ? `+${earnedXp} XP earned`
+              : "No new XP — this test's XP was already earned."}
+          </p>
+        )}
 
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
           <button

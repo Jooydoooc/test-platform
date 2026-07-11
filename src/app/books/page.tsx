@@ -214,23 +214,36 @@ function CategorySection({
                         </p>
                         <p className="text-xs text-slate-500">
                           {vocabId
-                            ? "8 exercises"
+                            ? "8 exercises · skills test"
                             : `${t.questions.length} question${
                                 t.questions.length === 1 ? "" : "s"
                               }`}
                         </p>
                       </div>
                       <div className="flex shrink-0 gap-2">
-                        <LinkButton
-                          href={
-                            vocabId
-                              ? `/practice/vocab/${vocabId}`
-                              : `/practice/${t.id}`
-                          }
-                          className="px-4"
-                        >
-                          {vocabId ? "Exercises" : "Practise"}
-                        </LinkButton>
+                        {vocabId ? (
+                          <>
+                            {/* Two things per vocab set: practice exercises (no XP)
+                                and the graded skills test (earns XP). */}
+                            <LinkButton
+                              href={`/practice/vocab/${vocabId}`}
+                              variant="secondary"
+                              className="px-3"
+                            >
+                              Exercises
+                            </LinkButton>
+                            <LinkButton
+                              href={`/practice/vocab/${vocabId}/test`}
+                              className="px-3"
+                            >
+                              Test
+                            </LinkButton>
+                          </>
+                        ) : (
+                          <LinkButton href={`/practice/${t.id}`} className="px-4">
+                            Practise
+                          </LinkButton>
+                        )}
                       </div>
                     </li>
                   );

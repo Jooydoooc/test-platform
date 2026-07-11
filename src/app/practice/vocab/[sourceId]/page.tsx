@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, BookOpen } from "lucide-react";
+import { ArrowRight, BookOpen, GraduationCap } from "lucide-react";
 import { Card } from "@/components/ui";
 import {
   ALL_EXERCISE_ORDER,
@@ -73,17 +73,49 @@ export default function VocabPracticePage({
         </Link>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {exercises.map((ex) => (
-          <ExerciseLink
-            key={ex.type}
-            sourceId={sourceId}
-            type={ex.type}
-            label={ex.label}
-            caption={ex.caption}
-          />
-        ))}
-      </div>
+      {/* Skills test — the graded assessment that earns XP, kept distinct from
+          the practice drills below (which are for learning and earn no XP). */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Test your skills
+        </h2>
+        <Link
+          href={`/practice/vocab/${sourceId}/test`}
+          className="group block focus-visible:outline-none"
+        >
+          <Card className="flex h-full items-center justify-between gap-3 border-brand-200 bg-brand-50/40 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-brand-300 group-hover:shadow-card-hover">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
+                <GraduationCap className="size-4" />
+              </span>
+              <div className="space-y-0.5">
+                <h3 className="font-semibold text-slate-900">Skills test</h3>
+                <p className="text-sm text-slate-600">
+                  Graded check over this set · earns XP
+                </p>
+              </div>
+            </div>
+            <ArrowRight className="size-5 shrink-0 text-brand-600 transition-transform group-hover:translate-x-0.5" />
+          </Card>
+        </Link>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Practice exercises
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {exercises.map((ex) => (
+            <ExerciseLink
+              key={ex.type}
+              sourceId={sourceId}
+              type={ex.type}
+              label={ex.label}
+              caption={ex.caption}
+            />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

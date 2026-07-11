@@ -18,6 +18,20 @@ export default function VocabPracticeExercisePage({
   const { sourceId, exerciseType } = use(params);
   const unitTitle = getSourceTitle(sourceId);
 
+  // The graded SKILLS TEST for a word set — reuses the quiz engine in test mode
+  // (awards EXP once per unit). Practice exercises award nothing.
+  if (exerciseType === "test") {
+    return (
+      <QuizShell
+        unitId={sourceId}
+        exerciseType="mc_definition"
+        unitTitle={unitTitle}
+        test
+        labelOverride="Skills test"
+      />
+    );
+  }
+
   if (isMcExerciseType(exerciseType)) {
     return (
       <QuizShell
