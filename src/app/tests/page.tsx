@@ -62,7 +62,11 @@ const GROUP_META: Record<TestGroup, { icon: IconType; skill: boolean }> = {
 };
 
 /** Groups hidden from the Tests page (still valid elsewhere in the model). */
-const HIDDEN_GROUPS: readonly TestGroup[] = ["Listening Tests", "Writing Tests"];
+const HIDDEN_GROUPS: readonly TestGroup[] = [
+  "Level Tests",
+  "Listening Tests",
+  "Writing Tests",
+];
 
 /** Groups actually shown in the Tests-page left menu, in display order. */
 const MENU_GROUPS = TEST_GROUPS.filter((g) => !HIDDEN_GROUPS.includes(g));
@@ -177,7 +181,7 @@ export default function TestsPage() {
   }, [tests]);
 
   // ---- UI state ----
-  const [group, setGroup] = useState<TestGroup>("Level Tests");
+  const [group, setGroup] = useState<TestGroup>(MENU_GROUPS[0]);
   const [activeLevel, setActiveLevel] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
