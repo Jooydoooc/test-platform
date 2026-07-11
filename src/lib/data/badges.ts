@@ -102,12 +102,15 @@ export async function evaluateAndUnlockBadges(
     .map((b) => ({ student_id: studentId, badge_id: b.id }));
   if (toInsert.length === 0) return [];
 
-  await admin
+  const { error: unlockErr } = await admin
     .from("badge_unlocks")
     .upsert(toInsert, {
       onConflict: "student_id,badge_id",
       ignoreDuplicates: true,
     });
+  // If the write failed, don't report badges as unlocked — the rows were never
+  // stored and would disappear on next load. Return [] so the UI shows nothing.
+  if (unlockErr) return [];
 
   const codeById = new Map(badgeRows.map((b) => [b.id, b.code]));
   const nameByCode = new Map(BADGE_CATALOG.map((d) => [d.code, d.name]));

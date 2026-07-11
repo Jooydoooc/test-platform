@@ -26,6 +26,10 @@ export function testExpKey(testId: string): string {
 // constraint makes a re-award a no-op, so a replayed submit never double-grants.
 // Placement tests are diagnostic and grant no EXP. Uses the service role because
 // points_ledger is read-only to clients.
+//
+// Returns the XP actually written this call: >0 on a fresh grant, 0 on a
+// duplicate (already earned) or a write error. Callers must not report XP to
+// the student unless this returns >0.
 export async function awardTestExp(
   studentId: string,
   testId: string,
@@ -34,7 +38,7 @@ export async function awardTestExp(
   const exp = computeTestExp(accuracy);
   if (exp <= 0) return 0;
   const admin = createAdminClient();
-  await admin
+  const { data, error } = await admin
     .from("points_ledger")
     .upsert(
       {
@@ -44,6 +48,10 @@ export async function awardTestExp(
         unique_key: testExpKey(testId),
       },
       { onConflict: "student_id,unique_key", ignoreDuplicates: true },
-    );
+    )
+    .select("id");
+  // On a write error or a dedupe (empty data), report 0 — don't tell the
+  // student they earned XP that was never recorded.
+  if (error || !data || data.length === 0) return 0;
   return exp;
 }
