@@ -624,17 +624,12 @@ export default function LeaderboardPage() {
           <p className="text-lg font-bold text-slate-900">Couldn&apos;t load standings</p>
           <p className="mt-1 text-sm text-slate-600">The leaderboard is temporarily unavailable. Please try again shortly.</p>
         </div>
-      ) : !hasData ? (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-10 text-center">
-          <p className="text-lg font-bold text-slate-900">No standings yet</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-slate-600">
-            Once you&apos;re in a group and students start earning XP from tests, exercises, and vocabulary practice, rankings appear here.
-          </p>
-        </div>
       ) : (
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6 lg:items-start">
       {/* MAIN COLUMN — the students' current standings are the focus */}
       <div className="min-w-0">
+      {hasData ? (
+      <>
       {/* Your Progress Card — only when the viewer is a ranked student in this group */}
       {me && myDiv && (
       <div className="relative bg-brand-600 rounded-2xl px-5 py-5 mb-5 text-white overflow-hidden">
@@ -743,6 +738,15 @@ export default function LeaderboardPage() {
         <p className="text-[11px] text-slate-400 mt-2 px-1">
           Only the top {PUBLIC_TOP_N} are shown publicly. You always see your own position.
         </p>
+      )}
+      </>
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-10 text-center">
+          <p className="text-lg font-bold text-slate-900">No standings yet</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-slate-600">
+            Once you&apos;re in a group and students start earning XP from tests, exercises, and vocabulary practice, rankings appear here. The rank tiers below are always here to aim for.
+          </p>
+        </div>
       )}
       </div>
       {/* end main column */}
