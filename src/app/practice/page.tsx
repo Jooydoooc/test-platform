@@ -123,17 +123,10 @@ export default function PracticePage() {
       : (firstWithTests ?? books[0] ?? null);
   const shown = inCategory.filter((t) => bookOf(t) === currentBook);
 
-  // Identity for personal stats/completion: the signed-in user when they have
-  // attempts, otherwise the most recent taker on this device (mirrors Dashboard).
-  const identityName = useMemo(() => {
-    const mostRecent = [...attempts].sort(
-      (a, b) => b.submittedAt - a.submittedAt,
-    )[0]?.takerName;
-    if (user && attempts.some((a) => a.takerName === user.name)) {
-      return user.name;
-    }
-    return mostRecent ?? null;
-  }, [attempts, user]);
+  // Identity for personal stats/completion: the signed-in user only.
+  // We no longer fall back to the most recent device-local taker so that a
+  // fresh student is never shown another user's name, XP, or accuracy.
+  const identityName = useMemo(() => user?.name ?? null, [user]);
 
   const myAttempts = useMemo(
     () =>
