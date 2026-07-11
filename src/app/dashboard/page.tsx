@@ -307,26 +307,6 @@ export default function DashboardPage() {
     [mine],
   );
 
-  // Leaderboard: top rows overall + the current user's own best, pinned.
-  const myName = user?.name.trim().toLowerCase() ?? "";
-  const board = useMemo(() => {
-    const bestByPlayer = new Map<string, Attempt>();
-    for (const a of attempts) {
-      const key = a.takerName.trim().toLowerCase();
-      const cur = bestByPlayer.get(key);
-      if (!cur || pct(a) > pct(cur)) bestByPlayer.set(key, a);
-    }
-    const ranked = [...bestByPlayer.values()].sort(
-      (a, b) => pct(b) - pct(a) || b.score - a.score,
-    );
-    const top = ranked.slice(0, 5);
-    const myRank = ranked.findIndex(
-      (a) => a.takerName.trim().toLowerCase() === myName,
-    );
-    const mePinned =
-      myRank >= 5 ? { attempt: ranked[myRank], rank: myRank } : null;
-    return { top, mePinned };
-  }, [attempts, myName]);
 
   if (loading || !user) return null;
 
@@ -696,37 +676,20 @@ export default function DashboardPage() {
             )}
 
             {/* Leaderboard */}
-            <Card className="!p-0 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3.5">
-                <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                  <Trophy className="h-4 w-4 text-amber-500" />
-                  Leaderboard
-                </h2>
-                <Link
-                  href="/leaderboard"
-                  className="text-xs font-semibold text-brand-700 hover:text-brand-800"
-                >
-                  View full
-                </Link>
+            <Card className="!p-5">
+              <div className="flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-amber-500" />
+                <h2 className="text-sm font-bold text-slate-900">Leaderboard</h2>
               </div>
-              <ul className="divide-y divide-slate-100 border-t border-slate-100">
-                {board.top.map((a, i) => (
-                  <BoardRow
-                    key={a.id}
-                    rank={i}
-                    attempt={a}
-                    isMe={a.takerName.trim().toLowerCase() === myName}
-                  />
-                ))}
-                {board.mePinned && (
-                  <BoardRow
-                    rank={board.mePinned.rank}
-                    attempt={board.mePinned.attempt}
-                    isMe
-                    pinned
-                  />
-                )}
-              </ul>
+              <p className="mt-2 text-sm text-slate-500">
+                See where you rank in your group.
+              </p>
+              <Link
+                href="/leaderboard"
+                className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:text-brand-800"
+              >
+                View group leaderboard
+              </Link>
             </Card>
           </div>
         </>
@@ -879,39 +842,4 @@ function Sparkline({ data }: { data: number[] }) {
   );
 }
 
-const MEDALS = ["🥇", "🥈", "🥉"];
-
-function BoardRow({
-  rank,
-  attempt,
-  isMe,
-  pinned = false,
-}: {
-  rank: number;
-  attempt: Attempt;
-  isMe: boolean;
-  pinned?: boolean;
-}) {
-  const p = Math.round(pct(attempt) * 100);
-  return (
-    <li
-      className={`flex items-center gap-3 px-5 py-2.5 ${
-        pinned ? "border-t-2 border-brand-200 bg-brand-50/70" : ""
-      } ${isMe && !pinned ? "bg-brand-50/50" : ""}`}
-    >
-      <span className="w-6 shrink-0 text-center text-sm tabular-nums text-slate-500">
-        {MEDALS[rank] ?? rank + 1}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
-        {attempt.takerName}
-        {isMe && (
-          <span className="ml-2 text-xs font-semibold text-brand-600">You</span>
-        )}
-      </span>
-      <span className="shrink-0 text-sm font-bold tabular-nums text-emerald-600">
-        {p}%
-      </span>
-    </li>
-  );
-}
 
