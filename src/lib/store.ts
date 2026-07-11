@@ -13,6 +13,7 @@ import {
   type TestGroup,
 } from "./types";
 import { ESSENTIAL_WORDS_BOOK1 } from "./data/essential-words";
+import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 
 const TESTS_KEY = "tp.tests";
 const ATTEMPTS_KEY = "tp.attempts";
@@ -20,6 +21,10 @@ const ATTEMPTS_KEY = "tp.attempts";
 // seeded earlier get them added on their next load (see loadTests).
 const EEW1_SEED_FLAG = "tp.seed.eew1";
 const GAP1_SEED_FLAG = "tp.seed.gap1";
+// One-time migration: strip fake seeded attempts (ids "seed-0"…"seed-5") for
+// browsers that visited prod before SUPABASE_ENABLED guard was added.
+const ATTEMPTS_SEED_VERSION = 2;
+const ATTEMPTS_VERSION_KEY = "tp.attempts.v";
 
 export function uid(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -354,9 +359,40 @@ function seedAttempts(): Attempt[] {
   }));
 }
 
+// One-time cleanup: remove fake seeded rows (ids "seed-0"…"seed-5") left in
+// browsers that visited prod before the SUPABASE_ENABLED guard was in place.
+// Only runs when Supabase is enabled, only runs once (version stamp), and only
+// removes seed-* ids — real student attempts (non-seed- ids) are preserved.
+function migrateAttemptsVersion(): void {
+  if (typeof window === "undefined") return;
+  if (!SUPABASE_ENABLED) return;
+  const stored = window.localStorage.getItem(ATTEMPTS_VERSION_KEY);
+  const currentVersion = stored ? Number(stored) : 0;
+  if (currentVersion >= ATTEMPTS_SEED_VERSION) return;
+  // Strip only the fake seeded rows; leave any real attempts untouched.
+  const raw = window.localStorage.getItem(ATTEMPTS_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as Attempt[];
+      const cleaned = parsed.filter((a) => !a.id.startsWith("seed-"));
+      window.localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(cleaned));
+    } catch {
+      // Corrupted data — leave it for the null-check branch below to handle.
+    }
+  }
+  window.localStorage.setItem(ATTEMPTS_VERSION_KEY, String(ATTEMPTS_SEED_VERSION));
+}
+
 export function loadAttempts(): Attempt[] {
+  migrateAttemptsVersion();
   const existing = read<Attempt[] | null>(ATTEMPTS_KEY, null);
   if (existing === null) {
+    // In prod (Supabase enabled) we never seed fake students — return a clean
+    // slate so real users aren't greeted as "Maya" or shown demo XP/accuracy.
+    if (SUPABASE_ENABLED) {
+      write(ATTEMPTS_KEY, []);
+      return [];
+    }
     const seeded = seedAttempts();
     write(ATTEMPTS_KEY, seeded);
     return seeded;
