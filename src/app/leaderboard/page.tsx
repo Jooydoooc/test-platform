@@ -753,7 +753,9 @@ export default function LeaderboardPage() {
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-1">Rank journey</p>
           <p className="text-[11px] text-slate-400 px-1 mb-2">Each tier has three steps (III → II → I) · rank comes from all-time XP and never drops.</p>
           <div className="space-y-0.5">
-            {TIERS.map((tier) => {
+            {/* Descending: highest tier (Challenger) first, Iron last. Reverse a
+                copy so TIERS + all index math (tierIndex/stepsDone) stay intact. */}
+            {[...TIERS].reverse().map((tier) => {
               const ti = tierIndex(tier);
               const isCurrent = tier.key === myTier.key;
               // Steps cleared: whole tier if below yours, your current division if it's yours, none if above.
