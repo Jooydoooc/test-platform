@@ -304,6 +304,19 @@ export interface Database {
           is_me: boolean;
         }[];
       };
+      group_xp_leaderboard: {
+        Args: Record<string, never>;
+        Returns: {
+          student_id: string;
+          display_name: string;
+          xp_total: number;
+          xp_week: number;
+          xp_month: number;
+          streak: number;
+          activity_count: number;
+          is_me: boolean;
+        }[];
+      };
     };
     Enums: {
       role: Role;

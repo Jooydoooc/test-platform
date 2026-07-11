@@ -1,20 +1,22 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { ChevronDown, Flame, Trophy } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Flame, Trophy } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
-const CURRENT_USER = "Leo";
 const XP_PER_LESSON = 60; // rough estimate used only to phrase "complete N more lessons"
 const PUBLIC_TOP_N = 5; // only the top N are shown publicly; each student always sees their own row
 
+// Real leaderboard rows come from the group_xp_leaderboard() RPC: EXP summed from
+// tests + exercises + vocab practice, scoped to the caller's own group, full names.
 type Player = {
   name: string;
-  group: string;
   streak: number;
-  accuracy: number;
   xpWeek: number;
   xpMonth: number;
   xpTotal: number;
+  isMe: boolean;
+  activity: number;
 };
 
 type Period = "week" | "month" | "total";
@@ -42,21 +44,6 @@ type Division = {
   xpToNext: number | null;
   nextLabel: string | null;
 };
-
-const PLAYERS: Player[] = [
-  { name: "Aziz", group: "Class B", streak: 21, accuracy: 92, xpWeek: 520, xpMonth: 2400, xpTotal: 7200 },
-  { name: "Priya", group: "Class B", streak: 12, accuracy: 95, xpWeek: 610, xpMonth: 2100, xpTotal: 5400 },
-  { name: "Maya", group: "Class A", streak: 6, accuracy: 88, xpWeek: 380, xpMonth: 1500, xpTotal: 4100 },
-  { name: "Dilnoza", group: "Class A", streak: 5, accuracy: 90, xpWeek: 410, xpMonth: 1200, xpTotal: 3050 },
-  { name: "Kamila", group: "Class B", streak: 0, accuracy: 75, xpWeek: 150, xpMonth: 900, xpTotal: 2200 },
-  { name: "Ken", group: "Class B", streak: 2, accuracy: 80, xpWeek: 95, xpMonth: 700, xpTotal: 1650 },
-  { name: "Leo", group: "Class A", streak: 9, accuracy: 86, xpWeek: 410, xpMonth: 820, xpTotal: 1480 },
-  { name: "Javlon", group: "Class B", streak: 0, accuracy: 70, xpWeek: 60, xpMonth: 400, xpTotal: 950 },
-  { name: "Ana", group: "Class A", streak: 4, accuracy: 82, xpWeek: 150, xpMonth: 300, xpTotal: 640 },
-  { name: "Tom", group: "Class B", streak: 0, accuracy: 60, xpWeek: 0, xpMonth: 120, xpTotal: 310 },
-  { name: "Nodira", group: "Class B", streak: 1, accuracy: 77, xpWeek: 80, xpMonth: 80, xpTotal: 120 },
-  { name: "Sardor", group: "Class A", streak: 0, accuracy: 65, xpWeek: 40, xpMonth: 40, xpTotal: 40 },
-];
 
 /* Shade a hex colour toward white (amt > 0) or black (amt < 0), amt in -1..1. */
 function shade(hex: string, amt: number): string {
@@ -393,12 +380,10 @@ function divisionInfo(xp: number, tier: Tier): Division {
 
 function getBadges(player: Player, pool: Player[]): Badge[] {
   const badges: Badge[] = [];
-  const maxAccuracy = Math.max(...pool.map((p) => p.accuracy));
-  const maxWeek = Math.max(...pool.map((p) => p.xpWeek));
+  const maxWeek = Math.max(0, ...pool.map((p) => p.xpWeek));
   if (player.streak >= 7) badges.push({ emoji: "🔥", label: "7-day streak" });
   if (player.xpWeek === maxWeek && maxWeek > 0) badges.push({ emoji: "⚡", label: "Fast learner" });
   if (player.xpTotal >= 3000) badges.push({ emoji: "💎", label: "Gem tier" });
-  if (player.accuracy === maxAccuracy) badges.push({ emoji: "🎯", label: "Sharpest aim" });
   return badges;
 }
 
@@ -460,7 +445,7 @@ function RankRow({ player, rank, isMe, pool }: { player: PlayerWithXp; rank: num
           ))}
         </div>
         <p className="text-[11px] text-slate-400">
-          {player.group} · {tier.label}
+          {tier.label} · {player.activity} {player.activity === 1 ? "activity" : "activities"}
         </p>
       </div>
       <span className="text-sm font-semibold text-slate-700 shrink-0">{player.xp.toLocaleString()} xp</span>
@@ -517,69 +502,95 @@ function TierListItem({
   );
 }
 
+type LeaderRow = {
+  student_id: string;
+  display_name: string;
+  xp_total: number;
+  xp_week: number;
+  xp_month: number;
+  streak: number;
+  activity_count: number;
+  is_me: boolean;
+};
+
 export default function LeaderboardPage() {
-  const [group, setGroup] = useState("All groups");
   const [period, setPeriod] = useState<Period>("total");
   const [showAll, setShowAll] = useState(false);
-  const groups = ["All groups", "Class A", "Class B"];
+  const [rows, setRows] = useState<LeaderRow[] | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  const withXp = useMemo<PlayerWithXp[]>(
-    () => PLAYERS.map((p) => ({ ...p, xp: xpFor(p, period), tier: tierFor(p.xpTotal) })),
-    [period],
-  );
+  // Real data: group_xp_leaderboard() sums EXP from tests + exercises + vocab
+  // practice, scoped by RLS to the caller's own group. Client read (RPC is
+  // grant-execute to authenticated); the function itself does the group scoping.
+  useEffect(() => {
+    const supabase = createClient();
+    let active = true;
+    supabase.rpc("group_xp_leaderboard").then(({ data, error }) => {
+      if (!active) return;
+      if (error) {
+        setFailed(true);
+        setRows([]);
+      } else {
+        setRows((data ?? []) as LeaderRow[]);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  const filtered = useMemo(
-    () => (group === "All groups" ? withXp : withXp.filter((p) => p.group === group)),
-    [withXp, group],
-  );
+  const withXp = useMemo<PlayerWithXp[]>(() => {
+    const players: Player[] = (rows ?? []).map((r) => ({
+      name: r.display_name || "Student",
+      streak: r.streak,
+      xpWeek: r.xp_week,
+      xpMonth: r.xp_month,
+      xpTotal: r.xp_total,
+      isMe: r.is_me,
+      activity: r.activity_count,
+    }));
+    return players
+      .map((p) => ({ ...p, xp: xpFor(p, period), tier: tierFor(p.xpTotal) }))
+      .sort((a, b) => b.xp - a.xp);
+  }, [rows, period]);
 
-  const ranked = useMemo(() => [...filtered].sort((a, b) => b.xp - a.xp), [filtered]);
-  const globalRanked = useMemo(() => [...withXp].sort((a, b) => b.xp - a.xp), [withXp]);
+  const ranked = withXp;
 
   const byTier = useMemo(() => {
     const map: Record<string, PlayerWithXp[]> = {};
     for (const t of TIERS) map[t.key] = [];
-    for (const p of filtered) map[p.tier.key].push(p);
+    for (const p of withXp) map[p.tier.key].push(p);
     return map;
-  }, [filtered]);
-
-  const classAvg = useMemo(() => {
-    const a = withXp.filter((p) => p.group === "Class A");
-    const b = withXp.filter((p) => p.group === "Class B");
-    const avg = (arr: PlayerWithXp[]) => (arr.length ? Math.round(arr.reduce((s, p) => s + p.xp, 0) / arr.length) : 0);
-    return { A: avg(a), B: avg(b) };
   }, [withXp]);
 
-  const me = withXp.find((p) => p.name === CURRENT_USER)!;
+  const me = ranked.find((p) => p.isMe) ?? null;
+  const myRank = me ? ranked.findIndex((p) => p.isMe) + 1 : 0;
+  const personAbove = me && myRank > 1 ? ranked[myRank - 2] : null;
+  const xpToPass = personAbove && me ? personAbove.xp - me.xp + 1 : 0;
 
-  const meInFiltered = ranked.some((p) => p.name === CURRENT_USER);
-  const board = meInFiltered ? ranked : globalRanked;
-  const scope = meInFiltered && group !== "All groups" ? `in ${group}` : "overall";
-  const myRank = board.findIndex((p) => p.name === CURRENT_USER) + 1;
-  const personAbove = myRank > 1 ? board[myRank - 2] : null;
-  const xpToPass = personAbove ? personAbove.xp - me.xp + 1 : 0;
-
-  // Rank + division are pinned to ALL-TIME XP — a student is never demoted by the period toggle.
-  const myTier = tierFor(me.xpTotal);
-  const myDiv = divisionInfo(me.xpTotal, myTier);
+  // Rank + division are pinned to ALL-TIME XP — never demoted by the period toggle.
+  const myTier = me ? tierFor(me.xpTotal) : TIERS[0];
+  const myDiv = me ? divisionInfo(me.xpTotal, myTier) : null;
   const myTierIdx = tierIndex(myTier);
-  const myDivIdx = DIVISIONS.indexOf(myDiv.label); // 0 = III (entry) … 2 = I (top of tier)
-  const lessonsToNextDiv = myDiv.xpToNext ? Math.max(1, Math.ceil(myDiv.xpToNext / XP_PER_LESSON)) : null;
+  const myDivIdx = myDiv ? DIVISIONS.indexOf(myDiv.label) : -1;
+  const lessonsToNextDiv = myDiv && myDiv.xpToNext ? Math.max(1, Math.ceil(myDiv.xpToNext / XP_PER_LESSON)) : null;
   const lessonPhrase =
     lessonsToNextDiv == null
       ? null
       : lessonsToNextDiv <= 3
         ? `${lessonsToNextDiv} more lesson${lessonsToNextDiv === 1 ? "" : "s"}`
         : "a few more lessons";
-  const proximityWord = myDiv.progressPct >= 60 ? "close to" : "on your way to";
-  const myBadges = getBadges(me, withXp);
+  const proximityWord = myDiv && myDiv.progressPct >= 60 ? "close to" : "on your way to";
+  const myBadges = me ? getBadges(me, withXp) : [];
 
   const top3 = ranked.slice(0, 3);
-
   const visible = showAll ? ranked : ranked.slice(0, PUBLIC_TOP_N);
-  const meVisible = visible.some((p) => p.name === CURRENT_USER);
-  const myListIdx = ranked.findIndex((p) => p.name === CURRENT_USER);
+  const meVisible = visible.some((p) => p.isMe);
+  const myListIdx = ranked.findIndex((p) => p.isMe);
   const myRow = myListIdx >= 0 ? ranked[myListIdx] : null;
+
+  const loading = rows === null;
+  const hasData = ranked.length > 0;
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -595,19 +606,37 @@ export default function LeaderboardPage() {
             Leaderboard
           </span>
           <h1 className="mt-4 text-2xl font-extrabold tracking-tight sm:text-3xl">
-            Climb the ranks
+            Your group standings
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-brand-100/90">
-            Earn XP from vocabulary practice, hold your streak, and rise through
-            the tiers against your classmates.
+            Earn XP from tests, exercises, and vocabulary practice, hold your
+            streak, and rise through the tiers against your group.
           </p>
         </div>
       </header>
 
+      {loading ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-10 text-center text-sm text-slate-400">
+          Loading standings…
+        </div>
+      ) : failed ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-10 text-center">
+          <p className="text-lg font-bold text-slate-900">Couldn&apos;t load standings</p>
+          <p className="mt-1 text-sm text-slate-600">The leaderboard is temporarily unavailable. Please try again shortly.</p>
+        </div>
+      ) : !hasData ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-10 text-center">
+          <p className="text-lg font-bold text-slate-900">No standings yet</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-slate-600">
+            Once you&apos;re in a group and students start earning XP from tests, exercises, and vocabulary practice, rankings appear here.
+          </p>
+        </div>
+      ) : (
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6 lg:items-start">
       {/* MAIN COLUMN — the students' current standings are the focus */}
       <div className="min-w-0">
-      {/* Your Progress Card */}
+      {/* Your Progress Card — only when the viewer is a ranked student in this group */}
+      {me && myDiv && (
       <div className="relative bg-brand-600 rounded-2xl px-5 py-5 mb-5 text-white overflow-hidden">
         <div className="flex items-center gap-4 mb-2">
           <div className="bg-white/15 rounded-2xl p-1.5 shrink-0">
@@ -615,7 +644,7 @@ export default function LeaderboardPage() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm text-brand-100">
-              You are <span className="font-bold text-white">#{myRank}</span> {scope}
+              You are <span className="font-bold text-white">#{myRank}</span> in your group
             </p>
             <p className="text-xl font-black leading-tight">
               {myTier.label} {myDiv.label} · {me.xpTotal.toLocaleString()} xp
@@ -647,7 +676,7 @@ export default function LeaderboardPage() {
 
         {personAbove && (
           <p className="text-xs text-brand-100 mt-1">
-            <span className="font-semibold text-white">{xpToPass.toLocaleString()} xp</span> to pass {personAbove.name} {scope}
+            <span className="font-semibold text-white">{xpToPass.toLocaleString()} xp</span> to pass {personAbove.name}
           </p>
         )}
 
@@ -661,16 +690,17 @@ export default function LeaderboardPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Top 3 Podium */}
       <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">Top 3 {period === "total" ? "of all time" : period === "week" ? "this week" : "this month"}</p>
       <div className="flex items-end gap-3 mb-6 overflow-x-auto pb-1 sm:overflow-visible">
         {top3.map((p, i) => (
-          <PodiumCard key={p.name} player={p} rank={i + 1} isMe={p.name === CURRENT_USER} />
+          <PodiumCard key={p.name + i} player={p} rank={i + 1} isMe={p.isMe} />
         ))}
       </div>
 
-      {/* Filters: Group + Time */}
+      {/* Time period filter */}
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
         <div className="flex bg-slate-100 rounded-xl p-1 gap-1" role="tablist" aria-label="Time period">
           {PERIODS.map((p) => (
@@ -685,22 +715,6 @@ export default function LeaderboardPage() {
             </button>
           ))}
         </div>
-        <div className="relative">
-          <label htmlFor="group-filter" className="sr-only">
-            Filter by group
-          </label>
-          <select
-            id="group-filter"
-            value={group}
-            onChange={(e) => setGroup(e.target.value)}
-            className="appearance-none text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg pl-3 pr-8 py-2 cursor-pointer"
-          >
-            {groups.map((g) => (
-              <option key={g}>{g}</option>
-            ))}
-          </select>
-          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
-        </div>
       </div>
 
       {/* Standings */}
@@ -714,7 +728,7 @@ export default function LeaderboardPage() {
       </div>
       <div className="bg-white rounded-2xl border border-slate-200 shadow-card divide-y divide-slate-100 overflow-hidden">
         {visible.map((p, i) => (
-          <RankRow key={p.name} player={p} rank={i + 1} isMe={p.name === CURRENT_USER} pool={withXp} />
+          <RankRow key={p.name + i} player={p} rank={i + 1} isMe={p.isMe} pool={withXp} />
         ))}
         {!showAll && !meVisible && myRow && (
           <>
@@ -733,22 +747,8 @@ export default function LeaderboardPage() {
       </div>
       {/* end main column */}
 
-      {/* SIDE PANEL — rank ladder + class context, tucked out of the way (drops below standings on mobile) */}
+      {/* SIDE PANEL — rank ladder, tucked out of the way (drops below standings on mobile) */}
       <aside className="mt-6 lg:mt-0 lg:sticky lg:top-6 space-y-4">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-3">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-2">Class averages</p>
-          <div className="flex gap-2">
-            <div className="flex-1 rounded-xl bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-400">Class A</p>
-              <p className="text-sm font-bold text-brand-600">{classAvg.A.toLocaleString()} xp</p>
-            </div>
-            <div className="flex-1 rounded-xl bg-slate-50 px-3 py-2">
-              <p className="text-[11px] text-slate-400">Class B</p>
-              <p className="text-sm font-bold text-teal-600">{classAvg.B.toLocaleString()} xp</p>
-            </div>
-          </div>
-        </div>
-
         <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-3">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-1">Rank journey</p>
           <p className="text-[11px] text-slate-400 px-1 mb-2">Each tier has three steps (III → II → I) · rank comes from all-time XP and never drops.</p>
@@ -757,9 +757,9 @@ export default function LeaderboardPage() {
                 copy so TIERS + all index math (tierIndex/stepsDone) stay intact. */}
             {[...TIERS].reverse().map((tier) => {
               const ti = tierIndex(tier);
-              const isCurrent = tier.key === myTier.key;
-              // Steps cleared: whole tier if below yours, your current division if it's yours, none if above.
-              const stepsDone = ti < myTierIdx ? 3 : isCurrent ? myDivIdx + 1 : 0;
+              const isCurrent = !!me && tier.key === myTier.key;
+              // Steps cleared: whole tier if below yours, your current division if it's yours, none if above (or if not ranked).
+              const stepsDone = me ? (ti < myTierIdx ? 3 : isCurrent ? myDivIdx + 1 : 0) : 0;
               return (
                 <TierListItem
                   key={tier.key}
@@ -774,6 +774,7 @@ export default function LeaderboardPage() {
         </div>
       </aside>
       </div>
+      )}
       {/* end grid */}
     </div>
   );

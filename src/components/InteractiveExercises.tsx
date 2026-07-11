@@ -9,6 +9,7 @@ import {
 } from "react";
 import { ArrowRight, Check, RotateCcw, X } from "lucide-react";
 import { Card, LinkButton, ProgressBar } from "@/components/ui";
+import { awardExerciseExp } from "@/lib/data/activity-exp";
 import {
   getVocabWords,
   saveVocabProgress,
@@ -163,6 +164,9 @@ function Results({
     } catch {
       /* score above is still correct */
     }
+    // Award real EXP for the completed exercise (feeds the leaderboard).
+    // Fire-and-forget: a failed award must never block showing the result.
+    void awardExerciseExp(unitId, exerciseType, score, total).catch(() => {});
   }, [unitId, exerciseType, score, total]);
 
   const tone = pct >= 80 ? "success" : pct >= 50 ? "brand" : "error";
