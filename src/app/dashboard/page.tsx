@@ -249,7 +249,11 @@ export default function DashboardPage() {
   // Feed the shared badge evaluator from data we already compute. Writing/
   // Speaking (no localStorage tests) and unit_master (no unit tracking) stay
   // locked until the Supabase engine supplies them — same catalog either way.
-  const badges = useMemo(() => {
+  // Badges are grouped into labelled sections (each skill's ladder together,
+  // then cross-skill categories) so 30+ badges stay scannable rather than a
+  // flat wall. Within a group we keep catalog order, which is threshold-
+  // ascending, so each ladder reads bottom rung up.
+  const { badgeGroups, earnedCount, totalCount } = useMemo(() => {
     const skillTests: Partial<Record<BadgeSkill, number>> = {};
     for (const s of skillProgress) {
       if (s.done > 0) skillTests[s.label.toUpperCase() as BadgeSkill] = s.done;
@@ -259,12 +263,43 @@ export default function DashboardPage() {
       streakDays: stats.longest,
       unitsMastered: 0,
     };
-    // Earned badges lead so progress feels rewarding; locked ladder trails in
-    // catalog order (a stable sort preserves it within each group).
-    return BADGE_CATALOG.map((def) => ({
+    const evaluated = BADGE_CATALOG.map((def) => ({
       def,
       earned: isBadgeEarned(def, counts),
-    })).sort((a, b) => Number(b.earned) - Number(a.earned));
+    }));
+
+    const groupFor = (def: BadgeDef): { key: string; label: string } => {
+      if (def.metric === "skill_tests" && def.skillArea) {
+        return {
+          key: def.skillArea,
+          label: def.skillArea[0] + def.skillArea.slice(1).toLowerCase(),
+        };
+      }
+      if (def.metric === "streak_days") return { key: "streaks", label: "Streaks" };
+      if (def.metric === "skills_touched") return { key: "breadth", label: "Breadth" };
+      if (def.metric === "total_tests") return { key: "volume", label: "Volume" };
+      return { key: "completion", label: "Completion" };
+    };
+
+    const order: string[] = [];
+    const byKey = new Map<
+      string,
+      { key: string; label: string; badges: typeof evaluated }
+    >();
+    for (const b of evaluated) {
+      const g = groupFor(b.def);
+      if (!byKey.has(g.key)) {
+        byKey.set(g.key, { ...g, badges: [] });
+        order.push(g.key);
+      }
+      byKey.get(g.key)!.badges.push(b);
+    }
+
+    return {
+      badgeGroups: order.map((k) => byKey.get(k)!),
+      earnedCount: evaluated.filter((b) => b.earned).length,
+      totalCount: evaluated.length,
+    };
   }, [skillProgress, stats.longest]);
 
   const recent = useMemo(
@@ -552,38 +587,57 @@ export default function DashboardPage() {
                   Badges
                 </h2>
                 <span className="text-xs font-semibold text-slate-500">
-                  {badges.filter((b) => b.earned).length}/{badges.length}
+                  {earnedCount}/{totalCount}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {badges.map(({ def, earned }) => {
-                  const Icon = badgeIcon(def);
+              <div className="space-y-4">
+                {badgeGroups.map((group) => {
+                  const groupEarned = group.badges.filter(
+                    (b) => b.earned,
+                  ).length;
                   return (
-                    <div
-                      key={def.code}
-                      title={def.description}
-                      className={`flex items-center gap-2.5 rounded-xl border p-2.5 ${
-                        earned
-                          ? "border-amber-200 bg-amber-50"
-                          : "border-slate-200 bg-slate-50 opacity-60"
-                      }`}
-                    >
-                      <span
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                          earned
-                            ? "bg-amber-100 text-amber-600"
-                            : "bg-slate-100 text-slate-400"
-                        }`}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-bold text-slate-800">
-                          {def.name}
+                    <div key={group.key}>
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                          {group.label}
                         </p>
-                        <p className="truncate text-[11px] text-slate-500">
-                          {def.description}
-                        </p>
+                        <span className="text-[11px] font-semibold text-slate-400">
+                          {groupEarned}/{group.badges.length}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {group.badges.map(({ def, earned }) => {
+                          const Icon = badgeIcon(def);
+                          return (
+                            <div
+                              key={def.code}
+                              title={def.description}
+                              className={`flex items-center gap-2.5 rounded-xl border p-2.5 ${
+                                earned
+                                  ? "border-amber-200 bg-amber-50"
+                                  : "border-slate-200 bg-slate-50 opacity-60"
+                              }`}
+                            >
+                              <span
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                                  earned
+                                    ? "bg-amber-100 text-amber-600"
+                                    : "bg-slate-100 text-slate-400"
+                                }`}
+                              >
+                                <Icon className="h-4 w-4" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-bold text-slate-800">
+                                  {def.name}
+                                </p>
+                                <p className="truncate text-[11px] text-slate-500">
+                                  {def.description}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
