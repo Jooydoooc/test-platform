@@ -27,6 +27,7 @@ import {
   BADGE_CATALOG,
   isBadgeEarned,
   type BadgeCounts,
+  type BadgeDef,
   type BadgeSkill,
 } from "@/lib/badges";
 import { Badge, Button, Card, LinkButton, ProgressBar } from "@/components/ui";
@@ -44,17 +45,38 @@ function pct(a: Attempt): number {
 // The trainable skills — every test group except the Level Tests bucket.
 const SKILL_GROUPS = TEST_GROUPS.filter((g) => g !== "Level Tests");
 
-// Plain icons per badge code (NO-AI-STYLE: no emoji in system UI).
-const BADGE_ICON: Record<string, LucideIcon> = {
-  grammar_starter: BookOpen,
-  vocabulary_builder: Sparkles,
-  reading_climber: BookText,
-  listening_focus: Headphones,
-  writing_voice: PenLine,
-  speaking_confidence: Mic,
+// Plain icons per badge (NO-AI-STYLE: no emoji in system UI). Skill tiers reuse
+// their skill icon; cross-skill badges get their own. Resolved by code, then by
+// skill area, then a Medal fallback — so new catalog rows never need new code.
+const SKILL_ICON: Record<BadgeSkill, LucideIcon> = {
+  GRAMMAR: BookOpen,
+  VOCABULARY: Sparkles,
+  READING: BookText,
+  LISTENING: Headphones,
+  WRITING: PenLine,
+  SPEAKING: Mic,
+};
+
+const CROSS_SKILL_ICON: Record<string, LucideIcon> = {
+  streak_3: Flame,
   streak_7: Flame,
+  streak_14: Flame,
+  streak_30: Flame,
+  explorer_3: Compass,
+  all_rounder: Award,
+  volume_10: Star,
+  volume_50: Target,
+  volume_100: Trophy,
   unit_master: Trophy,
 };
+
+function badgeIcon(def: BadgeDef): LucideIcon {
+  return (
+    CROSS_SKILL_ICON[def.code] ??
+    (def.skillArea ? SKILL_ICON[def.skillArea] : undefined) ??
+    Medal
+  );
+}
 
 /** Distinct-day streak ending today or yesterday, plus the longest run ever. */
 function streaks(dates: number[]): { current: number; longest: number } {
@@ -237,10 +259,12 @@ export default function DashboardPage() {
       streakDays: stats.longest,
       unitsMastered: 0,
     };
+    // Earned badges lead so progress feels rewarding; locked ladder trails in
+    // catalog order (a stable sort preserves it within each group).
     return BADGE_CATALOG.map((def) => ({
       def,
       earned: isBadgeEarned(def, counts),
-    }));
+    })).sort((a, b) => Number(b.earned) - Number(a.earned));
   }, [skillProgress, stats.longest]);
 
   const recent = useMemo(
@@ -533,7 +557,7 @@ export default function DashboardPage() {
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {badges.map(({ def, earned }) => {
-                  const Icon = BADGE_ICON[def.code] ?? Medal;
+                  const Icon = badgeIcon(def);
                   return (
                     <div
                       key={def.code}

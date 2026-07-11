@@ -127,6 +127,18 @@ export type BadgeUnlockRow = {
   unlocked_at: string;
 };
 
+export type HtmlTestRow = {
+  id: string;
+  title: string;
+  skill_scope: TestSkillScope;
+  level: Level | null;
+  storage_path: string;
+  share_token: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type QuestionRow = {
   id: string;
   task_id: string;
@@ -271,6 +283,7 @@ export interface Database {
       points_ledger: Table<PointsLedgerRow>;
       badges: Table<BadgeRow>;
       badge_unlocks: Table<BadgeUnlockRow>;
+      html_tests: Table<HtmlTestRow>;
       units: Table<UnitRow>;
       words: Table<WordRow>;
       user_progress: Table<UserProgressRow>;

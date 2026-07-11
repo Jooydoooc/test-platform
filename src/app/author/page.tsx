@@ -37,6 +37,9 @@ export default function AuthorPage() {
           <LinkButton href="/author/upload" variant="secondary">
             Upload book
           </LinkButton>
+          <LinkButton href="/author/tests/html" variant="secondary">
+            Upload HTML test
+          </LinkButton>
           <Button onClick={createTest}>+ New test</Button>
         </div>
       </div>

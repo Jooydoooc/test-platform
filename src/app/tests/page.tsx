@@ -61,7 +61,13 @@ const GROUP_META: Record<TestGroup, { icon: IconType; skill: boolean }> = {
   "Writing Tests": { icon: PenLine, skill: true },
 };
 
-const SKILL_GROUPS = TEST_GROUPS.filter((g) => GROUP_META[g].skill);
+/** Groups hidden from the Tests page (still valid elsewhere in the model). */
+const HIDDEN_GROUPS: readonly TestGroup[] = ["Listening Tests", "Writing Tests"];
+
+/** Groups actually shown in the Tests-page left menu, in display order. */
+const MENU_GROUPS = TEST_GROUPS.filter((g) => !HIDDEN_GROUPS.includes(g));
+
+const SKILL_GROUPS = MENU_GROUPS.filter((g) => GROUP_META[g].skill);
 
 const DAY = 86_400_000;
 
@@ -402,7 +408,7 @@ export default function TestsPage() {
             className={`${sidebarOpen ? "block" : "hidden"} rounded-2xl border border-slate-200 bg-white p-2 shadow-card lg:block`}
           >
             <nav className="space-y-0.5">
-              {TEST_GROUPS.map((g) => {
+              {MENU_GROUPS.map((g) => {
                 const meta = GROUP_META[g];
                 const Icon = meta.icon;
                 const count = tests.filter((t) => groupOf(t) === g).length;
