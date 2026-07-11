@@ -372,7 +372,8 @@ function Results({
   const pct = total > 0 ? Math.round((score / total) * 100) : 0;
   const savedRef = useRef(false);
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
-  const [earnedXp, setEarnedXp] = useState<number | null>(null);
+  const [xpResult, setXpResult] =
+    useState<Awaited<ReturnType<typeof awardVocabTestExp>> | null>(null);
 
   // Log one progress row on mount, with an incremented attempt_number.
   useEffect(() => {
@@ -387,8 +388,8 @@ function Results({
     // Skills test awards EXP once per unit (server-deduped). Practice awards none.
     if (test) {
       awardVocabTestExp(unitId, score, total)
-        .then((xp) => setEarnedXp(xp))
-        .catch(() => setEarnedXp(0));
+        .then(setXpResult)
+        .catch(() => setXpResult({ status: "error" }));
     }
   }, [unitId, exerciseType, score, total, test]);
 
@@ -411,11 +412,17 @@ function Results({
 
         <ProgressBar value={pct} tone={tone} />
 
-        {test && earnedXp !== null && (
-          <p className="text-sm font-semibold text-brand-600">
-            {earnedXp > 0
-              ? `+${earnedXp} XP earned`
-              : "No new XP — this test's XP was already earned."}
+        {test && xpResult && xpResult.status !== "ineligible" && (
+          <p
+            className={`text-sm font-semibold ${
+              xpResult.status === "error" ? "text-red-600" : "text-brand-600"
+            }`}
+          >
+            {xpResult.status === "granted"
+              ? `+${xpResult.xp} XP earned`
+              : xpResult.status === "duplicate"
+                ? "No new XP — this test's XP was already earned."
+                : "Couldn't save your XP. Check your connection and try again."}
           </p>
         )}
 
