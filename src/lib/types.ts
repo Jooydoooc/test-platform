@@ -1,5 +1,7 @@
 // Core domain types for the test platform.
 
+import type { SkillArea } from "@/lib/database.types";
+
 export type QuestionType = "single" | "multiple" | "boolean" | "short" | "gap";
 
 export interface Choice {
@@ -34,6 +36,14 @@ export interface Test {
   group?: TestGroup;
   /** Time limit in minutes for a timed test. Omitted/0 means untimed. */
   durationMinutes?: number;
+  /** Skill this test covers. Required to publish to Supabase (DB questions
+   *  need a skill_area); one skill per test in v1. */
+  skillArea?: SkillArea;
+  /** Set once the test has been published to Supabase — the DB tests.id.
+   *  Its presence means a re-publish updates in place (stable share link). */
+  supabaseTestId?: string;
+  /** The published test's share token; students take it at /t/<shareToken>. */
+  shareToken?: string;
   questions: Question[];
   createdAt: number;
   updatedAt: number;
