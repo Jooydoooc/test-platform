@@ -627,12 +627,12 @@ export default function LeaderboardPage() {
       ) : (
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6 lg:items-start">
       {/* MAIN COLUMN — the students' current standings are the focus */}
-      <div className="min-w-0">
+      <div className="min-w-0 space-y-6">
       {hasData ? (
       <>
       {/* Your Progress Card — only when the viewer is a ranked student in this group */}
       {me && myDiv && (
-      <div className="relative bg-brand-600 rounded-2xl px-5 py-5 mb-5 text-white overflow-hidden">
+      <div className="relative bg-brand-600 rounded-2xl px-5 py-5 text-white overflow-hidden">
         <div className="flex items-center gap-4 mb-2">
           <div className="bg-white/15 rounded-2xl p-1.5 shrink-0">
             <Medallion tier={myTier} size={48} />
@@ -687,16 +687,8 @@ export default function LeaderboardPage() {
       </div>
       )}
 
-      {/* Top 3 Podium */}
-      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">Top 3 {period === "total" ? "of all time" : period === "week" ? "this week" : "this month"}</p>
-      <div className="flex items-end gap-3 mb-6 overflow-x-auto pb-1 sm:overflow-visible">
-        {top3.map((p, i) => (
-          <PodiumCard key={p.name + i} player={p} rank={i + 1} isMe={p.isMe} />
-        ))}
-      </div>
-
-      {/* Time period filter */}
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+      {/* Time period filter — governs the podium and standings below */}
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex bg-slate-100 rounded-xl p-1 gap-1" role="tablist" aria-label="Time period">
           {PERIODS.map((p) => (
             <button
@@ -712,33 +704,45 @@ export default function LeaderboardPage() {
         </div>
       </div>
 
+      {/* Top 3 podium */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1">Top 3 {period === "total" ? "of all time" : period === "week" ? "this week" : "this month"}</p>
+        <div className="flex items-end gap-3 overflow-x-auto pb-1 sm:overflow-visible">
+          {top3.map((p, i) => (
+            <PodiumCard key={p.name + i} player={p} rank={i + 1} isMe={p.isMe} />
+          ))}
+        </div>
+      </div>
+
       {/* Standings */}
-      <div className="flex items-center justify-between mb-2 px-1">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Standings</p>
-        {ranked.length > PUBLIC_TOP_N && (
-          <button onClick={() => setShowAll((v) => !v)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
-            {showAll ? "Show top 5" : `Show all (${ranked.length})`}
-          </button>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Standings</p>
+          {ranked.length > PUBLIC_TOP_N && (
+            <button onClick={() => setShowAll((v) => !v)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
+              {showAll ? "Show top 5" : `Show all (${ranked.length})`}
+            </button>
+          )}
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-card divide-y divide-slate-100 overflow-hidden">
+          {visible.map((p, i) => (
+            <RankRow key={p.name + i} player={p} rank={i + 1} isMe={p.isMe} pool={withXp} />
+          ))}
+          {!showAll && !meVisible && myRow && (
+            <>
+              <div className="text-center text-slate-300 text-xs py-1 select-none" aria-hidden="true">
+                ···
+              </div>
+              <RankRow player={myRow} rank={myListIdx + 1} isMe pool={withXp} />
+            </>
+          )}
+        </div>
+        {!showAll && (
+          <p className="text-[11px] text-slate-400 px-1">
+            Only the top {PUBLIC_TOP_N} are shown publicly. You always see your own position.
+          </p>
         )}
       </div>
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-card divide-y divide-slate-100 overflow-hidden">
-        {visible.map((p, i) => (
-          <RankRow key={p.name + i} player={p} rank={i + 1} isMe={p.isMe} pool={withXp} />
-        ))}
-        {!showAll && !meVisible && myRow && (
-          <>
-            <div className="text-center text-slate-300 text-xs py-1 select-none" aria-hidden="true">
-              ···
-            </div>
-            <RankRow player={myRow} rank={myListIdx + 1} isMe pool={withXp} />
-          </>
-        )}
-      </div>
-      {!showAll && (
-        <p className="text-[11px] text-slate-400 mt-2 px-1">
-          Only the top {PUBLIC_TOP_N} are shown publicly. You always see your own position.
-        </p>
-      )}
       </>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-10 text-center">
