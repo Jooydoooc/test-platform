@@ -23,12 +23,14 @@ export type BadgeSkill =
 //   skills_touched — number of distinct skills with >=1 completed test
 //   total_tests    — completed tests across all skills
 //   units_mastered — units fully completed (not yet sourced)
+//   vocab_exercises — distinct vocab practice drills completed (unit × drill type)
 export type BadgeMetric =
   | "skill_tests"
   | "streak_days"
   | "skills_touched"
   | "total_tests"
-  | "units_mastered";
+  | "units_mastered"
+  | "vocab_exercises";
 
 export interface BadgeDef {
   code: string;
@@ -102,6 +104,10 @@ export const BADGE_CATALOG: BadgeDef[] = [
   { code: "volume_100", name: "Centurion", description: "Complete 100 tests in total.", skillArea: null, threshold: 100, metric: "total_tests" },
   // Completion — still awaiting a unit-completion source.
   { code: "unit_master", name: "Unit Master", description: "Complete every task in a unit.", skillArea: null, threshold: 1, metric: "units_mastered" },
+  // Vocab practice — reward drilling collected words (distinct unit × drill type).
+  { code: "vocab_practice_bronze", name: "Word Driller", description: "Complete 5 vocabulary practice drills.", skillArea: "VOCABULARY", threshold: 5, metric: "vocab_exercises" },
+  { code: "vocab_practice_silver", name: "Word Grinder", description: "Complete 15 vocabulary practice drills.", skillArea: "VOCABULARY", threshold: 15, metric: "vocab_exercises" },
+  { code: "vocab_practice_gold", name: "Word Master", description: "Complete 30 vocabulary practice drills.", skillArea: "VOCABULARY", threshold: 30, metric: "vocab_exercises" },
 ];
 
 // The inputs an evaluator needs. A source (localStorage now, Supabase later)
@@ -110,6 +116,9 @@ export interface BadgeCounts {
   skillTests: Partial<Record<BadgeSkill, number>>;
   streakDays: number;
   unitsMastered: number;
+  /** Distinct vocab practice drills completed. Optional: sources that can't see
+   *  the ledger (the localStorage/dashboard adapter) omit it and it reads as 0. */
+  vocabExercises?: number;
 }
 
 /** Distinct skills with at least one completed test — source for skills_touched. */
@@ -134,6 +143,8 @@ export function badgeProgress(def: BadgeDef, counts: BadgeCounts): number {
       return totalTests(counts);
     case "units_mastered":
       return counts.unitsMastered;
+    case "vocab_exercises":
+      return counts.vocabExercises ?? 0;
   }
 }
 

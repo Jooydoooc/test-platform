@@ -61,10 +61,21 @@ async function computeCounts(studentId: string): Promise<BadgeCounts> {
     for (const [skill, ids] of perSkill) skillTests[skill] = ids.size;
   }
 
+  // Vocab practice drills: each VOCAB_EXERCISE_EXP ledger row is one distinct
+  // (unit, drill type) completion (deduped at award time), so the row count is
+  // the number of drills completed. Exercises never write results, so this is
+  // the only source for the vocab_exercises metric.
+  const { count: vocabExercises } = await admin
+    .from("points_ledger")
+    .select("id", { count: "exact", head: true })
+    .eq("student_id", studentId)
+    .eq("reason", "VOCAB_EXERCISE_EXP");
+
   return {
     skillTests,
     streakDays: longestDailyStreak((results ?? []).map((r) => r.created_at)),
     unitsMastered: 0,
+    vocabExercises: vocabExercises ?? 0,
   };
 }
 
