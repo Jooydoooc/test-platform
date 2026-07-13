@@ -164,6 +164,9 @@ export type AttemptRow = {
   task_id: string | null;
   test_id: string | null;
   html_test_id: string | null;
+  /** Client-side vocab unit id (e.g. "eew1-u1") — text, not a FK uuid.
+   *  Added by migration 0016 to support the vocab skills-test pipeline. */
+  vocab_source_id: string | null;
   started_at: string;
   submitted_at: string | null;
 };

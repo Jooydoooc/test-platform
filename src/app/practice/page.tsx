@@ -9,11 +9,13 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  Flame,
   GraduationCap,
   ListChecks,
   Search,
   Sparkles,
   Sprout,
+  Star,
   Target,
   X,
 } from "lucide-react";
@@ -159,19 +161,8 @@ export default function PracticePage() {
         : 0;
     const streak = computeStreak(myAttempts.map((a) => a.submittedAt));
 
-    // Rank by total points across all takers.
-    let rank: number | null = null;
-    if (identityName) {
-      const totals = new Map<string, number>();
-      for (const a of attempts)
-        totals.set(a.takerName, (totals.get(a.takerName) ?? 0) + a.score);
-      const idx = [...totals.entries()]
-        .sort((x, y) => y[1] - x[1])
-        .findIndex(([n]) => n === identityName);
-      rank = idx >= 0 ? idx + 1 : null;
-    }
-    return { xp, questions, accuracy, streak, rank };
-  }, [tests, myAttempts, attempts, identityName]);
+    return { xp, questions, accuracy, streak };
+  }, [tests, myAttempts]);
 
   // Books filtered by search + content filter (sidebar view only).
   const visibleBooks = useMemo(
@@ -227,20 +218,22 @@ export default function PracticePage() {
         </p>
       </header>
 
-      {/* ---------- statistics cards ---------- */}
-      <section
-        aria-label="Your practice stats"
-        className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
-      >
-        <StatCard emoji="🔥" label="Current streak" value={`${stats.streak}d`} />
-        <StatCard emoji="⭐" label="Total XP" value={stats.xp} />
-        <StatCard
-          emoji="🏆"
-          label="Current rank"
-          value={stats.rank ? `#${stats.rank}` : "—"}
-        />
-        <StatCard emoji="🎯" label="Accuracy" value={`${stats.accuracy}%`} />
-        <StatCard emoji="📚" label="Questions" value={stats.questions} />
+      {/* ---------- your progress (all-time) ---------- */}
+      <section aria-label="Your all-time progress" className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Your progress
+          </h2>
+          <span className="text-xs text-slate-400">
+            All-time · practice doesn&apos;t change these
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard Icon={Flame} label="Current streak" value={`${stats.streak}d`} />
+          <StatCard Icon={Star} label="Total XP" value={stats.xp} />
+          <StatCard Icon={Target} label="Accuracy" value={`${stats.accuracy}%`} />
+          <StatCard Icon={ListChecks} label="Questions" value={stats.questions} />
+        </div>
       </section>
 
       {/* ---------- my vocabulary (saved words → drills) ---------- */}
@@ -375,7 +368,7 @@ function MyVocabulary({
           href="/lexora/vocab"
           className="group block focus-visible:outline-none"
         >
-          <div className="flex items-center gap-3 rounded-3xl border border-dashed border-slate-200 bg-white/60 px-5 py-6 transition group-hover:border-brand-300 group-hover:bg-white">
+          <div className="flex items-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-white/60 px-5 py-6 transition group-hover:border-brand-300 group-hover:bg-white">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-500">
               <Sparkles className="size-5" />
             </span>
@@ -397,7 +390,7 @@ function MyVocabulary({
             <Link
               key={c.passageId}
               href={`/practice/vocab/${c.passageId}`}
-              className="group flex flex-col rounded-3xl border border-slate-200/70 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 motion-reduce:hover:translate-y-0"
+              className="group flex flex-col rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 motion-reduce:hover:translate-y-0"
             >
               <div className="flex items-start justify-between gap-3">
                 <h3 className="font-semibold leading-snug text-[#0F172A]">
@@ -428,20 +421,23 @@ function MyVocabulary({
 /* --------------------------- stat card --------------------------------- */
 
 function StatCard({
-  emoji,
+  Icon,
   label,
   value,
 }: {
-  emoji: string;
+  Icon: typeof Sprout;
   label: string;
   value: string | number;
 }) {
   return (
-    <div className="rounded-3xl border border-slate-200/70 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover motion-reduce:hover:translate-y-0 sm:p-5">
-      <div className="flex size-10 items-center justify-center rounded-2xl bg-slate-50 text-lg" aria-hidden>
-        {emoji}
+    <div className="rounded-2xl border border-slate-200/70 bg-white p-3.5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover motion-reduce:hover:translate-y-0 sm:p-4">
+      <div
+        className="flex size-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600"
+        aria-hidden
+      >
+        <Icon className="size-5" />
       </div>
-      <p className="mt-3 font-display text-2xl font-bold tabular-nums text-[#0F172A]">
+      <p className="mt-3 font-display text-xl font-bold tabular-nums text-[#0F172A]">
         {value}
       </p>
       <p className="mt-0.5 text-xs font-medium text-slate-500">{label}</p>
@@ -471,7 +467,7 @@ function LevelCard({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`group relative flex flex-col rounded-3xl border p-4 text-left transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:ring-offset-2 motion-reduce:hover:translate-y-0 ${
+      className={`group relative flex flex-col rounded-2xl border p-4 text-left transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:ring-offset-2 motion-reduce:hover:translate-y-0 ${
         active
           ? "border-brand-600 bg-brand-600 text-white shadow-card-hover"
           : "border-slate-200/70 bg-white text-[#0F172A] shadow-sm hover:-translate-y-0.5 hover:shadow-card-hover"
@@ -498,7 +494,7 @@ function LevelCard({
         >
           <div
             className={`h-full rounded-full transition-[width] duration-500 ${
-              active ? "bg-accent-400" : "bg-brand-600"
+              active ? "bg-white" : "bg-brand-600"
             }`}
             style={{ width: `${completion}%` }}
           />
@@ -658,14 +654,14 @@ function BookDetail({
   return (
     <div className="space-y-6">
       {/* Book overview card */}
-      <div className="overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-card">
+      <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-card">
         <div className="flex flex-col gap-5 p-5 sm:flex-row sm:p-6">
           {/* cover */}
           <div
             aria-hidden
             className="flex h-32 w-full shrink-0 items-center justify-center rounded-2xl bg-brand-600 ring-1 ring-inset ring-white/10 sm:h-36 sm:w-28"
           >
-            <span className="font-display text-3xl font-bold text-accent-400">
+            <span className="font-display text-3xl font-bold text-white">
               {book
                 .split(/\s+/)
                 .slice(0, 2)
@@ -767,7 +763,7 @@ function TestCard({ test, done }: { test: Test; done: boolean }) {
   return (
     <Link
       href={`/practice/${test.id}`}
-      className="group flex flex-col rounded-3xl border border-slate-200/70 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 motion-reduce:hover:translate-y-0"
+      className="group flex flex-col rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 motion-reduce:hover:translate-y-0"
     >
       <div className="flex items-start justify-between gap-3">
         <h4 className="font-semibold leading-snug text-[#0F172A]">
@@ -800,10 +796,10 @@ function TestCard({ test, done }: { test: Test; done: boolean }) {
 
 function ReadyState() {
   return (
-    <div className="flex min-h-[320px] flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-white/60 px-6 py-12 text-center">
+    <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white/60 px-6 py-12 text-center">
       <div
         aria-hidden
-        className="flex size-20 items-center justify-center rounded-3xl bg-brand-50"
+        className="flex size-20 items-center justify-center rounded-2xl bg-brand-50"
       >
         <BookOpen className="size-9 text-brand-600" />
       </div>
@@ -819,10 +815,10 @@ function ReadyState() {
 
 function EmptyLevel({ category }: { category: Category }) {
   return (
-    <div className="flex min-h-[240px] flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-white/60 px-6 py-12 text-center">
+    <div className="flex min-h-[240px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white/60 px-6 py-12 text-center">
       <div
         aria-hidden
-        className="flex size-16 items-center justify-center rounded-3xl bg-slate-100"
+        className="flex size-16 items-center justify-center rounded-2xl bg-slate-100"
       >
         <BookOpen className="size-8 text-slate-400" />
       </div>
