@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, RotateCcw, X } from "lucide-react";
 import { Card, LinkButton, ProgressBar } from "@/components/ui";
-import { awardVocabTestExp } from "@/lib/data/activity-exp";
+import {
+  submitVocabTest,
+  awardVocabExerciseExp,
+} from "@/lib/data/activity-exp";
 import {
   getVocabWords,
   saveVocabProgress,
@@ -373,7 +376,7 @@ function Results({
   const savedRef = useRef(false);
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
   const [xpResult, setXpResult] =
-    useState<Awaited<ReturnType<typeof awardVocabTestExp>> | null>(null);
+    useState<Awaited<ReturnType<typeof submitVocabTest>> | null>(null);
 
   // Log one progress row on mount, with an incremented attempt_number.
   useEffect(() => {
@@ -385,9 +388,16 @@ function Results({
     } catch {
       setSaveState("error");
     }
-    // Skills test awards EXP once per unit (server-deduped). Practice awards none.
     if (test) {
-      awardVocabTestExp(unitId, score, total)
+      // Skills test: full-pipeline graded event — writes attempts/results/scores,
+      // grants XP once per unit, and evaluates badges. Server-deduped.
+      submitVocabTest(unitId, score, total)
+        .then(setXpResult)
+        .catch(() => setXpResult({ status: "error" }));
+    } else {
+      // Practice exercise: small, capped, non-farmable XP. Does NOT write
+      // results/skill-scores — exercises must not inflate badge or skill counts.
+      awardVocabExerciseExp(unitId, exerciseType, score, total)
         .then(setXpResult)
         .catch(() => setXpResult({ status: "error" }));
     }
@@ -412,7 +422,7 @@ function Results({
 
         <ProgressBar value={pct} tone={tone} />
 
-        {test && xpResult && xpResult.status !== "ineligible" && (
+        {xpResult && xpResult.status !== "ineligible" && (
           <p
             className={`text-sm font-semibold ${
               xpResult.status === "error" ? "text-red-600" : "text-brand-600"
@@ -421,10 +431,21 @@ function Results({
             {xpResult.status === "granted"
               ? `+${xpResult.xp} XP earned`
               : xpResult.status === "duplicate"
-                ? "No new XP — this test's XP was already earned."
+                ? "No new XP — already earned for this session."
                 : "Couldn't save your XP. Check your connection and try again."}
           </p>
         )}
+        {xpResult &&
+          xpResult.status === "granted" &&
+          "newBadges" in xpResult &&
+          Array.isArray(xpResult.newBadges) &&
+          xpResult.newBadges.length > 0 && (
+            <p className="text-sm font-semibold text-amber-600">
+              {xpResult.newBadges.length === 1
+                ? `Badge unlocked: ${xpResult.newBadges[0]}`
+                : `Badges unlocked: ${xpResult.newBadges.join(", ")}`}
+            </p>
+          )}
 
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
           <button

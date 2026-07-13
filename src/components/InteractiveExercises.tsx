@@ -14,6 +14,7 @@ import {
   saveVocabProgress,
   type VocabWord,
 } from "@/lib/vocab-store";
+import { awardVocabExerciseExp } from "@/lib/data/activity-exp";
 import {
   INTERACTIVE_CONFIG,
   type InteractiveConfig,
@@ -163,8 +164,13 @@ function Results({
     } catch {
       /* score above is still correct */
     }
-    // NOTE: exercises are PRACTICE and deliberately award no EXP. EXP for
-    // vocabulary comes from the separate skills test, not from practice drills.
+    // Small, capped, non-farmable XP for completing a practice exercise.
+    // Deduped once per (unit, exerciseType) via the server ledger — retakes
+    // are free practice but grant no additional XP. Does NOT write
+    // results/skill-scores so exercises never inflate badge or skill counts.
+    awardVocabExerciseExp(unitId, exerciseType, score, total).catch(() => {
+      /* best-effort — never block the results UI */
+    });
   }, [unitId, exerciseType, score, total]);
 
   const tone = pct >= 80 ? "success" : pct >= 50 ? "brand" : "error";
