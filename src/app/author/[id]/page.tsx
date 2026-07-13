@@ -11,6 +11,17 @@ import {
   validateQuestion,
   validateTest,
 } from "@/lib/author/validate-question";
+import { publishAuthoredTest } from "@/lib/data/publish-test";
+import type { SkillArea } from "@/lib/database.types";
+
+// Skills a test can be published under (valid for both test_skill_scope and
+// skill_area). WRITING/SPEAKING are skill_area-only, so not offered here.
+const PUBLISH_SKILLS: { value: SkillArea; label: string }[] = [
+  { value: "GRAMMAR", label: "Grammar" },
+  { value: "VOCABULARY", label: "Vocabulary" },
+  { value: "READING", label: "Reading" },
+  { value: "LISTENING", label: "Listening" },
+];
 
 const TYPE_LABELS: Record<QuestionType, string> = {
   single: "Single choice",
@@ -91,6 +102,10 @@ export default function EditTestPage({
   const [pasteConfirm, setPasteConfirm] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
 
+  // Publish state
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+
   useEffect(() => {
     const t = getTest(id);
     if (!t) {
@@ -158,11 +173,50 @@ export default function EditTestPage({
     setSaved(true);
   }
 
+  async function publish() {
+    if (!test || publishing) return;
+    setPublishError(null);
+    const skill = test.skillArea;
+    if (!skill) {
+      setPublishError("Pick a skill before publishing.");
+      return;
+    }
+    setPublishing(true);
+    // Persist the draft locally first so the published snapshot matches what's
+    // on screen, then push it to Supabase.
+    saveTest(test);
+    try {
+      const res = await publishAuthoredTest(test, skill);
+      if (!res.ok) {
+        setPublishError(res.error);
+        return;
+      }
+      // Record the published identity so a re-publish updates in place.
+      const published = {
+        ...test,
+        supabaseTestId: res.testId,
+        shareToken: res.shareToken,
+      };
+      setTest(published);
+      saveTest(published);
+      setSaved(true);
+    } catch {
+      setPublishError("Could not reach the server. Try again.");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   const total = maxScore(test);
   const count = test.questions.length;
 
   // Readiness banner
   const readiness = validateTest(test.questions);
+  const canPublish = readiness.ready && !!test.skillArea && !publishing;
+  const shareUrl =
+    test.shareToken && typeof window !== "undefined"
+      ? `${window.location.origin}/t/${test.shareToken}`
+      : null;
 
   return (
     <div className="space-y-6 text-[#1B2130]">
@@ -176,14 +230,68 @@ export default function EditTestPage({
               <CheckIcon /> Saved
             </span>
           )}
+          {test.shareToken && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-[#c3e6cb] bg-[#f0faf3] px-2.5 py-0.5 text-xs font-medium text-[#2a6640]">
+              <CheckIcon /> Published
+            </span>
+          )}
           <button
             onClick={save}
-            className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-[#1B2130] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2b3346] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] sm:min-h-0"
+            className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-[#E3E1DB] bg-white px-4 py-2 text-sm font-medium text-[#1B2130] transition-colors hover:border-[#E3A82B] hover:bg-[#fbf6ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] sm:min-h-0"
           >
-            Save test
+            Save draft
+          </button>
+          <button
+            onClick={publish}
+            disabled={!canPublish}
+            title={
+              !test.skillArea
+                ? "Pick a skill first"
+                : !readiness.ready
+                  ? "Fix incomplete questions first"
+                  : undefined
+            }
+            className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-[#1B2130] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2b3346] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0"
+          >
+            {publishing
+              ? "Publishing…"
+              : test.shareToken
+                ? "Update published test"
+                : "Publish to students"}
           </button>
         </div>
       </div>
+
+      {/* Publish error */}
+      {publishError && (
+        <div className="flex items-start gap-2 rounded-lg border border-[#e6b3ad] bg-[#fdf3f2] px-4 py-2.5 text-sm text-[#8a2c22]">
+          <AlertIcon className="mt-px h-3.5 w-3.5 shrink-0" />
+          <span>{publishError}</span>
+        </div>
+      )}
+
+      {/* Share link (after publishing) */}
+      {shareUrl && (
+        <div className={`${card} flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between`}>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[#1B2130]">
+              Student link
+            </p>
+            <p className="truncate font-mono text-xs text-[#6b6a63]">{shareUrl}</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button
+              onClick={() => navigator.clipboard?.writeText(shareUrl)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E3E1DB] bg-white px-3 py-1.5 text-sm font-medium text-[#1B2130] transition-colors hover:border-[#E3A82B] hover:bg-[#fbf6ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B]"
+            >
+              <CopyIcon /> Copy link
+            </button>
+            <LinkButton href={shareUrl} variant="secondary">
+              Open
+            </LinkButton>
+          </div>
+        </div>
+      )}
 
       {/* Test meta */}
       <div className={`${card} space-y-4 p-5`}>
@@ -217,6 +325,31 @@ export default function EditTestPage({
           <span className="mt-1 block text-xs text-[#6b6a63]">
             Leave blank or 0 for an untimed test. When set, the test
             auto-submits when time runs out.
+          </span>
+        </Field>
+        <Field label="Skill">
+          <div className="flex flex-wrap gap-2">
+            {PUBLISH_SKILLS.map((s) => {
+              const active = test.skillArea === s.value;
+              return (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => update({ skillArea: s.value })}
+                  className={`inline-flex min-h-[40px] items-center rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] sm:min-h-0 ${
+                    active
+                      ? "border-[#E3A82B] bg-[#fbf6ea] text-[#1B2130]"
+                      : "border-[#E3E1DB] bg-white text-[#6b6a63] hover:border-[#E3A82B] hover:bg-[#fbf6ea]"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+          <span className="mt-1 block text-xs text-[#6b6a63]">
+            Required to publish. All questions in this test count toward this
+            skill.
           </span>
         </Field>
       </div>
