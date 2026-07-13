@@ -163,6 +163,7 @@ export type AttemptRow = {
   student_id: string;
   task_id: string | null;
   test_id: string | null;
+  html_test_id: string | null;
   started_at: string;
   submitted_at: string | null;
 };

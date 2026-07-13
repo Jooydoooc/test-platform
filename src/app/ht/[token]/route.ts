@@ -8,6 +8,10 @@ import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 // object access, so we resolve the token under the caller's RLS, then stream the
 // file with the service-role client. The raw HTML is returned as a full page —
 // these are full-screen exam UIs, no app chrome needed.
+//
+// Score capture (Phase 2): when the student loads the page we create-or-resume
+// an attempt row (mirroring startAttempt for DB tests) and inject a small bridge
+// script so the HTML can POST its self-computed score back to /api/tests/html/submit.
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ token: string }> },
@@ -23,10 +27,12 @@ export async function GET(
 
   const { token } = await params;
 
+  // Resolve the share token to the test row. The user's RLS-scoped client
+  // enforces that only signed-in users can read html_tests metadata.
   const supabase = await createClient();
   const { data: test } = await supabase
     .from("html_tests")
-    .select("storage_path")
+    .select("id, storage_path")
     .eq("share_token", token)
     .maybeSingle();
 
@@ -34,6 +40,8 @@ export async function GET(
     return new Response("Test not found.", { status: 404 });
   }
 
+  // Download the HTML file with the service-role client — students have no
+  // direct bucket access (see 0012_html_tests.sql storage policies).
   const admin = createAdminClient();
   const { data: blob, error } = await admin.storage
     .from("html-tests")
@@ -43,7 +51,73 @@ export async function GET(
     return new Response("Could not load the test file.", { status: 500 });
   }
 
-  const html = await blob.text();
+  // Create-or-resume the student's single attempt for this HTML test.
+  // We use the RLS-scoped client for the insert so the attempts_insert policy
+  // (student_id = auth.uid()) is the enforcing gate — not application logic.
+  //
+  // Race handling mirrors startAttempt in src/lib/data/attempts.ts:
+  //   * existing + submitted  -> resume (student reviews); keep attemptId
+  //   * existing + in-progress -> resume the same row
+  //   * none                  -> insert; on unique-index collision re-select
+  let attemptId: string | null = null;
+  try {
+    const { data: existing } = await supabase
+      .from("attempts")
+      .select("id, submitted_at")
+      .eq("student_id", user.id)
+      .eq("html_test_id", test.id)
+      .maybeSingle();
+
+    if (existing) {
+      // Already have a row (submitted or in-progress) — reuse it.
+      attemptId = existing.id;
+    } else {
+      // No row yet — create one. The partial unique index makes a concurrent
+      // double-open fail the second insert rather than producing two rows.
+      const { data: created, error: insErr } = await supabase
+        .from("attempts")
+        .insert({ student_id: user.id, html_test_id: test.id })
+        .select("id")
+        .single();
+
+      if (insErr || !created) {
+        // Likely lost a concurrent race — re-select the winner.
+        const { data: raced } = await supabase
+          .from("attempts")
+          .select("id")
+          .eq("student_id", user.id)
+          .eq("html_test_id", test.id)
+          .maybeSingle();
+        attemptId = raced?.id ?? null;
+      } else {
+        attemptId = created.id;
+      }
+    }
+  } catch {
+    // Non-fatal: attempt creation failing must not block the student from
+    // loading the test. The submit endpoint will 404 on an unknown attemptId.
+    attemptId = null;
+  }
+
+  let html = await blob.text();
+
+  // Inject the bridge script so the HTML can report its self-computed score.
+  // The script sets two globals the HTML reads after it finishes grading:
+  //   window.LEXORA_TEST.attemptId  — the row to close out
+  //   window.LEXORA_TEST.submitUrl  — the endpoint to POST to
+  // Only inject when we have a real attemptId (the attempt must exist before
+  // the HTML can submit a score against it).
+  if (attemptId) {
+    const bridge = `<script>window.LEXORA_TEST={attemptId:"${attemptId}",submitUrl:"/api/tests/html/submit"};</script>`;
+    const bodyClose = html.search(/<\/body>/i);
+    if (bodyClose !== -1) {
+      html = html.slice(0, bodyClose) + bridge + html.slice(bodyClose);
+    } else {
+      // No </body> — append to the end (some minimal test HTML omits it).
+      html = html + bridge;
+    }
+  }
+
   return new Response(html, {
     status: 200,
     headers: {

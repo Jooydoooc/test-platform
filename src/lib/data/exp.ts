@@ -55,3 +55,42 @@ export async function awardTestExp(
   if (error || !data || data.length === 0) return 0;
   return exp;
 }
+
+/** The ledger dedupe key for an HTML test's EXP: enforces "awarded once per HTML test". */
+export function htmlTestExpKey(htmlTestId: string): string {
+  return `html-test-exp:${htmlTestId}`;
+}
+
+// Award HTML-test EXP once, into the append-only ledger. Identical contract to
+// awardTestExp but keyed on htmlTestId so DB-test and HTML-test EXP are tracked
+// separately and neither can dedupe the other. Uses the service role because
+// points_ledger is read-only to clients.
+//
+// Returns the XP actually written this call: >0 on a fresh grant, 0 on a
+// duplicate (already earned) or a write error. Callers must not report XP to
+// the student unless this returns >0.
+export async function awardHtmlTestExp(
+  studentId: string,
+  htmlTestId: string,
+  accuracy: number,
+): Promise<number> {
+  const exp = computeTestExp(accuracy);
+  if (exp <= 0) return 0;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("points_ledger")
+    .upsert(
+      {
+        student_id: studentId,
+        reason: "TEST_EXP",
+        points: exp,
+        unique_key: htmlTestExpKey(htmlTestId),
+      },
+      { onConflict: "student_id,unique_key", ignoreDuplicates: true },
+    )
+    .select("id");
+  // On a write error or a dedupe (empty data), report 0 — don't tell the
+  // student they earned XP that was never recorded.
+  if (error || !data || data.length === 0) return 0;
+  return exp;
+}
