@@ -1,10 +1,16 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Field, LinkButton } from "@/components/ui";
 import { getTest, maxScore, saveTest, uid } from "@/lib/store";
 import type { Question, QuestionType, Test } from "@/lib/types";
+import { parseQuestions } from "@/lib/author/parse-questions";
+import {
+  isQuestionValid,
+  validateQuestion,
+  validateTest,
+} from "@/lib/author/validate-question";
 
 const TYPE_LABELS: Record<QuestionType, string> = {
   single: "Single choice",
@@ -56,6 +62,19 @@ function previewText(q: Question) {
   return t.length > 64 ? `${t.slice(0, 64)}…` : t;
 }
 
+// Correct-answer summary for paste preview
+function correctSummary(q: Question): string {
+  if (q.type === "boolean") return q.correct[0] ?? "—";
+  if (q.type === "single" || q.type === "multiple") {
+    const texts = q.choices
+      .filter((c) => q.correct.includes(c.id))
+      .map((c) => (c.text.length > 24 ? c.text.slice(0, 24) + "…" : c.text));
+    return texts.length ? texts.join(", ") : "—";
+  }
+  // short / gap
+  return q.correct.slice(0, 2).join(" / ") || "—";
+}
+
 export default function EditTestPage({
   params,
 }: {
@@ -66,6 +85,11 @@ export default function EditTestPage({
   const [test, setTest] = useState<Test | null>(null);
   const [saved, setSaved] = useState(false);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+
+  // Paste panel state
+  const [pasteText, setPasteText] = useState("");
+  const [pasteConfirm, setPasteConfirm] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
 
   useEffect(() => {
     const t = getTest(id);
@@ -137,6 +161,9 @@ export default function EditTestPage({
   const total = maxScore(test);
   const count = test.questions.length;
 
+  // Readiness banner
+  const readiness = validateTest(test.questions);
+
   return (
     <div className="space-y-6 text-[#1B2130]">
       <div className="flex items-center justify-between gap-3">
@@ -205,6 +232,34 @@ export default function EditTestPage({
         </span>
       </div>
 
+      {/* Readiness banner */}
+      {readiness.total > 0 && (
+        <div
+          className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm ${
+            readiness.ready
+              ? "border border-[#c3e6cb] bg-[#f0faf3] text-[#2a6640]"
+              : "border border-[#f0d9a0] bg-[#fef9ec] text-[#7a5500]"
+          }`}
+        >
+          {readiness.ready ? (
+            <>
+              <CheckIcon />
+              <span>
+                All {readiness.total} question{readiness.total === 1 ? "" : "s"} look good.
+              </span>
+            </>
+          ) : (
+            <>
+              <AlertIcon />
+              <span>
+                {readiness.incomplete} of {readiness.total} question
+                {readiness.total === 1 ? "" : "s"} need attention.
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Collapsible question list */}
       {count === 0 ? (
         <div className={`${card} p-6 text-sm text-[#6b6a63]`}>
@@ -231,6 +286,22 @@ export default function EditTestPage({
         </ul>
       )}
 
+      {/* Paste questions panel */}
+      <PastePanel
+        open={pasteOpen}
+        onToggle={() => { setPasteOpen((v) => !v); setPasteConfirm(false); }}
+        pasteText={pasteText}
+        onTextChange={(v) => { setPasteText(v); setPasteConfirm(false); }}
+        confirm={pasteConfirm}
+        onAdd={(questions) => {
+          update({ questions: [...test!.questions, ...questions] });
+          setPasteText("");
+          setPasteConfirm(true);
+          setTimeout(() => setPasteConfirm(false), 3000);
+        }}
+        onClear={() => { setPasteText(""); setPasteConfirm(false); }}
+      />
+
       {/* Add a question */}
       <div className={`${card} space-y-3 p-5`}>
         <h3 className="text-sm font-semibold text-[#1B2130]">Add a question</h3>
@@ -249,6 +320,182 @@ export default function EditTestPage({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Paste panel
+// ---------------------------------------------------------------------------
+
+function PastePanel({
+  open,
+  onToggle,
+  pasteText,
+  onTextChange,
+  confirm,
+  onAdd,
+  onClear,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  pasteText: string;
+  onTextChange: (v: string) => void;
+  confirm: boolean;
+  onAdd: (questions: Question[]) => void;
+  onClear: () => void;
+}) {
+  const parsed = useMemo(
+    () => (pasteText.trim() ? parseQuestions(pasteText) : []),
+    [pasteText],
+  );
+  const count = parsed.length;
+
+  return (
+    <div className={`${card} overflow-hidden`}>
+      {/* Header / toggle */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 px-5 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] focus-visible:ring-inset"
+      >
+        <Chevron open={open} />
+        <span className="flex-1 text-sm font-semibold text-[#1B2130]">
+          Paste questions
+        </span>
+        <span className="text-xs text-[#9c988e]">Bulk import from text</span>
+      </button>
+
+      {open && (
+        <div className="space-y-4 border-t border-[#E3E1DB] px-5 py-4">
+          {/* Format help */}
+          <details className="group">
+            <summary className="cursor-pointer select-none text-xs font-medium text-[#6b6a63] hover:text-[#1B2130]">
+              Format help ▸
+            </summary>
+            <pre className="mt-2 overflow-x-auto rounded-lg border border-[#E3E1DB] bg-[#FAFAF8] p-3 font-mono text-xs leading-relaxed text-[#4a4a40]">{`[SINGLE] What is the capital of France?
+A) Berlin
+B) Paris *
+C) Madrid
+D) Rome
+Explanation: Paris has been the capital since 987.
+
+[MULTIPLE] Which are prime numbers?
+- 2 *
+- 4
+- 7 *
+- 9
+
+[TF] The Earth orbits the Sun.
+Answer: True
+
+[SHORT] What gas do plants absorb during photosynthesis?
+Answer: carbon dioxide | CO2
+
+[GAP] She ___ to school every morning.
+Answer: goes
+(2 pts)`}</pre>
+            <p className="mt-2 text-xs text-[#6b6a63]">
+              Separate questions with a blank line. Type tags are optional — the
+              parser infers the type. Correct choices end with{" "}
+              <code className="rounded bg-[#f0ede8] px-1">*</code> or{" "}
+              <code className="rounded bg-[#f0ede8] px-1">(correct)</code>.
+              Accepted answers for Short/Gap are split on{" "}
+              <code className="rounded bg-[#f0ede8] px-1">|</code>,{" "}
+              <code className="rounded bg-[#f0ede8] px-1">/</code>, or{" "}
+              <code className="rounded bg-[#f0ede8] px-1">,</code>.
+            </p>
+          </details>
+
+          {/* Textarea */}
+          <textarea
+            className={`${input} resize-y`}
+            rows={8}
+            value={pasteText}
+            onChange={(e) => onTextChange(e.target.value)}
+            placeholder={`Paste your questions here, one block per question separated by blank lines…`}
+          />
+
+          {/* Live preview */}
+          {count > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-[#6b6a63]">
+                {count} question{count === 1 ? "" : "s"} detected
+              </p>
+              <ul className="space-y-1.5">
+                {parsed.map(({ question: q, warnings }, idx) => (
+                  <li
+                    key={idx}
+                    className="rounded-lg border border-[#E3E1DB] bg-[#FAFAF8] px-3 py-2 text-sm"
+                  >
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="shrink-0 rounded-full border border-[#E3E1DB] bg-white px-2 py-0.5 text-xs font-medium text-[#6b6a63]">
+                        {TYPE_LABELS[q.type]}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[#1B2130]">
+                        {q.prompt.trim() || (
+                          <span className="text-[#9c988e]">Untitled</span>
+                        )}
+                      </span>
+                      <span className="shrink-0 text-xs text-[#9c988e]">
+                        → {correctSummary(q)}
+                      </span>
+                    </div>
+                    {warnings.length > 0 && (
+                      <ul className="mt-1 space-y-0.5">
+                        {warnings.map((w, wi) => (
+                          <li
+                            key={wi}
+                            className="flex items-start gap-1 text-xs text-[#9a6b00]"
+                          >
+                            <AlertIcon className="mt-px h-3 w-3 shrink-0" />
+                            {w}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {!pasteText.trim() && (
+            <p className="text-xs text-[#9c988e]">
+              Questions will appear here as you type or paste.
+            </p>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={count === 0}
+              onClick={() => onAdd(parsed.map((p) => p.question))}
+              className="inline-flex min-h-[36px] items-center justify-center rounded-lg bg-[#1B2130] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2b3346] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] disabled:pointer-events-none disabled:opacity-40"
+            >
+              Add {count > 0 ? count : ""} question{count === 1 ? "" : "s"}
+            </button>
+            <button
+              type="button"
+              onClick={onClear}
+              className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-[#E3E1DB] bg-white px-4 py-2 text-sm font-medium text-[#1B2130] transition-colors hover:border-[#E3A82B] hover:bg-[#fbf6ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B]"
+            >
+              Clear
+            </button>
+            {confirm && (
+              <span className="inline-flex items-center gap-1 text-sm text-[#3F8F5F]">
+                <CheckIcon /> Added!
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Question row + body
+// ---------------------------------------------------------------------------
 
 function QuestionRow({
   index,
@@ -275,6 +522,8 @@ function QuestionRow({
 }) {
   const q = question;
   const bodyId = `q-${q.id}-body`;
+  const valid = isQuestionValid(q);
+  const issues = valid ? [] : validateQuestion(q);
 
   return (
     <>
@@ -306,6 +555,16 @@ function QuestionRow({
           <span className={`${num} shrink-0 text-xs text-[#6b6a63]`}>
             {q.points} pt{q.points === 1 ? "" : "s"}
           </span>
+          {/* Validation status chip */}
+          {!valid && (
+            <span
+              title={issues.join("\n")}
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#f0d9a0] bg-[#fef9ec] px-2 py-0.5 text-xs font-medium text-[#7a5500]"
+            >
+              <AlertIcon className="h-3 w-3" />
+              Incomplete
+            </span>
+          )}
         </button>
 
         {/* Row actions (siblings of the toggle, not nested) */}
@@ -339,6 +598,20 @@ function QuestionRow({
           id={bodyId}
           className="space-y-4 border-t border-[#E3E1DB] px-3 py-4"
         >
+          {/* Inline validation issues */}
+          {issues.length > 0 && (
+            <ul className="space-y-1 rounded-lg border border-[#f0d9a0] bg-[#fef9ec] px-3 py-2">
+              {issues.map((issue, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-1.5 text-xs text-[#7a5500]"
+                >
+                  <AlertIcon className="mt-px h-3.5 w-3.5 shrink-0" />
+                  {issue}
+                </li>
+              ))}
+            </ul>
+          )}
           <QuestionBody question={q} onChange={onChange} />
         </div>
       )}
@@ -615,6 +888,27 @@ function CheckIcon() {
   return (
     <svg {...svg} width={16} height={16}>
       <path d="M20 6L9 17l-5-5" />
+    </svg>
+  );
+}
+
+function AlertIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      width={18}
+      height={18}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={className}
+    >
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
     </svg>
   );
 }
