@@ -312,7 +312,7 @@ export default function TestsPage() {
             Lexora
           </span>
           <h1 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Lexora
+            Test Center
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-brand-100/90 sm:text-[15px]">
             Choose your next challenge, improve your weak skills, and track your
