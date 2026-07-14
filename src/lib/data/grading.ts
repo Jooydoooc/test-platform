@@ -5,27 +5,13 @@ import type { QuestionFormat } from "@/lib/database.types";
 // Thresholds that would be tuned live (e.g. translation fuzzy-match cutoff)
 // belong in config — see CLAUDE_RULES.md; the constant here is a placeholder.
 
-export const AUTO_GRADED: QuestionFormat[] = [
-  "MULTIPLE_CHOICE_SINGLE",
-  "MULTIPLE_CHOICE_MULTI",
-  "TRUE_FALSE",
-  "GAP_FILL",
-  "SHORT_ANSWER",
-  "MATCHING",
-  "REORDERING",
-  "TRANSLATION_UZ_EN",
-  "VOCAB_EXAMPLE_SENTENCE",
-];
-
+// Formats that are AI-assisted (Writing/Speaking) are returned as "pending" for
+// teacher/AI review; every other format is auto-graded inline by gradeQuestion.
 export const AI_GRADED: QuestionFormat[] = [
   "WRITING_SENTENCE",
   "WRITING_EXTENDED",
   "SPEAKING_AUDIO",
 ];
-
-export function isAutoGraded(format: QuestionFormat): boolean {
-  return AUTO_GRADED.includes(format);
-}
 
 export interface GradeInput {
   format: QuestionFormat;

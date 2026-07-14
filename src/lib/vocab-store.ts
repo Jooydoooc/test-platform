@@ -248,12 +248,6 @@ function writeCollection(all: CollectedEntry[]): void {
   window.dispatchEvent(new Event("tp.change"));
 }
 
-export function isCollected(passageId: string, wordKey: string): boolean {
-  return readCollection().some(
-    (e) => e.passageId === passageId && e.wordKey === wordKey,
-  );
-}
-
 /**
  * Add a word to the passage's collection. Only words that exist in the
  * passage's target dictionary are accepted (so every collected word stays

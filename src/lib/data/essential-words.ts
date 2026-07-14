@@ -153,8 +153,3 @@ export const ESSENTIAL_WORDS_BOOK1: EssentialUnit[] = [
     ],
   },
 ];
-
-/** All units flattened, e.g. for building a whole-book drill later. */
-export function allEssentialWords(): EssentialWord[] {
-  return ESSENTIAL_WORDS_BOOK1.flatMap((u) => u.words);
-}
