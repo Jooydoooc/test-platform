@@ -34,6 +34,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Badge, Button, Card, LinkButton, ProgressBar } from "@/components/ui";
+import { useSession } from "@/lib/auth";
 import {
   bookOf,
   groupOf,
@@ -147,6 +148,8 @@ const DURATION_OPTS = ["All", "Short", "Medium", "Long"] as const;
 const SORT_OPTS = ["Newest", "Shortest", "Most Questions"] as const;
 
 export default function TestsPage() {
+  const { user } = useSession();
+  const isAdmin = user?.role === "admin";
   const tests = useTests().filter((t) => t.questions.length > 0);
   const attempts = useAttempts();
 
@@ -493,9 +496,9 @@ export default function TestsPage() {
         {/* -------- Main: test cards -------- */}
         <main className="min-w-0">
           {noTestsAtAll ? (
-            <EmptyState mode="none" />
+            <EmptyState mode="none" isAdmin={isAdmin} />
           ) : shown.length === 0 ? (
-            <EmptyState mode="filtered" label={activeLevel ?? group} />
+            <EmptyState mode="filtered" label={activeLevel ?? group} isAdmin={isAdmin} />
           ) : (
             <div className="grid gap-5 md:grid-cols-2">
               {shown.map((t) => (
@@ -841,9 +844,11 @@ function Meta({ icon: Icon, label }: { icon: IconType; label: string }) {
 function EmptyState({
   mode,
   label,
+  isAdmin = false,
 }: {
   mode: "none" | "filtered";
   label?: string;
+  isAdmin?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white/70 px-6 py-16 text-center shadow-card">
@@ -861,14 +866,18 @@ function EmptyState({
       </h3>
       <p className="mt-1.5 max-w-sm text-sm text-slate-600">
         {mode === "none"
-          ? "Create your first test to start building your Lexora Test Center."
+          ? isAdmin
+            ? "Create your first test to start building your Lexora Test Center."
+            : "Tests will appear here once your teacher adds them."
           : "Try clearing the search or switching filters to see more tests."}
       </p>
-      <LinkButton href="/author" className="mt-5">
-        <Sparkles className="h-4 w-4" />
-        {mode === "none" ? "Create a test" : "Author a new test"}
-        <ArrowRight className="h-4 w-4" />
-      </LinkButton>
+      {isAdmin && (
+        <LinkButton href="/author" className="mt-5">
+          <Sparkles className="h-4 w-4" />
+          {mode === "none" ? "Create a test" : "Author a new test"}
+          <ArrowRight className="h-4 w-4" />
+        </LinkButton>
+      )}
     </div>
   );
 }

@@ -38,8 +38,10 @@ export function SiteHeader() {
   const navItems = [
     { href: "/", label: "Home" },
     { href: "/tests", label: "Tests" },
+    { href: "/practice", label: "Practice" },
     { href: "/books", label: "Books" },
     { href: "/leaderboard", label: "Leaderboard" },
+    { href: "/dashboard", label: "Dashboard" },
   ];
 
   // Admins get the elevated surface (Admin lives in the account menu, not the nav).

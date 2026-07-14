@@ -6,9 +6,9 @@ import type { Role as DbRole } from "@/lib/database.types";
 import type { Role, User } from "@/lib/auth-types";
 
 function toAppRole(dbRole: DbRole): Role {
-  // STUDENT -> student; every elevated DB role (ADMIN, and any dormant TEACHER
-  // rows from before the role was retired) -> admin.
-  return dbRole === "STUDENT" ? "student" : "admin";
+  // Only ADMIN maps to the elevated app role. STUDENT and the frozen-out
+  // TEACHER role both behave as students in the client UI.
+  return dbRole === "ADMIN" ? "admin" : "student";
 }
 
 // Supabase-backed session hook. Used when SUPABASE_ENABLED is true.

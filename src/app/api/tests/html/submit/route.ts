@@ -6,6 +6,11 @@ import { awardHtmlTestExp } from "@/lib/data/exp";
 import { evaluateAndUnlockBadges } from "@/lib/data/badges";
 import type { SkillArea } from "@/lib/database.types";
 
+// Sane upper bound on the total question count a single HTML test can report
+// for any skill. No realistic IELTS or platform exam has more than 200 items
+// in a single skill area. Values above this indicate a tampered payload.
+const MAX_TOTAL_CEILING = 200;
+
 // The six skill areas the HTML tests can report scores for.
 const SKILL_AREAS: SkillArea[] = [
   "GRAMMAR",
@@ -16,17 +21,38 @@ const SKILL_AREAS: SkillArea[] = [
   "SPEAKING",
 ];
 
-// Receive a self-computed per-skill score from a hosted HTML test and persist
-// it into the existing attempts → results → result_skill_scores → points_ledger
-// pipeline. The HTML tests are self-grading (the answer key is in the HTML), so
-// we trust the score the client reports — the security is in the ownership check
-// (the attempt must belong to the authenticated student) and the single-attempt
-// anti-replay guard (submitted_at already set → idempotent 200, no re-award).
+// ---------------------------------------------------------------------------
+// TRUST LEVEL: HTML-test scores are SELF-REPORTED (lower-trust).
+//
+// Hosted HTML tests are self-contained exam files whose answer keys live
+// entirely in the browser. The server has no independent answer key and
+// CANNOT re-grade the submission. This means correct/total are client-supplied
+// and could be tampered with.
+//
+// Defense-in-depth applied here (what we CAN enforce server-side):
+//   1. Authentication + ownership: attempt must belong to the authenticated
+//      STUDENT (getServerUser + student_id check).
+//   2. Strict payload validation: correct/total must be finite non-negative
+//      integers, correct <= total, total in (0, MAX_TOTAL_CEILING].
+//   3. Once-per-test dedupe: awardHtmlTestExp uses a unique ledger key keyed
+//      on html_test_id so XP is awarded at most once per test per student,
+//      regardless of how many times the payload is sent.
+//   4. XP is capped: awardHtmlTestExp caps at EXP_PER_TEST (100) scaled by
+//      accuracy — even a 100 % forged score yields at most 100 XP, deduped.
+//
+// What we CANNOT enforce without a server answer key:
+//   - Accuracy of the self-reported correct/total within the valid range.
+//
+// HTML-test results feed progress (excluded_from_progress: false) but the
+// bounded, deduped XP and skill-score writes are as safe as the constraints
+// above can make them. Server-graded /t/<token> tests (submit.ts) are the
+// high-trust path for assessments that matter.
 //
 // Reads use the service-role client because: (a) the result/score tables are
 // read-only to clients via RLS (see 0002_rls.sql), and (b) we need to verify
 // ownership before operating on the attempt row. The client's RLS identity is
 // established via getServerUser().
+// ---------------------------------------------------------------------------
 export async function POST(req: Request) {
   if (!SUPABASE_ENABLED) {
     return NextResponse.json(
@@ -114,10 +140,14 @@ export async function POST(req: Request) {
       typeof total !== "number" ||
       !Number.isFinite(total) ||
       !Number.isInteger(total) ||
-      total <= 0
+      total <= 0 ||
+      total > MAX_TOTAL_CEILING
     ) {
       return NextResponse.json(
-        { ok: false, error: "Each skills entry must have total as a positive integer." },
+        {
+          ok: false,
+          error: `Each skills entry must have total as a positive integer no greater than ${MAX_TOTAL_CEILING}.`,
+        },
         { status: 400 },
       );
     }
@@ -139,6 +169,18 @@ export async function POST(req: Request) {
       correct: prev.correct + entry.correct,
       total: prev.total + entry.total,
     });
+  }
+
+  // Re-check the ceiling AFTER merging: the per-entry validation above runs
+  // before duplicate skills are summed, so repeated entries for the same skill
+  // could otherwise push a merged total past MAX_TOTAL_CEILING.
+  for (const t of perSkill.values()) {
+    if (t.total > MAX_TOTAL_CEILING || t.correct > t.total) {
+      return NextResponse.json(
+        { ok: false, error: "Merged skill totals are out of range." },
+        { status: 400 },
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -195,8 +237,18 @@ export async function POST(req: Request) {
   // Finalize the attempt and write results + skill scores.
   // ---------------------------------------------------------------------------
 
-  // Mark submitted_at first — if any subsequent write fails we won't re-award
-  // XP on a retry (the idempotency check above catches it).
+  // TODO(ordering): Ideally we would write the result row BEFORE stamping
+  // submitted_at so that a crash between the two writes leaves the attempt
+  // in a retryable state rather than "submitted but result missing". The
+  // server-graded path does this safely via the finalize_attempt RPC
+  // (migration 0019) which wraps both writes in a single DB transaction.
+  // Reordering here without a similar transaction would introduce a window
+  // where submitted_at is NOT set but the result row exists, causing the
+  // idempotency check above to miss it and potentially re-insert on retry.
+  // Deferring to a future migration that wraps this in an RPC like 0019's
+  // finalize_attempt pattern. For now the current ordering (stamp first)
+  // is the safer choice: a crashed result write is recoverable by an admin
+  // but a double-awarded XP is not.
   const { error: updErr } = await admin
     .from("attempts")
     .update({ submitted_at: new Date().toISOString() })
@@ -236,7 +288,18 @@ export async function POST(req: Request) {
     accuracy: t.correct / t.total,
   }));
   if (skillRows.length > 0) {
-    await admin.from("result_skill_scores").insert(skillRows);
+    const { error: ssErr } = await admin
+      .from("result_skill_scores")
+      .insert(skillRows);
+    // Surface the failure instead of swallowing it: without skill scores the
+    // result contributes nothing to progress/leaderboard, so returning success
+    // here would silently under-record the student's work.
+    if (ssErr) {
+      return NextResponse.json(
+        { ok: false, error: "Could not save skill scores." },
+        { status: 500 },
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------

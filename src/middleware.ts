@@ -33,7 +33,8 @@ export async function middleware(request: NextRequest) {
       .select("role")
       .eq("id", user.id)
       .single();
-    const isAdmin = profile?.role === "ADMIN" || profile?.role === "TEACHER";
+    // TEACHER is frozen out of gated areas; only ADMIN keeps access.
+    const isAdmin = profile?.role === "ADMIN";
     if (!isAdmin) {
       const url = request.nextUrl.clone();
       url.pathname = "/tests";

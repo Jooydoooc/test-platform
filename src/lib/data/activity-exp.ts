@@ -207,6 +207,41 @@ export async function submitVocabTest(
 // can't farm a single drill for infinite XP.
 const EXP_PER_VOCAB_EXERCISE = 20;
 
+// Server-side allowlist of valid exercise types. Sourced from the canonical type
+// definitions in src/lib/vocab.ts (McExerciseType + InteractiveExerciseType).
+// A fixed allowlist is REQUIRED here: `exerciseType` arrives from a client-
+// callable "use server" action and becomes part of the ledger dedupe key
+// (`vocab-ex:<unitId>:<exerciseType>`). An open string lets any student mint
+// unlimited XP by passing endless unique strings. This set makes the key space
+// finite and bounded to the real drills shipped in the product.
+const VALID_EXERCISE_TYPES = new Set([
+  // Multiple-choice drills (McExerciseType in vocab.ts)
+  "mc_definition",
+  "mc_definition_reverse",
+  "mc_translation_en_uz",
+  "mc_translation_uz_en",
+  "mc_filling",
+  // Interactive drills (InteractiveExerciseType in vocab.ts)
+  "gap_fill_typed",
+  "sentence_builder",
+  "match_words",
+]);
+
+// Maximum question count per exercise type — the server-side source of truth for
+// the total cap (mirrors questionCount in QUIZ_CONFIG / INTERACTIVE_CONFIG in
+// vocab.ts). Used to clamp the client-supplied `total` so a tampered payload
+// cannot drive score/total above what the real exercise ever produces.
+const MAX_TOTAL_PER_EXERCISE: Record<string, number> = {
+  mc_definition: 20,
+  mc_definition_reverse: 20,
+  mc_translation_en_uz: 20,
+  mc_translation_uz_en: 20,
+  mc_filling: 20,
+  gap_fill_typed: 20,
+  sentence_builder: 10,
+  match_words: 5,
+};
+
 // Server action: award a small XP reward for completing a vocabulary PRACTICE
 // EXERCISE (gap-fill, sentence-builder, matching, multiple-choice drills).
 //
@@ -226,14 +261,37 @@ export async function awardVocabExerciseExp(
   if (!SUPABASE_ENABLED) return { status: "ineligible" };
   if (!VALID_TEST_UNIT_IDS.has(unitId)) return { status: "ineligible" };
 
-  const user = await getServerUser().catch(() => null);
-  if (!user || user.role !== "STUDENT") return { status: "ineligible" };
-
-  if (!Number.isFinite(score) || !Number.isFinite(total) || total <= 0) {
+  // Reject any exerciseType not in the server-side allowlist. This is the
+  // primary anti-forgery guard: without it a student can pass any arbitrary
+  // string and mint a new dedupe key (= new XP grant) each time.
+  if (!VALID_EXERCISE_TYPES.has(exerciseType)) {
     return { status: "ineligible" };
   }
 
-  const clampedAccuracy = Math.max(0, Math.min(1, score / total));
+  const user = await getServerUser().catch(() => null);
+  if (!user || user.role !== "STUDENT") return { status: "ineligible" };
+
+  // Guard against non-finite AND non-integer client input. Requiring integers
+  // closes a fractional-payload bypass: score=0.01, total=0.01 would otherwise
+  // clamp to a valid ratio of 1.0 and mint full XP without real completion.
+  if (
+    !Number.isInteger(score) ||
+    !Number.isInteger(total) ||
+    total <= 0 ||
+    score < 0
+  ) {
+    return { status: "ineligible" };
+  }
+
+  // Clamp `total` to the server-known maximum for this exercise type so a
+  // tampered payload cannot inflate the denominator (and thus the accuracy) to
+  // values that the real UI never produces. `score` is then also clamped to
+  // [0, clampedTotal] to ensure correct <= total is preserved server-side.
+  const maxTotal = MAX_TOTAL_PER_EXERCISE[exerciseType] ?? 20;
+  const clampedTotal = Math.min(total, maxTotal);
+  const clampedScore = Math.max(0, Math.min(score, clampedTotal));
+
+  const clampedAccuracy = Math.max(0, Math.min(1, clampedScore / clampedTotal));
   const exp = Math.round(EXP_PER_VOCAB_EXERCISE * clampedAccuracy);
   if (exp <= 0) return { status: "ineligible" };
 

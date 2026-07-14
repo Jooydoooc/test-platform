@@ -118,12 +118,51 @@ export async function GET(
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Security headers for the served HTML document.
+  //
+  // These tests are self-contained HTML files with inline scripts/styles and
+  // no external resource dependencies. The bridge script injected above uses
+  // a same-origin fetch to POST scores to /api/tests/html/submit.
+  //
+  // CSP rationale:
+  //   script-src 'unsafe-inline'  — all scripts are inline (self-contained HTML
+  //                                  + the injected bridge above); no external JS.
+  //   style-src  'unsafe-inline'  — all styles are inline; no external CSS.
+  //   img-src    data: blob:      — tests may embed data-URI or blob images.
+  //   font-src   data:            — tests may embed data-URI fonts.
+  //   connect-src 'self'          — bridge POSTs to same-origin submit endpoint.
+  //   base-uri   'none'           — prevent <base href> hijack.
+  //   form-action 'none'          — no HTML forms post externally.
+  //   frame-ancestors 'self'      — only our own pages may embed this (replaces
+  //                                  X-Frame-Options: SAMEORIGIN, which we still
+  //                                  send for older clients).
+  //   default-src 'none'          — deny everything not explicitly listed.
+  // -------------------------------------------------------------------------
   return new Response(html, {
     status: 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       // Private to the signed-in student; never cache on shared proxies.
       "Cache-Control": "private, no-store",
+      // Contain the uploaded HTML: disallow external resource loads and script
+      // execution beyond what the self-contained tests and score bridge need.
+      "Content-Security-Policy": [
+        "default-src 'none'",
+        "script-src 'unsafe-inline'",
+        "style-src 'unsafe-inline'",
+        "img-src data: blob:",
+        "font-src data:",
+        "connect-src 'self'",
+        "base-uri 'none'",
+        "form-action 'none'",
+        "frame-ancestors 'self'",
+      ].join("; "),
+      // Belt-and-suspenders framing protection for older clients that don't
+      // honour frame-ancestors.
+      "X-Frame-Options": "SAMEORIGIN",
+      // Prevent MIME-type sniffing on the served document.
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

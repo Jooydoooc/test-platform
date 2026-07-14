@@ -1,10 +1,34 @@
 "use client";
 
-import { Card } from "@/components/ui";
+import { useMemo, useEffect, useRef } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Card, LinkButton } from "@/components/ui";
 import { useAttempts } from "@/lib/store";
+import { useSession } from "@/lib/auth";
 
 export default function ResultsPage() {
+  const { user } = useSession();
   const attempts = useAttempts();
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get("r") ?? null;
+  const highlightRef = useRef<HTMLTableRowElement | null>(null);
+
+  // Filter to current user only — shared-device safety.
+  const mine = useMemo(() => {
+    if (!user) return [];
+    const name = user.name.trim().toLowerCase();
+    return attempts
+      .filter((a) => a.takerName.trim().toLowerCase() === name)
+      .sort((a, b) => b.submittedAt - a.submittedAt);
+  }, [attempts, user]);
+
+  // Scroll the highlighted row into view after render.
+  useEffect(() => {
+    if (highlightRef.current) {
+      highlightRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightId]);
 
   return (
     <div className="space-y-6">
@@ -15,11 +39,12 @@ export default function ResultsPage() {
         </p>
       </div>
 
-      {attempts.length === 0 ? (
-        <Card>
-          <p className="text-sm text-slate-600">
-            No attempts yet. Take a test to see results here.
-          </p>
+      {mine.length === 0 ? (
+        <Card className="py-12 text-center">
+          <p className="text-sm text-slate-600">No results yet. Take a test to see your results here.</p>
+          <LinkButton href="/tests" variant="secondary" className="mt-4">
+            Browse tests
+          </LinkButton>
         </Card>
       ) : (
         <Card className="overflow-x-auto p-0">
@@ -27,25 +52,35 @@ export default function ResultsPage() {
             <thead className="border-b border-slate-200 text-left text-slate-500">
               <tr>
                 <th className="px-4 py-3 font-medium">Test</th>
-                <th className="px-4 py-3 font-medium">Taker</th>
                 <th className="px-4 py-3 font-medium">Score</th>
                 <th className="px-4 py-3 font-medium">%</th>
                 <th className="px-4 py-3 font-medium">When</th>
+                <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
-              {attempts.map((a) => {
+              {mine.map((a) => {
                 const pct =
                   a.maxScore > 0
                     ? Math.round((a.score / a.maxScore) * 100)
                     : 0;
+                const isHighlighted = highlightId === a.id;
                 return (
                   <tr
                     key={a.id}
-                    className="border-b border-slate-100 last:border-0"
+                    ref={isHighlighted ? highlightRef : null}
+                    className={`border-b border-slate-100 last:border-0 transition-colors ${
+                      isHighlighted ? "bg-brand-50 ring-2 ring-inset ring-brand-300" : ""
+                    }`}
                   >
-                    <td className="px-4 py-3 font-medium">{a.testTitle}</td>
-                    <td className="px-4 py-3 text-slate-600">{a.takerName}</td>
+                    <td className="px-4 py-3 font-medium">
+                      {a.testTitle}
+                      {isHighlighted && (
+                        <span className="ml-2 inline-flex items-center rounded-full bg-brand-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                          Latest
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       {a.score} / {a.maxScore}
                     </td>
@@ -58,6 +93,14 @@ export default function ResultsPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {new Date(a.submittedAt).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/tests/${a.testId}`}
+                        className="text-xs font-semibold text-brand-600 hover:text-brand-700"
+                      >
+                        Take again
+                      </Link>
                     </td>
                   </tr>
                 );
