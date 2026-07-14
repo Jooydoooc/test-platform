@@ -207,10 +207,14 @@ export async function submitAttempt(
   }
 
   if (alreadyDone) {
+    // A concurrent submit already persisted this attempt. Report the STORED
+    // result's status (returned by the RPC), not this request's re-grade —
+    // anyPending reflects the current payload, which may differ from what the
+    // winning request actually saved.
     return {
       ok: true,
       resultId,
-      pendingReview: anyPending,
+      pendingReview: rpcRow.status === "PENDING_REVIEW",
       expAwarded: 0,
     };
   }
