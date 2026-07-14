@@ -259,13 +259,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const update: Partial<ProfileRow> = {};
   if (body.firstName !== undefined) update.first_name = body.firstName.trim();
   if (body.lastName !== undefined) update.last_name = body.lastName.trim();
-  if (body.role !== undefined) {
-    // Already validated above; this guard is kept for type-narrowing.
-    if (!MANAGEABLE_ROLES.includes(body.role as Role)) {
-      return NextResponse.json({ ok: false, error: "Invalid role." }, { status: 400 });
-    }
-    update.role = body.role;
-  }
+  if (body.role !== undefined) update.role = body.role; // validated above
   if (body.groupId !== undefined) update.group_id = body.groupId;
 
   if (Object.keys(update).length === 0) {

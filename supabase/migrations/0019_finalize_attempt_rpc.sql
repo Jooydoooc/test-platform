@@ -39,7 +39,7 @@ declare
   v_claimed_id    uuid;
   v_result_id     uuid;
   v_exp_awarded   int := 0;
-  v_exp_inserted  boolean := false;
+  v_exp_rows      bigint := 0;  -- GET DIAGNOSTICS row_count target (bigint, NOT boolean)
 begin
   -- -----------------------------------------------------------------------
   -- Step 1: Atomically CLAIM the attempt.
@@ -129,9 +129,11 @@ begin
     on conflict (student_id, unique_key) do nothing;
 
     -- GET DIAGNOSTICS tells us whether the INSERT actually wrote a row
-    -- (vs. silently skipped by ON CONFLICT DO NOTHING).
-    get diagnostics v_exp_inserted = row_count;
-    if v_exp_inserted then
+    -- (vs. silently skipped by ON CONFLICT DO NOTHING). row_count is a bigint,
+    -- so the target MUST be an integer type — assigning it to a boolean raises a
+    -- runtime cast error that would roll back the whole submission transaction.
+    get diagnostics v_exp_rows = row_count;
+    if v_exp_rows > 0 then
       v_exp_awarded := p_exp;
     end if;
   end if;
