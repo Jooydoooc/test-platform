@@ -10,6 +10,7 @@ import {
   getReadingPassage,
   normalizeWord,
   removeCollectedWord,
+  type ReadingPassage,
 } from "@/lib/vocab-store";
 
 const MIN_TO_PRACTISE = 4;
@@ -23,8 +24,9 @@ export default function VocabReadPage({
   params: Promise<{ passageId: string }>;
 }) {
   const { passageId } = use(params);
-  const passage = getReadingPassage(passageId);
-  if (!passage) notFound();
+
+  // Load passage client-side to avoid hydration mismatch (localStorage).
+  const [passage, setPassage] = useState<ReadingPassage | null | "missing">(null);
 
   // Ordered list of collected word keys (add order). Client-only to avoid an
   // SSR/hydration mismatch reading localStorage.
@@ -32,6 +34,12 @@ export default function VocabReadPage({
   const [flash, setFlash] = useState<string | null>(null);
 
   useEffect(() => {
+    const p = getReadingPassage(passageId);
+    if (!p) {
+      setPassage("missing");
+      return;
+    }
+    setPassage(p);
     setCollected(getCollectedEntries(passageId).map((e) => e.wordKey));
   }, [passageId]);
 
@@ -42,15 +50,19 @@ export default function VocabReadPage({
   }, [flash]);
 
   const tokens = useMemo(
-    () => passage.text.match(/[A-Za-z']+|[^A-Za-z']+/g) ?? [],
-    [passage.text],
+    () =>
+      passage && passage !== "missing"
+        ? passage.text.match(/[A-Za-z']+|[^A-Za-z']+/g) ?? []
+        : [],
+    [passage],
   );
 
   function onWord(token: string) {
+    if (!passage || passage === "missing") return;
     const key = normalizeWord(token);
     if (!key) return;
-    if (!passage!.targets[key]) {
-      setFlash(`“${token}” isn’t a saveable word here`);
+    if (!passage.targets[key]) {
+      setFlash(`"${token}" isn't a saveable word here`);
       return;
     }
     setCollected((prev) => {
@@ -61,6 +73,20 @@ export default function VocabReadPage({
       addCollectedWord(passageId, key);
       return [...prev, key];
     });
+  }
+
+  // Loading state
+  if (passage === null) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-600" />
+      </div>
+    );
+  }
+
+  // Not found
+  if (passage === "missing") {
+    notFound();
   }
 
   const collectedSet = new Set(collected);

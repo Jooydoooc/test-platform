@@ -151,9 +151,3 @@ export function badgeProgress(def: BadgeDef, counts: BadgeCounts): number {
 export function isBadgeEarned(def: BadgeDef, counts: BadgeCounts): boolean {
   return badgeProgress(def, counts) >= def.threshold;
 }
-
-export function earnedBadgeCodes(counts: BadgeCounts): Set<string> {
-  return new Set(
-    BADGE_CATALOG.filter((b) => isBadgeEarned(b, counts)).map((b) => b.code),
-  );
-}

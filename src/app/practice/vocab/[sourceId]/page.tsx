@@ -26,20 +26,24 @@ export default function VocabPracticePage({
   params: Promise<{ sourceId: string }>;
 }) {
   const { sourceId } = use(params);
-  const isUnit = Boolean(getVocabUnit(sourceId));
-  const isSeededPassage = Boolean(getReadingPassage(sourceId));
+
+  // All localStorage lookups are deferred to the client to avoid hydration mismatch.
+  const [isUnit, setIsUnit] = useState(false);
+  const [isSeededPassage, setIsSeededPassage] = useState(false);
+  const [title, setTitle] = useState("Word set");
+  const [wordCount, setWordCount] = useState(0);
+
+  useEffect(() => {
+    setIsUnit(Boolean(getVocabUnit(sourceId)));
+    setIsSeededPassage(Boolean(getReadingPassage(sourceId)));
+    setTitle(getSourceTitle(sourceId));
+    setWordCount(getVocabWords(sourceId).length);
+  }, [sourceId]);
+
   // Only collected-word sets (passages / uploaded books) let you add more.
   const readHref = isSeededPassage
     ? `/lexora/vocab/read/${sourceId}`
     : `/books/read/${sourceId}`;
-
-  // Title + word count are client-only (localStorage / unit lookup).
-  const [title, setTitle] = useState("Word set");
-  const [wordCount, setWordCount] = useState(0);
-  useEffect(() => {
-    setTitle(getSourceTitle(sourceId));
-    setWordCount(getVocabWords(sourceId).length);
-  }, [sourceId]);
 
   const exercises = ALL_EXERCISE_ORDER.map((type) => {
     const cfg = isMcExerciseType(type)

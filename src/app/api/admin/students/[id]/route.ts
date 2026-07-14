@@ -175,12 +175,78 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (!gate.ok) return gate.res;
   const { id } = await params;
 
-  let body: UpdateStudentPayload;
+  let raw: unknown;
   try {
-    body = (await req.json()) as UpdateStudentPayload;
+    raw = await req.json();
   } catch {
     return NextResponse.json({ ok: false, error: "Invalid JSON." }, { status: 400 });
   }
+
+  // Runtime validation — only known keys are permitted; unknown keys are
+  // rejected to prevent accidental DB column injection via the spread below.
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return NextResponse.json({ ok: false, error: "Request body must be a JSON object." }, { status: 400 });
+  }
+  const ALLOWED_KEYS = new Set(["firstName", "lastName", "role", "groupId"]);
+  for (const key of Object.keys(raw as Record<string, unknown>)) {
+    if (!ALLOWED_KEYS.has(key)) {
+      return NextResponse.json(
+        { ok: false, error: `Unknown field: "${key}".` },
+        { status: 400 },
+      );
+    }
+  }
+
+  const rawBody = raw as Record<string, unknown>;
+
+  // Validate firstName — must be a string, non-empty, max 100 chars.
+  if (rawBody.firstName !== undefined) {
+    if (typeof rawBody.firstName !== "string") {
+      return NextResponse.json({ ok: false, error: "firstName must be a string." }, { status: 400 });
+    }
+    const trimmed = rawBody.firstName.trim();
+    if (trimmed.length === 0) {
+      return NextResponse.json({ ok: false, error: "firstName must not be empty." }, { status: 400 });
+    }
+    if (trimmed.length > 100) {
+      return NextResponse.json({ ok: false, error: "firstName must be 100 characters or fewer." }, { status: 400 });
+    }
+  }
+
+  // Validate lastName — must be a string, max 100 chars (empty is allowed to
+  // support single-name profiles).
+  if (rawBody.lastName !== undefined) {
+    if (typeof rawBody.lastName !== "string") {
+      return NextResponse.json({ ok: false, error: "lastName must be a string." }, { status: 400 });
+    }
+    if (rawBody.lastName.trim().length > 100) {
+      return NextResponse.json({ ok: false, error: "lastName must be 100 characters or fewer." }, { status: 400 });
+    }
+  }
+
+  // Validate role — must be one of the manageable role strings.
+  if (rawBody.role !== undefined) {
+    if (typeof rawBody.role !== "string" || !MANAGEABLE_ROLES.includes(rawBody.role as Role)) {
+      return NextResponse.json(
+        { ok: false, error: `role must be one of: ${MANAGEABLE_ROLES.join(", ")}.` },
+        { status: 400 },
+      );
+    }
+  }
+
+  // Validate groupId — must be a UUID string or null (null = unassign from group).
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (rawBody.groupId !== undefined && rawBody.groupId !== null) {
+    if (typeof rawBody.groupId !== "string" || !UUID_RE.test(rawBody.groupId)) {
+      return NextResponse.json(
+        { ok: false, error: "groupId must be a valid UUID or null." },
+        { status: 400 },
+      );
+    }
+  }
+
+  // Narrowed, validated payload.
+  const body: UpdateStudentPayload = rawBody as UpdateStudentPayload;
 
   // Safety: an admin can't demote themselves out of ADMIN (avoids self lock-out).
   if (id === gate.user.id && body.role && body.role !== "ADMIN") {
@@ -193,12 +259,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const update: Partial<ProfileRow> = {};
   if (body.firstName !== undefined) update.first_name = body.firstName.trim();
   if (body.lastName !== undefined) update.last_name = body.lastName.trim();
-  if (body.role !== undefined) {
-    if (!MANAGEABLE_ROLES.includes(body.role as Role)) {
-      return NextResponse.json({ ok: false, error: "Invalid role." }, { status: 400 });
-    }
-    update.role = body.role;
-  }
+  if (body.role !== undefined) update.role = body.role; // validated above
   if (body.groupId !== undefined) update.group_id = body.groupId;
 
   if (Object.keys(update).length === 0) {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Flame, Trophy } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Flame, Gem, Trophy, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const XP_PER_LESSON = 60; // rough estimate used only to phrase "complete N more lessons"
@@ -36,7 +37,7 @@ type Tier = {
 
 type PlayerWithXp = Player & { xp: number; tier: Tier };
 
-type Badge = { emoji: string; label: string };
+type Badge = { Icon: LucideIcon; label: string };
 
 type Division = {
   label: string;
@@ -381,9 +382,9 @@ function divisionInfo(xp: number, tier: Tier): Division {
 function getBadges(player: Player, pool: Player[]): Badge[] {
   const badges: Badge[] = [];
   const maxWeek = Math.max(0, ...pool.map((p) => p.xpWeek));
-  if (player.streak >= 7) badges.push({ emoji: "🔥", label: "7-day streak" });
-  if (player.xpWeek === maxWeek && maxWeek > 0) badges.push({ emoji: "⚡", label: "Fast learner" });
-  if (player.xpTotal >= 3000) badges.push({ emoji: "💎", label: "Gem tier" });
+  if (player.streak >= 7) badges.push({ Icon: Flame, label: "7-day streak" });
+  if (player.xpWeek === maxWeek && maxWeek > 0) badges.push({ Icon: Zap, label: "Fast learner" });
+  if (player.xpTotal >= 3000) badges.push({ Icon: Gem, label: "Gem tier" });
   return badges;
 }
 
@@ -439,8 +440,8 @@ function RankRow({ player, rank, isMe, pool }: { player: PlayerWithXp; rank: num
           <p className={`text-sm truncate ${isMe ? "font-semibold text-brand-700" : "font-medium text-slate-700"}`}>{player.name}</p>
           {isMe && <span className="text-[10px] bg-brand-600 text-white px-1.5 py-0.5 rounded-full font-semibold">you</span>}
           {badges.map((b) => (
-            <span key={b.label} role="img" aria-label={b.label} title={b.label} className="text-xs">
-              {b.emoji}
+            <span key={b.label} aria-label={b.label} title={b.label} className="inline-flex">
+              <b.Icon className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" />
             </span>
           ))}
         </div>
@@ -679,7 +680,7 @@ export default function LeaderboardPage() {
           <div className="flex flex-wrap gap-1.5 mt-3">
             {myBadges.map((b) => (
               <span key={b.label} className="flex items-center gap-1 text-[11px] bg-white/15 rounded-full px-2 py-1 font-medium">
-                {b.emoji} {b.label}
+                <b.Icon className="h-3 w-3" aria-hidden="true" /> {b.label}
               </span>
             ))}
           </div>

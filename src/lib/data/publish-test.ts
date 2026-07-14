@@ -138,9 +138,44 @@ export async function publishAuthoredTest(
     : null;
 
   if (existing && existing.created_by === user.id) {
-    // Update path — refresh meta, then rebuild the children below.
+    // Update path — rebuild the children below.
     testId = existing.id;
     shareToken = existing.share_token as string;
+
+    // FK/orphan guard FIRST, before mutating anything: attempt_answers.question_id
+    // references questions WITHOUT ON DELETE CASCADE. If any student has started
+    // or completed this test, the cascade delete of tasks → questions would either
+    // raise a FK error (if attempt_answers rows exist) or silently orphan attempt
+    // data. We refuse the destructive rebuild in that case rather than risk data
+    // loss. Checking BEFORE the metadata update means a rejected overwrite leaves
+    // the existing test completely untouched (no partial title/description change).
+    const { data: items, error: itemsErr } = await admin
+      .from("test_items")
+      .select("task_id")
+      .eq("test_id", testId);
+    if (itemsErr) return { ok: false, error: itemsErr.message };
+    const oldTaskIds = (items ?? []).map((i) => i.task_id);
+
+    if (oldTaskIds.length > 0) {
+      // Check for any attempts that reference this test directly.
+      const { count: attemptCount, error: cntErr } = await admin
+        .from("attempts")
+        .select("id", { count: "exact", head: true })
+        .eq("test_id", testId);
+      // Fail closed: if we cannot confirm zero attempts, do NOT delete.
+      if (cntErr) return { ok: false, error: cntErr.message };
+
+      if (attemptCount && attemptCount > 0) {
+        return {
+          ok: false,
+          error:
+            `Cannot overwrite this test — ${attemptCount} student attempt(s) already exist. ` +
+            "To avoid orphaning student answers, publish this as a new test instead.",
+        };
+      }
+    }
+
+    // Guard passed — now it is safe to refresh metadata and rebuild children.
     const { error: updErr } = await admin
       .from("tests")
       .update({
@@ -153,13 +188,8 @@ export async function publishAuthoredTest(
       .eq("id", testId);
     if (updErr) return { ok: false, error: updErr.message };
 
-    // Delete the old container task(s) (cascades their questions) and the item
-    // links, so we can rebuild cleanly from the current draft.
-    const { data: items } = await admin
-      .from("test_items")
-      .select("task_id")
-      .eq("test_id", testId);
-    const oldTaskIds = (items ?? []).map((i) => i.task_id);
+    // Delete item links first, then tasks (cascades their questions via FK on
+    // questions.task_id).
     await admin.from("test_items").delete().eq("test_id", testId);
     if (oldTaskIds.length > 0) {
       await admin.from("tasks").delete().in("id", oldTaskIds);

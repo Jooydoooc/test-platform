@@ -38,8 +38,8 @@ export async function getServerUser(): Promise<ServerUser | null> {
   };
 }
 
-// Elevated (admin) access. TEACHER is retired but the enum value lingers, so we
-// still treat any legacy TEACHER row as admin until it is migrated.
+// Elevated (admin) access. TEACHER is frozen out: only ADMIN retains elevated
+// powers. Any lingering TEACHER row is treated as a plain student.
 export function isAdminRole(role: DbRole): boolean {
-  return role === "ADMIN" || role === "TEACHER";
+  return role === "ADMIN";
 }

@@ -124,7 +124,11 @@ export default function DashboardPage() {
   const attempts = useAttempts();
   const tests = useTests();
 
-  // Editable daily goal, persisted locally.
+  // Editable daily goal, persisted locally. Initialise to the constant default
+  // on BOTH server and first client render (hydration-safe), then hydrate the
+  // stored value in an effect. A lazy localStorage initializer would make the
+  // first client render diverge from the SSR HTML and trigger a hydration
+  // mismatch, so the read is deliberately deferred to useEffect.
   const [dailyGoal, setDailyGoal] = useState(3);
   useEffect(() => {
     const raw = Number(localStorage.getItem(GOAL_KEY));
@@ -308,7 +312,13 @@ export default function DashboardPage() {
   );
 
 
-  if (loading || !user) return null;
+  if (loading || !user) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-600" />
+      </div>
+    );
+  }
 
   const initial = user.name.trim().charAt(0).toUpperCase() || "?";
   function signOut() {
@@ -472,7 +482,7 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <p className="mt-3 text-sm text-slate-500">
-                    Great balance across every skill. 🎯
+                    Great balance across every skill.
                   </p>
                 )}
               </Card>
@@ -511,7 +521,7 @@ export default function DashboardPage() {
                 />
                 <p className="mt-3 text-xs font-medium text-slate-500">
                   {goalDone >= dailyGoal
-                    ? "🎉 Goal smashed — see you tomorrow!"
+                    ? "Goal smashed — see you tomorrow!"
                     : `${dailyGoal - goalDone} to go · ${stats.streak}-day streak`}
                 </p>
               </Card>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -273,6 +273,21 @@ function NewGroupModal({
   const [level, setLevel] = useState<Level>(LEVEL_OPTIONS[0].value);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
+  // Escape key closes the modal.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Focus the first input when the modal opens.
+  useEffect(() => {
+    firstInputRef.current?.focus();
+  }, []);
 
   async function create() {
     if (!name.trim()) {
@@ -298,9 +313,14 @@ function NewGroupModal({
         onClick={onClose}
         aria-hidden
       />
-      <div className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-group-title"
+        className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"
+      >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">New group</h2>
+          <h2 id="new-group-title" className="text-lg font-bold text-slate-900">New group</h2>
           <button
             type="button"
             onClick={onClose}
@@ -324,10 +344,10 @@ function NewGroupModal({
               Name
             </span>
             <input
+              ref={firstInputRef}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. B2 Evening"
-              autoFocus
               className={inputClass}
             />
           </label>

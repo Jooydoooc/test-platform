@@ -5,6 +5,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 import { ESSENTIAL_WORDS_BOOK1 } from "@/lib/data/essential-words";
 import { evaluateAndUnlockBadges } from "@/lib/data/badges";
+import {
+  QUIZ_CONFIG,
+  INTERACTIVE_CONFIG,
+  isMcExerciseType,
+  isInteractiveExerciseType,
+} from "@/lib/vocab";
 
 // The only units that ship a graded skills test are the seeded vocab units
 // (eew1-u1 … eew1-uN). Deriving the allow-list from the same seed the client
@@ -207,6 +213,26 @@ export async function submitVocabTest(
 // can't farm a single drill for infinite XP.
 const EXP_PER_VOCAB_EXERCISE = 20;
 
+// A valid exercise type is REQUIRED here: `exerciseType` arrives from a client-
+// callable "use server" action and becomes part of the ledger dedupe key
+// (`vocab-ex:<unitId>:<exerciseType>`). An open string lets any student mint
+// unlimited XP by passing endless unique strings, so we validate against — and
+// derive the per-exercise question-count cap FROM — the canonical vocab config
+// (QUIZ_CONFIG / INTERACTIVE_CONFIG). Deriving from that single source means a
+// new drill added in vocab.ts is automatically allowed and correctly capped,
+// with no second list here to drift out of sync.
+
+/** Server-side max question count for an exercise type, or null if unknown. */
+function maxTotalForExercise(exerciseType: string): number | null {
+  if (isMcExerciseType(exerciseType)) {
+    return QUIZ_CONFIG[exerciseType].questionCount;
+  }
+  if (isInteractiveExerciseType(exerciseType)) {
+    return INTERACTIVE_CONFIG[exerciseType].questionCount;
+  }
+  return null;
+}
+
 // Server action: award a small XP reward for completing a vocabulary PRACTICE
 // EXERCISE (gap-fill, sentence-builder, matching, multiple-choice drills).
 //
@@ -226,14 +252,40 @@ export async function awardVocabExerciseExp(
   if (!SUPABASE_ENABLED) return { status: "ineligible" };
   if (!VALID_TEST_UNIT_IDS.has(unitId)) return { status: "ineligible" };
 
-  const user = await getServerUser().catch(() => null);
-  if (!user || user.role !== "STUDENT") return { status: "ineligible" };
-
-  if (!Number.isFinite(score) || !Number.isFinite(total) || total <= 0) {
+  // Reject any exerciseType the vocab config doesn't know about. This is the
+  // primary anti-forgery guard: without it a student can pass any arbitrary
+  // string and mint a new dedupe key (= new XP grant) each time. maxTotal is
+  // the exercise's real question count; a null (unknown) type or a non-positive
+  // count is rejected outright (the latter also avoids a divide-by-zero below).
+  const maxTotal = maxTotalForExercise(exerciseType);
+  if (maxTotal === null || maxTotal <= 0) {
     return { status: "ineligible" };
   }
 
-  const clampedAccuracy = Math.max(0, Math.min(1, score / total));
+  const user = await getServerUser().catch(() => null);
+  if (!user || user.role !== "STUDENT") return { status: "ineligible" };
+
+  // Guard against non-finite AND non-integer client input. Requiring integers
+  // closes a fractional-payload bypass: score=0.01, total=0.01 would otherwise
+  // clamp to a valid ratio of 1.0 and mint full XP without real completion.
+  if (
+    !Number.isInteger(score) ||
+    !Number.isInteger(total) ||
+    total <= 0 ||
+    score < 0
+  ) {
+    return { status: "ineligible" };
+  }
+
+  // Clamp `total` to the server-known maximum for this exercise type so a
+  // tampered payload cannot inflate the denominator (and thus the accuracy) to
+  // values that the real UI never produces. `score` is then also clamped to
+  // [0, clampedTotal] to ensure correct <= total is preserved server-side.
+  // maxTotal is guaranteed > 0 by the guard above, so clampedTotal is > 0.
+  const clampedTotal = Math.min(total, maxTotal);
+  const clampedScore = Math.max(0, Math.min(score, clampedTotal));
+
+  const clampedAccuracy = Math.max(0, Math.min(1, clampedScore / clampedTotal));
   const exp = Math.round(EXP_PER_VOCAB_EXERCISE * clampedAccuracy);
   if (exp <= 0) return { status: "ineligible" };
 

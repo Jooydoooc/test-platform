@@ -321,6 +321,29 @@ export interface Database {
           is_me: boolean;
         }[];
       };
+      /**
+       * Atomically claim + persist a graded test attempt in one PG transaction.
+       * Fixes High #6 (non-transactional finalize) and High #7 (points-weighted accuracy).
+       * Called exclusively from submit.ts via the service-role admin client.
+       */
+      finalize_test_attempt: {
+        Args: {
+          p_attempt_id: string;
+          p_student_id: string;
+          p_status: ResultStatus;
+          p_excluded: boolean;
+          p_answers: Json;
+          p_skill_scores: Json;
+          p_exp: number;
+          p_exp_unique_key: string | null;
+        };
+        Returns: {
+          result_id: string;
+          status: ResultStatus;
+          exp_awarded: number;
+          was_already_submitted: boolean;
+        }[];
+      };
     };
     Enums: {
       role: Role;

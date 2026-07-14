@@ -159,7 +159,17 @@ function parseChoiceLine(line: string): ParsedChoice | null {
 // Answer-line parsing
 // ---------------------------------------------------------------------------
 
-const ANSWER_LINE_RE = /^(?:answer|ans|a|correct)\s*:/i;
+// NOTE: We intentionally do NOT include the bare `a` alternative here.
+// A single letter followed by a colon (e.g. "A: Berlin") is a valid choice
+// line prefix (matched by CHOICE_PREFIX_RE above) and must NOT be consumed
+// as an answer line. Keeping only the unambiguous keywords `answer`, `ans`,
+// and `correct` avoids the false-positive.
+//
+//   ✓  "Answer: B"    → parsed as answer line  (answerValue = "B")
+//   ✓  "Ans: B"       → parsed as answer line  (answerValue = "B")
+//   ✓  "Correct: B"   → parsed as answer line  (answerValue = "B")
+//   ✗  "A: Berlin"    → NOT an answer line; falls through to parseChoiceLine
+const ANSWER_LINE_RE = /^(?:answer|ans|correct)\s*:/i;
 
 function parseAnswerLine(line: string): string | null {
   if (!ANSWER_LINE_RE.test(line.trim())) return null;

@@ -122,13 +122,6 @@ export function isInteractiveExerciseType(
 /** Any drill type — multiple-choice or interactive. */
 export type AnyExerciseType = McExerciseType | InteractiveExerciseType;
 
-/** Human label for any drill type (used by progress views). */
-export function exerciseLabel(type: AnyExerciseType): string {
-  return isMcExerciseType(type)
-    ? QUIZ_CONFIG[type].label
-    : INTERACTIVE_CONFIG[type].label;
-}
-
 /** Every drill type, in the order they should appear on a unit's hub. */
 export const ALL_EXERCISE_ORDER: (McExerciseType | InteractiveExerciseType)[] = [
   "mc_translation_en_uz",

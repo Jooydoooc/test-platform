@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Card } from "@/components/ui";
 import { QuestionRunner, type SubmitMeta } from "@/components/QuestionRunner";
@@ -93,7 +94,14 @@ export default function TakeTestPage({
     setTest(t);
   }, [id, router]);
 
-  if (!test) return <p className="text-slate-500">Loading…</p>;
+  if (!test) {
+    return (
+      <Card className="mx-auto max-w-md py-12 text-center">
+        <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-600" />
+        <p className="text-sm text-slate-500">Loading test…</p>
+      </Card>
+    );
+  }
 
   function handleSubmit(answers: Answers, meta: SubmitMeta) {
     const score = gradeTest(test!, answers);
@@ -242,18 +250,18 @@ function Results({
       </div>
 
       <div className="flex gap-2">
-        <a
+        <Link
           href="/tests"
           className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
           Back to tests
-        </a>
-        <a
+        </Link>
+        <Link
           href="/results"
           className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
         >
           View all results
-        </a>
+        </Link>
       </div>
     </div>
   );
