@@ -67,6 +67,8 @@ export type ProfileRow = {
   last_name: string;
   group_id: string | null;
   last_active_at: string | null;
+  /** Soft-delete timestamp (migration 0023). null = active; non-null = deleted. */
+  deleted_at: string | null;
 } & Timestamps;
 
 export type GroupRow = {

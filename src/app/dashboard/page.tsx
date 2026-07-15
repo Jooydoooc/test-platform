@@ -35,6 +35,10 @@ import { logout, useSession } from "@/lib/auth";
 import { groupOf, useAttempts, useTests } from "@/lib/store";
 import { useStudentXp } from "@/lib/xp";
 import { TEST_GROUPS, type Attempt } from "@/lib/types";
+import { SUPABASE_ENABLED } from "@/lib/supabase/env";
+import { useMyAttempts, type MyAttempt } from "@/lib/data/my-attempts";
+import { useSkillMastery } from "@/lib/data/use-skill-mastery";
+import { useStreak } from "@/lib/data/use-streak";
 
 const DAY = 86_400_000;
 
@@ -118,11 +122,41 @@ function greeting(): string {
 
 const GOAL_KEY = "lexora:dailyGoal";
 
+// ---------------------------------------------------------------------------
+// Skill-group → DB SkillArea mapping (for useSkillMastery result lookup)
+// ---------------------------------------------------------------------------
+
+const GROUP_TO_SKILL: Record<string, string> = {
+  "Grammar Tests": "GRAMMAR",
+  "Vocabulary Tests": "VOCABULARY",
+  "Reading Tests": "READING",
+  "Listening Tests": "LISTENING",
+  "Writing Tests": "WRITING",
+  "Speaking Tests": "SPEAKING",
+};
+
 export default function DashboardPage() {
   const { user, loading } = useSession();
   const router = useRouter();
-  const attempts = useAttempts();
+
+  // ---------------------------------------------------------------------------
+  // Legacy localStorage data (always loaded; used as fallback when Supabase is
+  // disabled, ignored when Supabase is enabled).
+  // ---------------------------------------------------------------------------
+  const localAttempts = useAttempts();
   const tests = useTests();
+
+  // ---------------------------------------------------------------------------
+  // Real Supabase data — all three hooks return empty/zero immediately when
+  // SUPABASE_ENABLED is false, so they're always safe to call.
+  // ---------------------------------------------------------------------------
+  const { attempts: realAttempts, loading: attLoading } = useMyAttempts();
+  const { mastery: realMastery, loading: masteryLoading } = useSkillMastery();
+  const {
+    current: realStreakCurrent,
+    longest: realStreakLongest,
+    loading: streakLoading,
+  } = useStreak();
 
   // Lifetime XP + level from the SHARED source of truth (useStudentXp): the sum
   // of the student's own points_ledger rows, keyed by student_id and independent
@@ -132,9 +166,7 @@ export default function DashboardPage() {
 
   // Editable daily goal, persisted locally. Initialise to the constant default
   // on BOTH server and first client render (hydration-safe), then hydrate the
-  // stored value in an effect. A lazy localStorage initializer would make the
-  // first client render diverge from the SSR HTML and trigger a hydration
-  // mismatch, so the read is deliberately deferred to useEffect.
+  // stored value in an effect.
   const [dailyGoal, setDailyGoal] = useState(3);
   useEffect(() => {
     const raw = Number(localStorage.getItem(GOAL_KEY));
@@ -146,53 +178,114 @@ export default function DashboardPage() {
     localStorage.setItem(GOAL_KEY, String(v));
   }
 
-  const mine = useMemo(() => {
+  // ---------------------------------------------------------------------------
+  // Legacy: filter localStorage attempts by display name.
+  // ---------------------------------------------------------------------------
+  const localMine = useMemo(() => {
     if (!user) return [];
     const name = user.name.trim().toLowerCase();
-    return attempts.filter((a) => a.takerName.trim().toLowerCase() === name);
-  }, [attempts, user]);
+    return localAttempts.filter((a) => a.takerName.trim().toLowerCase() === name);
+  }, [localAttempts, user]);
 
-  // Best % achieved per test (for XP + skill mastery).
-  const bestByTest = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const a of mine) {
-      m.set(a.testId, Math.max(m.get(a.testId) ?? 0, pct(a) * 100));
-    }
-    return m;
-  }, [mine]);
+  // ---------------------------------------------------------------------------
+  // Whether real Supabase data is still loading. Show skeleton until resolved.
+  // ---------------------------------------------------------------------------
+  const dataLoading = SUPABASE_ENABLED && (attLoading || masteryLoading || streakLoading);
 
-  const testById = useMemo(
-    () => new Map(tests.map((t) => [t.id, t])),
-    [tests],
-  );
-
+  // ---------------------------------------------------------------------------
+  // Stats: sourced from Supabase when enabled, localStorage otherwise.
+  // avg = mean accuracy across non-excluded attempts (0..100)
+  // best = max accuracy (0..100)
+  // count = total attempts
+  // tests = distinct test ids
+  // ---------------------------------------------------------------------------
   const stats = useMemo(() => {
-    const pcts = mine.map(pct);
+    if (SUPABASE_ENABLED) {
+      const nonExcluded = realAttempts.filter((a) => !a.excludedFromProgress);
+      const accs = nonExcluded.map((a) => a.accuracy);
+      const avg =
+        accs.length > 0
+          ? Math.round((accs.reduce((s, p) => s + p, 0) / accs.length) * 100)
+          : 0;
+      const best =
+        accs.length > 0 ? Math.round(Math.max(...accs) * 100) : 0;
+      return {
+        count: realAttempts.length,
+        avg,
+        best,
+        tests: new Set(nonExcluded.map((a) => a.testId)).size,
+        streak: realStreakCurrent,
+        longest: realStreakLongest,
+      };
+    }
+    // Legacy localStorage path
+    const pcts = localMine.map(pct);
     const avg =
       pcts.length > 0
         ? Math.round((pcts.reduce((s, p) => s + p, 0) / pcts.length) * 100)
         : 0;
     const best = pcts.length > 0 ? Math.round(Math.max(...pcts) * 100) : 0;
-    const s = streaks(mine.map((a) => a.submittedAt));
+    const bestByTestLocal = new Map<string, number>();
+    for (const a of localMine) {
+      bestByTestLocal.set(
+        a.testId,
+        Math.max(bestByTestLocal.get(a.testId) ?? 0, pct(a) * 100),
+      );
+    }
+    const s = streaks(localMine.map((a) => a.submittedAt));
     return {
-      count: mine.length,
+      count: localMine.length,
       avg,
       best,
-      tests: bestByTest.size,
+      tests: bestByTestLocal.size,
       streak: s.current,
       longest: s.longest,
     };
-  }, [mine, bestByTest]);
+  }, [
+    realAttempts,
+    localMine,
+    realStreakCurrent,
+    realStreakLongest,
+  ]);
 
-  // Per-skill mastery (avg best% across each group's attempted tests).
+  // ---------------------------------------------------------------------------
+  // Skill mastery per group: Supabase (useSkillMastery) or legacy (bestByTest).
+  // ---------------------------------------------------------------------------
+
+  // Legacy bestByTest — only used when SUPABASE_ENABLED is false.
+  const localBestByTest = useMemo(() => {
+    if (SUPABASE_ENABLED) return new Map<string, number>();
+    const m = new Map<string, number>();
+    for (const a of localMine) {
+      m.set(a.testId, Math.max(m.get(a.testId) ?? 0, pct(a) * 100));
+    }
+    return m;
+  }, [localMine]);
+
   const skillProgress = useMemo(() => {
     return SKILL_GROUPS.map((g) => {
+      if (SUPABASE_ENABLED) {
+        // Map the test-group name to a DB SkillArea key and look up mastery.
+        const skillKey = GROUP_TO_SKILL[g];
+        const avg = skillKey ? (realMastery[skillKey as keyof typeof realMastery] ?? 0) : 0;
+        return {
+          group: g,
+          label: g.replace(" Tests", ""),
+          // When Supabase is enabled we don't have per-group test counts, so
+          // we use `done > 0` based on whether mastery is non-zero, and `total`
+          // as a sentinel (1) so empty-state messaging works correctly.
+          total: 1,
+          done: avg > 0 ? 1 : 0,
+          avg,
+        };
+      }
+      // Legacy path
       const inGroup = tests.filter((t) => groupOf(t) === g);
-      const done = inGroup.filter((t) => bestByTest.has(t.id));
+      const done = inGroup.filter((t) => localBestByTest.has(t.id));
       const avg =
         done.length > 0
           ? Math.round(
-              done.reduce((s, t) => s + (bestByTest.get(t.id) ?? 0), 0) /
+              done.reduce((s, t) => s + (localBestByTest.get(t.id) ?? 0), 0) /
                 done.length,
             )
           : 0;
@@ -204,10 +297,9 @@ export default function DashboardPage() {
         avg,
       };
     });
-  }, [tests, bestByTest]);
+  }, [tests, localBestByTest, realMastery]);
 
-  // Focus area: the started skill with the lowest mastery (fallback: an
-  // untouched skill that has tests available).
+  // Focus area: the started skill with the lowest mastery.
   const focus = useMemo(() => {
     const started = skillProgress
       .filter((s) => s.done > 0)
@@ -217,11 +309,30 @@ export default function DashboardPage() {
     return untouched ?? started[0] ?? null;
   }, [skillProgress]);
 
-  // Weekly momentum: avg% of the last 7 days vs the 7 before that.
+  // ---------------------------------------------------------------------------
+  // Momentum + activity sparkline: sourced from realAttempts or localMine.
+  // MyAttempt.accuracy is 0..1; local pct() is also 0..1.
+  // ---------------------------------------------------------------------------
   const momentum = useMemo(() => {
     const now = Date.now();
+    if (SUPABASE_ENABLED) {
+      const nonExcluded = realAttempts.filter((a) => !a.excludedFromProgress);
+      const win = (from: number, to: number) => {
+        const xs = nonExcluded.filter(
+          (a) => a.submittedAt >= from && a.submittedAt < to,
+        );
+        return xs.length
+          ? (xs.reduce((s, a) => s + a.accuracy, 0) / xs.length) * 100
+          : null;
+      };
+      const thisWeek = win(now - 7 * DAY, now);
+      const lastWeek = win(now - 14 * DAY, now - 7 * DAY);
+      if (thisWeek === null || lastWeek === null) return null;
+      return Math.round(thisWeek - lastWeek);
+    }
+    // Legacy
     const win = (from: number, to: number) => {
-      const xs = mine.filter(
+      const xs = localMine.filter(
         (a) => a.submittedAt >= from && a.submittedAt < to,
       );
       return xs.length
@@ -232,32 +343,92 @@ export default function DashboardPage() {
     const lastWeek = win(now - 14 * DAY, now - 7 * DAY);
     if (thisWeek === null || lastWeek === null) return null;
     return Math.round(thisWeek - lastWeek);
-  }, [mine]);
+  }, [realAttempts, localMine]);
 
-  // 14-day activity: attempts per day (for the sparkline).
+  // 14-day activity sparkline (attempts per day).
   const activity = useMemo(() => {
     const today = Math.floor(Date.now() / DAY);
-    const buckets = new Array(14).fill(0);
-    for (const a of mine) {
+    const buckets = new Array(14).fill(0) as number[];
+    const source: { submittedAt: number }[] = SUPABASE_ENABLED
+      ? realAttempts
+      : localMine;
+    for (const a of source) {
       const d = Math.floor(a.submittedAt / DAY);
       const idx = 13 - (today - d);
       if (idx >= 0 && idx < 14) buckets[idx]++;
     }
     return buckets;
-  }, [mine]);
+  }, [realAttempts, localMine]);
 
+  // Daily goal progress.
   const goalDone = useMemo(() => {
     const today = Math.floor(Date.now() / DAY);
-    return mine.filter((a) => Math.floor(a.submittedAt / DAY) === today).length;
-  }, [mine]);
+    const source: { submittedAt: number }[] = SUPABASE_ENABLED
+      ? realAttempts
+      : localMine;
+    return source.filter(
+      (a) => Math.floor(a.submittedAt / DAY) === today,
+    ).length;
+  }, [realAttempts, localMine]);
 
-  // Feed the shared badge evaluator from data we already compute. Writing/
-  // Speaking (no localStorage tests) and unit_master (no unit tracking) stay
-  // locked until the Supabase engine supplies them — same catalog either way.
-  // Badges are grouped into labelled sections (each skill's ladder together,
-  // then cross-skill categories) so 30+ badges stay scannable rather than a
-  // flat wall. Within a group we keep catalog order, which is threshold-
-  // ascending, so each ladder reads bottom rung up.
+  // ---------------------------------------------------------------------------
+  // Recent results list — newest 6, real or local.
+  // Rendered differently: real (MyAttempt) vs local (Attempt) have different shapes.
+  // We normalise to a common display shape.
+  // ---------------------------------------------------------------------------
+  type RecentItem = {
+    id: string;
+    testTitle: string;
+    accuracy: number; // 0..1
+    submittedAt: number;
+    score: number;
+    maxScore: number;
+    testGroup?: string; // only available for local attempts
+  };
+
+  const testById = useMemo(
+    () => new Map(tests.map((t) => [t.id, t])),
+    [tests],
+  );
+
+  const recent = useMemo((): RecentItem[] => {
+    if (SUPABASE_ENABLED) {
+      return [...realAttempts]
+        .sort((a, b) => b.submittedAt - a.submittedAt)
+        .slice(0, 6)
+        .map(
+          (a: MyAttempt): RecentItem => ({
+            id: a.id,
+            testTitle: a.testTitle,
+            accuracy: a.accuracy,
+            submittedAt: a.submittedAt,
+            score: a.score,
+            maxScore: a.maxScore,
+          }),
+        );
+    }
+    return [...localMine]
+      .sort((a, b) => b.submittedAt - a.submittedAt)
+      .slice(0, 6)
+      .map(
+        (a: Attempt): RecentItem => ({
+          id: a.id,
+          testTitle: a.testTitle,
+          accuracy: pct(a),
+          submittedAt: a.submittedAt,
+          score: a.score,
+          maxScore: a.maxScore,
+          testGroup: (() => {
+            const t = testById.get(a.testId);
+            return t ? groupOf(t).replace(" Tests", "") : undefined;
+          })(),
+        }),
+      );
+  }, [realAttempts, localMine, testById]);
+
+  // ---------------------------------------------------------------------------
+  // Badges — fed from skillProgress (always computed above) + streak.
+  // ---------------------------------------------------------------------------
   const { badgeGroups, earnedCount, totalCount } = useMemo(() => {
     const skillTests: Partial<Record<BadgeSkill, number>> = {};
     for (const s of skillProgress) {
@@ -307,13 +478,21 @@ export default function DashboardPage() {
     };
   }, [skillProgress, stats.longest]);
 
-  const recent = useMemo(
-    () => [...mine].sort((a, b) => b.submittedAt - a.submittedAt).slice(0, 6),
-    [mine],
-  );
-
-
+  // ---------------------------------------------------------------------------
+  // Gate: show spinner while auth is resolving OR while real data is loading.
+  // ---------------------------------------------------------------------------
   if (loading || !user) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-600" />
+      </div>
+    );
+  }
+
+  // While Supabase data is fetching, show a lightweight skeleton so widgets
+  // don't flash zeros then correct values. This matches the "loading" treatment
+  // described in the task: show existing skeleton/empty treatment, not zeros.
+  if (dataLoading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-600" />
@@ -389,7 +568,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Stat tiles */}
+          {/* Stat tiles — sourced from real Supabase data when enabled */}
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <HeroStat icon={Flame} label="Day streak" value={stats.streak} />
             <HeroStat icon={TrendingUp} label="Avg score" value={`${stats.avg}%`} />
@@ -426,7 +605,7 @@ export default function DashboardPage() {
                   Skill mastery
                 </h2>
                 <span className="text-xs text-slate-400">
-                  avg best score per skill
+                  avg accuracy per skill
                 </span>
               </div>
               <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
@@ -653,25 +832,24 @@ export default function DashboardPage() {
                   </Link>
                 </div>
                 <ul className="divide-y divide-slate-100 border-t border-slate-100">
-                  {recent.map((a) => {
-                    const p = Math.round(pct(a) * 100);
-                    const t = testById.get(a.testId);
+                  {recent.map((item) => {
+                    const p = Math.round(item.accuracy * 100);
                     return (
                       <li
-                        key={a.id}
+                        key={item.id}
                         className="flex items-center gap-3 px-5 py-3"
                       >
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-slate-800">
-                            {a.testTitle}
+                            {item.testTitle}
                           </p>
                           <p className="text-xs text-slate-400">
-                            {t ? `${groupOf(t).replace(" Tests", "")} · ` : ""}
-                            {timeAgo(a.submittedAt)}
+                            {item.testGroup ? `${item.testGroup} · ` : ""}
+                            {timeAgo(item.submittedAt)}
                           </p>
                         </div>
                         <span className="shrink-0 text-xs tabular-nums text-slate-400">
-                          {a.score}/{a.maxScore}
+                          {item.score}/{item.maxScore}
                         </span>
                         <Badge
                           tone={p >= 80 ? "success" : p >= 50 ? "brand" : "amber"}
@@ -852,5 +1030,3 @@ function Sparkline({ data }: { data: number[] }) {
     </div>
   );
 }
-
-

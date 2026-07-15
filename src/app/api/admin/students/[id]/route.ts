@@ -288,8 +288,12 @@ export async function PATCH(req: Request, { params }: Ctx) {
   return NextResponse.json({ ok: true });
 }
 
-// DELETE /api/admin/students/[id] — remove the account. Deleting the auth user
-// cascades the profile (and its attempts/results/etc.) via ON DELETE CASCADE.
+// DELETE /api/admin/students/[id] — soft-delete the account.
+//
+// Soft delete (migration 0023): sets profiles.deleted_at = now() and bans the
+// auth user for 100 years so they cannot sign back in. All historical data
+// (attempts, results, points_ledger) is RETAINED — only the profile is hidden
+// from active rosters and leaderboards. No cascade-erase happens.
 export async function DELETE(_req: Request, { params }: Ctx) {
   const gate = await requireAdmin();
   if (!gate.ok) return gate.res;
@@ -303,9 +307,34 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   }
 
   const admin = createAdminClient();
-  const { error } = await admin.auth.admin.deleteUser(id);
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+
+  // Step 1: Soft-delete the profile row — sets deleted_at so the student
+  // disappears from active listings and leaderboards but data is preserved.
+  const { error: profileErr } = await admin
+    .from("profiles")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (profileErr) {
+    return NextResponse.json(
+      { ok: false, error: profileErr.message },
+      { status: 500 },
+    );
   }
+
+  // Step 2: Ban the auth user so they cannot sign back in while soft-deleted.
+  // 876000h ≈ 100 years. If this step fails we still consider the operation
+  // successful (the profile is already hidden) but surface a warning.
+  const { error: banErr } = await admin.auth.admin.updateUserById(id, {
+    ban_duration: "876000h",
+  });
+
+  if (banErr) {
+    return NextResponse.json({
+      ok: true,
+      warning: `Account data soft-deleted but auth ban failed: ${banErr.message}`,
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }

@@ -20,6 +20,8 @@ export async function GET() {
         .select(
           "id, role, first_name, last_name, group_id, last_active_at, created_at",
         )
+        // Soft-delete filter: exclude accounts soft-deleted by migration 0023.
+        .is("deleted_at", null)
         .order("created_at", { ascending: true }),
       admin.from("groups").select("id, name").order("name"),
     ]);
