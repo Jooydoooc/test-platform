@@ -423,7 +423,7 @@ function PodiumCard({ player, rank, isMe }: { player: PlayerWithXp; rank: number
         {player.name}
         {isMe && " (you)"}
       </p>
-      <p className="text-[11px] text-slate-400">{player.xp.toLocaleString()} xp</p>
+      <p className="text-xs font-semibold text-slate-600 tabular-nums">{player.xp.toLocaleString()} xp</p>
     </div>
   );
 }
@@ -433,7 +433,7 @@ function RankRow({ player, rank, isMe, pool }: { player: PlayerWithXp; rank: num
   const badges = getBadges(player, pool);
   return (
     <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isMe ? "bg-brand-50" : "hover:bg-slate-50"}`}>
-      <span className={`text-sm font-bold w-7 text-center shrink-0 ${rank <= 3 ? "text-slate-700" : "text-slate-400"}`}>#{rank}</span>
+      <span className={`text-sm font-bold w-7 text-center shrink-0 tabular-nums ${rank <= 3 ? "text-slate-700" : "text-slate-500"}`}>#{rank}</span>
       <Medallion tier={tier} size={32} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -445,11 +445,11 @@ function RankRow({ player, rank, isMe, pool }: { player: PlayerWithXp; rank: num
             </span>
           ))}
         </div>
-        <p className="text-[11px] text-slate-400">
+        <p className="text-[11px] text-slate-500">
           {tier.label} · {player.activity} {player.activity === 1 ? "activity" : "activities"}
         </p>
       </div>
-      <span className="text-sm font-semibold text-slate-700 shrink-0">{player.xp.toLocaleString()} xp</span>
+      <span className="text-sm font-semibold text-slate-700 shrink-0 tabular-nums">{player.xp.toLocaleString()} xp</span>
     </div>
   );
 }
@@ -517,6 +517,7 @@ type LeaderRow = {
 export default function LeaderboardPage() {
   const [period, setPeriod] = useState<Period>("total");
   const [showAll, setShowAll] = useState(false);
+  const [showAllTiers, setShowAllTiers] = useState(false);
   const [rows, setRows] = useState<LeaderRow[] | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -584,6 +585,31 @@ export default function LeaderboardPage() {
   const proximityWord = myDiv && myDiv.progressPct >= 60 ? "close to" : "on your way to";
   const myBadges = me ? getBadges(me, withXp) : [];
 
+  // Rank-journey ladder: by default show only tiers that carry meaning right now —
+  // populated tiers plus the viewer's own tier and its immediate neighbours. Empty
+  // tiers collapse behind a "Show full ladder" expander. A viewer with no rank yet
+  // sees the whole aspirational ladder (nothing to anchor a collapse around).
+  const tierShownCollapsed = (idx: number): boolean =>
+    byTier[TIERS[idx].key].length > 0 || (!!me && Math.abs(idx - myTierIdx) <= 1);
+  const hiddenTierCount = me ? TIERS.filter((_, i) => !tierShownCollapsed(i)).length : 0;
+
+  // The rank number reflects the selected period, so name the period alongside it
+  // (a student can be #1 this week but #3 overall). Tier/division stay all-time.
+  const rankScope = period === "total" ? "overall" : period === "week" ? "this week" : "this month";
+
+  // Legend for the row badges: touch users can't hover the icon-only badges, so
+  // list every badge type that actually appears in the standings, with its label.
+  const legendBadges: Badge[] = [];
+  {
+    const seen = new Set<string>();
+    for (const p of withXp)
+      for (const b of getBadges(p, withXp))
+        if (!seen.has(b.label)) {
+          seen.add(b.label);
+          legendBadges.push(b);
+        }
+  }
+
   const top3 = ranked.slice(0, 3);
   const visible = showAll ? ranked : ranked.slice(0, PUBLIC_TOP_N);
   const meVisible = visible.some((p) => p.isMe);
@@ -617,7 +643,7 @@ export default function LeaderboardPage() {
       </header>
 
       {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-10 text-center text-sm text-slate-400">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-10 text-center text-sm text-slate-500">
           Loading standings…
         </div>
       ) : failed ? (
@@ -640,10 +666,11 @@ export default function LeaderboardPage() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm text-brand-100">
-              You are <span className="font-bold text-white">#{myRank}</span> in your group
+              You&apos;re <span className="font-bold text-white">#{myRank}</span> {rankScope} in your group
             </p>
-            <p className="text-xl font-black leading-tight">
-              {myTier.label} {myDiv.label} · {me.xpTotal.toLocaleString()} xp
+            <p className="text-xl font-black leading-tight tabular-nums">
+              {myTier.label} {myDiv.label} · {me.xpTotal.toLocaleString()}{" "}
+              <span className="text-sm font-semibold text-brand-200">xp all-time</span>
             </p>
             <p className="text-xs text-brand-200 italic mt-0.5">&quot;{myTier.slogan}&quot;</p>
           </div>
@@ -707,7 +734,7 @@ export default function LeaderboardPage() {
 
       {/* Top 3 podium */}
       <div className="space-y-2">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1">Top 3 {period === "total" ? "of all time" : period === "week" ? "this week" : "this month"}</p>
+        <p className="text-sm font-semibold text-slate-700 px-1">Top 3 {period === "total" ? "of all time" : period === "week" ? "this week" : "this month"}</p>
         <div className="flex items-end gap-3 overflow-x-auto pb-1 sm:overflow-visible">
           {top3.map((p, i) => (
             <PodiumCard key={p.name + i} player={p} rank={i + 1} isMe={p.isMe} />
@@ -718,7 +745,7 @@ export default function LeaderboardPage() {
       {/* Standings */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Standings</p>
+          <p className="text-sm font-semibold text-slate-700">Standings</p>
           {ranked.length > PUBLIC_TOP_N && (
             <button onClick={() => setShowAll((v) => !v)} className="text-xs font-medium text-brand-600 hover:text-brand-700">
               {showAll ? "Show top 5" : `Show all (${ranked.length})`}
@@ -738,8 +765,18 @@ export default function LeaderboardPage() {
             </>
           )}
         </div>
+        {legendBadges.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pt-0.5">
+            <span className="text-[11px] font-medium text-slate-500">Badges</span>
+            {legendBadges.map((b) => (
+              <span key={b.label} className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                <b.Icon className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" /> {b.label}
+              </span>
+            ))}
+          </div>
+        )}
         {!showAll && (
-          <p className="text-[11px] text-slate-400 px-1">
+          <p className="text-[11px] text-slate-500 px-1">
             Only the top {PUBLIC_TOP_N} are shown publicly. You always see your own position.
           </p>
         )}
@@ -759,13 +796,15 @@ export default function LeaderboardPage() {
       {/* SIDE PANEL — rank ladder, tucked out of the way (drops below standings on mobile) */}
       <aside className="mt-6 lg:mt-0 lg:sticky lg:top-6 space-y-4">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-3">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-1 mb-1">Rank journey</p>
-          <p className="text-[11px] text-slate-400 px-1 mb-2">Each tier has three steps (III → II → I) · rank comes from all-time XP and never drops.</p>
+          <p className="text-sm font-semibold text-slate-700 px-1 mb-1">Rank journey</p>
+          <p className="text-[11px] text-slate-500 px-1 mb-2">Each tier has three steps (III → II → I) · rank comes from all-time XP and never drops.</p>
           <div className="space-y-0.5">
             {/* Descending: highest tier (Challenger) first, Iron last. Reverse a
-                copy so TIERS + all index math (tierIndex/stepsDone) stay intact. */}
+                copy so TIERS + all index math (tierIndex/stepsDone) stay intact.
+                Collapsed by default to the tiers that matter now; empty tiers hide. */}
             {[...TIERS].reverse().map((tier) => {
               const ti = tierIndex(tier);
+              if (!showAllTiers && !tierShownCollapsed(ti)) return null;
               const isCurrent = !!me && tier.key === myTier.key;
               // Steps cleared: whole tier if below yours, your current division if it's yours, none if above (or if not ranked).
               const stepsDone = me ? (ti < myTierIdx ? 3 : isCurrent ? myDivIdx + 1 : 0) : 0;
@@ -780,6 +819,15 @@ export default function LeaderboardPage() {
               );
             })}
           </div>
+          {hiddenTierCount > 0 && (
+            <button
+              onClick={() => setShowAllTiers((v) => !v)}
+              className="mt-1.5 w-full rounded-lg px-2 py-1.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-brand-50 hover:text-brand-700"
+              aria-expanded={showAllTiers}
+            >
+              {showAllTiers ? "Show fewer tiers" : `Show full ladder (${hiddenTierCount} more)`}
+            </button>
+          )}
         </div>
       </aside>
       </div>
