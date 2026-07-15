@@ -33,7 +33,7 @@ import {
 import { Badge, Button, Card, LinkButton, ProgressBar } from "@/components/ui";
 import { logout, useSession } from "@/lib/auth";
 import { groupOf, useAttempts, useTests } from "@/lib/store";
-import { computeXp, levelFor } from "@/lib/xp";
+import { useStudentXp } from "@/lib/xp";
 import { TEST_GROUPS, type Attempt } from "@/lib/types";
 
 const DAY = 86_400_000;
@@ -124,6 +124,12 @@ export default function DashboardPage() {
   const attempts = useAttempts();
   const tests = useTests();
 
+  // Lifetime XP + level from the SHARED source of truth (useStudentXp): the sum
+  // of the student's own points_ledger rows, keyed by student_id and independent
+  // of group. This is the same hook the top-bar pill uses, so the two never
+  // disagree, and the score survives group changes, renames, and new devices.
+  const { xp: displayXp, level } = useStudentXp();
+
   // Editable daily goal, persisted locally. Initialise to the constant default
   // on BOTH server and first client render (hydration-safe), then hydrate the
   // stored value in an effect. A lazy localStorage initializer would make the
@@ -167,21 +173,16 @@ export default function DashboardPage() {
         ? Math.round((pcts.reduce((s, p) => s + p, 0) / pcts.length) * 100)
         : 0;
     const best = pcts.length > 0 ? Math.round(Math.max(...pcts) * 100) : 0;
-    // Lifetime XP — shared with the top-bar pill so the two never disagree.
-    const xp = computeXp(mine, tests);
     const s = streaks(mine.map((a) => a.submittedAt));
     return {
       count: mine.length,
       avg,
       best,
       tests: bestByTest.size,
-      xp,
       streak: s.current,
       longest: s.longest,
     };
-  }, [mine, tests, bestByTest]);
-
-  const level = levelFor(stats.xp);
+  }, [mine, bestByTest]);
 
   // Per-skill mastery (avg best% across each group's attempted tests).
   const skillProgress = useMemo(() => {
@@ -372,7 +373,7 @@ export default function DashboardPage() {
             <div className="mb-1.5 flex items-center justify-between text-xs font-semibold text-brand-100/90">
               <span className="inline-flex items-center gap-1.5">
                 <Zap className="h-3.5 w-3.5" />
-                {stats.xp.toLocaleString()} XP
+                {displayXp.toLocaleString()} XP
               </span>
               <span>
                 {level.next
