@@ -144,6 +144,24 @@ export default function BulkImportPage() {
       </div>
 
       <Card className="space-y-3">
+        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 px-4 py-3 text-sm transition hover:border-brand-300 hover:bg-white">
+          <span className="min-w-0 flex-1 truncate text-slate-600">
+            Upload a .json file (or paste below)
+          </span>
+          <span className="shrink-0 rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-brand-600 ring-1 ring-inset ring-brand-200">
+            Choose file
+          </span>
+          <input
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            disabled={running}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (file) setRaw(await file.text());
+            }}
+          />
+        </label>
         <textarea
           className={`${inputClass} min-h-[280px] font-mono text-xs`}
           value={raw}
