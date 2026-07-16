@@ -82,8 +82,9 @@ export async function POST(req: Request) {
     );
   }
 
-  // 2) Child rows by content type.
-  if (isQuestionBook(payload.contentType)) {
+  // 2) Child rows. Questions ship for question books and for Articles that
+  //    carry a comprehension set; passage + glossary are Articles-only.
+  if (payload.questions.length > 0) {
     const rows = payload.questions.map((q, i) => ({
       book_id: book.id,
       order: i,
@@ -95,7 +96,8 @@ export async function POST(req: Request) {
     }));
     const { error } = await supabase.from("book_questions").insert(rows);
     if (error) return await rollback(supabase, book.id, error.message);
-  } else {
+  }
+  if (!isQuestionBook(payload.contentType)) {
     if (payload.passage) {
       const { error } = await supabase.from("book_passages").insert({
         book_id: book.id,

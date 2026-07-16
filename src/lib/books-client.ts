@@ -43,19 +43,29 @@ export type BookForRead = {
   book: BookRow;
   passages: BookPassageRow[];
   glossary: BookGlossaryRow[];
+  questionCount: number;
 };
 
 export async function getBookForRead(id: string): Promise<BookForRead | null> {
   if (!SUPABASE_ENABLED) return null;
   const supabase = createClient();
-  const [{ data: book }, { data: passages }, { data: glossary }] =
+  const [{ data: book }, { data: passages }, { data: glossary }, { count }] =
     await Promise.all([
       supabase.from("books").select("*").eq("id", id).single(),
       supabase.from("book_passages").select("*").eq("book_id", id).order("order"),
       supabase.from("book_glossary").select("*").eq("book_id", id).order("word"),
+      supabase
+        .from("book_questions")
+        .select("id", { count: "exact", head: true })
+        .eq("book_id", id),
     ]);
   if (!book) return null;
-  return { book, passages: passages ?? [], glossary: glossary ?? [] };
+  return {
+    book,
+    passages: passages ?? [],
+    glossary: glossary ?? [],
+    questionCount: count ?? 0,
+  };
 }
 
 /** A question book as an in-memory Test, so QuestionRunner can render it. */
