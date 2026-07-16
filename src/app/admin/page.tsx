@@ -1,6 +1,6 @@
 "use client";
 
-import { Users } from "lucide-react";
+import { BookOpen, Users } from "lucide-react";
 import { Card, LinkButton } from "@/components/ui";
 import { PencilIcon, SendIcon } from "@/components/icons";
 import { useTests } from "@/lib/store";
@@ -46,15 +46,32 @@ export default function AdminPage() {
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/15">
             <PencilIcon />
           </span>
-          <h2 className="text-lg font-semibold text-slate-900">Authoring</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Tests</h2>
           <p className="flex-1 text-sm text-slate-600">
-            Create and edit tests, upload categorized books (Vocabulary,
-            Grammar, Reading, Articles), and build question banks.
+            Create and edit tests, build question banks, and upload self-contained
+            HTML tests for students.
           </p>
           <div className="flex gap-2">
             <LinkButton href="/author">Manage tests</LinkButton>
+            <LinkButton href="/author/tests/html" variant="secondary">
+              Upload HTML test
+            </LinkButton>
+          </div>
+        </Card>
+
+        <Card className="flex flex-col gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/15">
+            <BookOpen className="size-5" />
+          </span>
+          <h2 className="text-lg font-semibold text-slate-900">Books &amp; units</h2>
+          <p className="flex-1 text-sm text-slate-600">
+            Upload units by category (Vocabulary, Grammar, Reading, Articles) and
+            delete any you no longer need. Students get a read-only catalog.
+          </p>
+          <div className="flex gap-2">
+            <LinkButton href="/admin/books">Manage units</LinkButton>
             <LinkButton href="/author/upload" variant="secondary">
-              Upload book
+              Upload a unit
             </LinkButton>
           </div>
         </Card>
