@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Info, Sparkles, X } from "lucide-react";
 import { Card, LinkButton } from "@/components/ui";
 import { getBookForRead, type BookForRead } from "@/lib/books-client";
+import { CONTENT_TYPE_LABELS } from "@/lib/books";
 import {
   addExternalWord,
   getCollectedEntries,
@@ -109,7 +110,9 @@ export default function BookReadPage({
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <p className="text-sm font-medium text-slate-500">Vocabulary · Reading</p>
+        <p className="text-sm font-medium text-slate-500">
+          {CONTENT_TYPE_LABELS[book.content_type]}
+        </p>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           {book.title}
         </h1>
