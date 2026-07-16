@@ -6,6 +6,7 @@ import { getServerUser } from "@/lib/auth-server";
 import { gradeQuestion } from "@/lib/data/grading";
 import { computeTestExp, testExpKey } from "@/lib/data/exp";
 import { evaluateAndUnlockBadges } from "@/lib/data/badges";
+import { notifyGroupOfResult } from "@/lib/telegram-notify";
 import type { Json, SkillArea } from "@/lib/database.types";
 
 export interface SubmitResult {
@@ -45,7 +46,7 @@ export async function submitAttempt(
 
   const { data: test, error: testErr } = await supabase
     .from("tests")
-    .select("id, purpose")
+    .select("id, purpose, title")
     .eq("id", testId)
     .single();
   if (testErr || !test) return { ok: false, error: "Test not found." };
@@ -227,6 +228,16 @@ export async function submitAttempt(
   } catch {
     newBadges = [];
   }
+
+  // Post the result to the class Telegram channel (no-op unless configured).
+  // correct/total carry POINTS here, matching the points-weighted accuracy above.
+  await notifyGroupOfResult({
+    studentId: user.id,
+    testTitle: test.title,
+    correct: totalPointsEarned,
+    total: totalPointsPossible,
+    pendingReview: anyPending,
+  });
 
   return {
     ok: true,
