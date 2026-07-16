@@ -128,6 +128,51 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true, id: book.id });
 }
 
+// Delete an uploaded book (unit). Admin-gated; RLS is the real gate. Child rows
+// (questions/passages/glossary) drop via ON DELETE CASCADE; the stored original
+// file is removed best-effort.
+export async function DELETE(req: Request) {
+  if (!SUPABASE_ENABLED) {
+    return NextResponse.json(
+      { ok: false, error: "Uploads require the Supabase backend (not configured)." },
+      { status: 503 },
+    );
+  }
+
+  const user = await getServerUser().catch(() => null);
+  if (!user) {
+    return NextResponse.json({ ok: false, error: "Authentication required." }, { status: 401 });
+  }
+  if (!isAdminRole(user.role)) {
+    return NextResponse.json({ ok: false, error: "Admin access required." }, { status: 403 });
+  }
+
+  const id = new URL(req.url).searchParams.get("id");
+  if (!id) {
+    return NextResponse.json({ ok: false, error: "Missing book id." }, { status: 400 });
+  }
+
+  const supabase = await createClient();
+
+  // Grab the stored file path before the row goes away, so we can clean up Storage.
+  const { data: existing } = await supabase
+    .from("books")
+    .select("source_path")
+    .eq("id", id)
+    .single();
+
+  const { error } = await supabase.from("books").delete().eq("id", id);
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+
+  if (existing?.source_path) {
+    await supabase.storage.from(BUCKET).remove([existing.source_path]);
+  }
+
+  return NextResponse.json({ ok: true });
+}
+
 function validate(p: CreateBookPayload): string | null {
   if (!p || typeof p !== "object") return "Missing payload.";
   if (!p.title?.trim()) return "Title is required.";

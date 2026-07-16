@@ -147,7 +147,7 @@ export default function UploadBookPage() {
     return (
       <Card>
         <p className="text-sm text-slate-600">
-          Uploading books is available to admins only.
+          Uploading units is available to admins only.
         </p>
       </Card>
     );
@@ -158,11 +158,11 @@ export default function UploadBookPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Upload a book
+            Upload a unit
           </h1>
           <p className="text-sm text-slate-600">
-            Add a book and tag it with a category. Grammar & Vocabulary take a
-            questions CSV; Reading & Articles take a text plus a glossary CSV.
+            Add a unit and tag it with a category. Grammar, Vocabulary & Reading
+            take a drilling CSV; Articles take a text plus a glossary CSV.
           </p>
         </div>
         <LinkButton href="/author" variant="secondary">
@@ -179,7 +179,7 @@ export default function UploadBookPage() {
 
       {submit.phase === "done" && (
         <Banner tone="ok">
-          Book saved.{" "}
+          Unit saved.{" "}
           <Link href="/books" className="font-semibold underline">
             View in Books
           </Link>{" "}
@@ -366,7 +366,7 @@ export default function UploadBookPage() {
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5">
-              <Upload className="size-4" /> Save book
+              <Upload className="size-4" /> Save unit
             </span>
           )}
         </Button>
