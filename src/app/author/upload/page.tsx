@@ -56,6 +56,7 @@ export default function UploadBookPage() {
   // Question-book state
   const [questions, setQuestions] = useState<ParsedQuestion[]>([]);
   const [questionErrors, setQuestionErrors] = useState<string[]>([]);
+  const [questionsText, setQuestionsText] = useState("");
 
   // Reading-book state
   const [passageText, setPassageText] = useState("");
@@ -77,6 +78,7 @@ export default function UploadBookPage() {
   function resetContent() {
     setQuestions([]);
     setQuestionErrors([]);
+    setQuestionsText("");
     setPassageText("");
     setGlossary([]);
     setGlossaryErrors([]);
@@ -87,10 +89,26 @@ export default function UploadBookPage() {
   async function onQuestionsFile(file: File | null) {
     if (!file) return;
     const text = await readTextFile(file);
+    setQuestionsText(text);
     const res = parseQuestionsCsv(text);
     setQuestions(res.items);
     setQuestionErrors(res.errors);
     setPrimaryFile(file);
+    setSubmit({ phase: "idle" });
+  }
+
+  // Paste CSV directly (e.g. AI-generated drilling questions) — no file needed.
+  function onQuestionsText(text: string) {
+    setQuestionsText(text);
+    setPrimaryFile(null);
+    if (text.trim()) {
+      const res = parseQuestionsCsv(text);
+      setQuestions(res.items);
+      setQuestionErrors(res.errors);
+    } else {
+      setQuestions([]);
+      setQuestionErrors([]);
+    }
     setSubmit({ phase: "idle" });
   }
 
@@ -266,6 +284,13 @@ export default function UploadBookPage() {
             accept=".csv,text/csv"
             label="Upload a questions CSV"
             onFile={onQuestionsFile}
+          />
+          <p className="text-center text-xs text-slate-400">or paste CSV below</p>
+          <textarea
+            className={`${inputClass} min-h-[140px] font-mono text-xs`}
+            value={questionsText}
+            onChange={(e) => onQuestionsText(e.target.value)}
+            placeholder={"type,prompt,choices,correct,points\nsingle,\"What causes X?\",A|B|C,2,1"}
           />
           {questionErrors.length > 0 && <IssueList issues={questionErrors} />}
           {questions.length > 0 && (
