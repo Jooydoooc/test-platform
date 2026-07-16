@@ -165,7 +165,7 @@ export default function UploadBookPage() {
             take a drilling CSV; Articles take a text plus a glossary CSV.
           </p>
         </div>
-        <LinkButton href="/author" variant="secondary">
+        <LinkButton href="/admin/books" variant="secondary">
           Back
         </LinkButton>
       </div>

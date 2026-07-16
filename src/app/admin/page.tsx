@@ -52,7 +52,7 @@ export default function AdminPage() {
             HTML tests for students.
           </p>
           <div className="flex gap-2">
-            <LinkButton href="/author">Manage tests</LinkButton>
+            <LinkButton href="/admin/tests">Manage tests</LinkButton>
             <LinkButton href="/author/tests/html" variant="secondary">
               Upload HTML test
             </LinkButton>

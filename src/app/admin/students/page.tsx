@@ -6,6 +6,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Loader2,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -25,6 +26,7 @@ import {
   deleteStudent,
   fetchStudentDetail,
   fetchStudents,
+  updateGroup,
   updateStudent,
 } from "@/lib/admin-client";
 import type { Level, Role } from "@/lib/database.types";
@@ -67,6 +69,7 @@ export default function AdminStudentsPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showNewGroup, setShowNewGroup] = useState(false);
+  const [editGroupId, setEditGroupId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -110,6 +113,8 @@ export default function AdminStudentsPage() {
   }, [students]);
 
   const selected = students.find((s) => s.id === selectedId) ?? null;
+  const isRealGroup = groupFilter !== "All" && groupFilter !== "none";
+  const editingGroup = groups.find((g) => g.id === editGroupId) ?? null;
 
   return (
     <div className="space-y-6">
@@ -169,20 +174,33 @@ export default function AdminStudentsPage() {
                 </option>
               ))}
             </select>
-            <select
-              value={groupFilter}
-              onChange={(e) => setGroupFilter(e.target.value)}
-              aria-label="Filter by group"
-              className={`${inputClass} min-h-[44px] sm:min-h-0`}
-            >
-              <option value="All">All groups</option>
-              <option value="none">No group</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={groupFilter}
+                onChange={(e) => setGroupFilter(e.target.value)}
+                aria-label="Filter by group"
+                className={`${inputClass} min-h-[44px] flex-1 sm:min-h-0`}
+              >
+                <option value="All">All groups</option>
+                <option value="none">No group</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+              {isRealGroup && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setEditGroupId(groupFilter)}
+                  className="shrink-0 !px-3"
+                  aria-label="Edit selected group"
+                  title="Edit group"
+                >
+                  <Pencil className="size-4" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </Card>
@@ -254,6 +272,150 @@ export default function AdminStudentsPage() {
       {showNewGroup && (
         <NewGroupModal onClose={() => setShowNewGroup(false)} onCreated={load} />
       )}
+
+      {editingGroup && (
+        <EditGroupModal
+          group={editingGroup}
+          onClose={() => setEditGroupId(null)}
+          onSaved={load}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Modal: edit a group's name and level.
+// ---------------------------------------------------------------------------
+
+function EditGroupModal({
+  group,
+  onClose,
+  onSaved,
+}: {
+  group: GroupOption;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [name, setName] = useState(group.name);
+  const [level, setLevel] = useState<Level>(group.level);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
+  const dirty = name.trim() !== group.name || level !== group.level;
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    firstInputRef.current?.focus();
+    firstInputRef.current?.select();
+  }, []);
+
+  async function save() {
+    if (!name.trim()) {
+      setErr("Group name is required.");
+      return;
+    }
+    setSaving(true);
+    setErr(null);
+    try {
+      await updateGroup(group.id, { name: name.trim(), level });
+      await onSaved();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not update the group.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-group-title"
+        className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 id="edit-group-title" className="text-lg font-bold text-slate-900">
+            Edit group
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="inline-flex size-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        {err && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <AlertCircle className="size-4 shrink-0" />
+            {err}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">
+              Name
+            </span>
+            <input
+              ref={firstInputRef}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. B2 Evening"
+              className={inputClass}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">
+              Level
+            </span>
+            <select
+              value={level}
+              onChange={(e) => setLevel(e.target.value as Level)}
+              className={inputClass}
+            >
+              {LEVEL_OPTIONS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-5 flex gap-2">
+          <Button variant="secondary" onClick={onClose} className="flex-1">
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={!dirty || saving} className="flex-1">
+            {saving ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -109,7 +109,7 @@ export default function EditTestPage({
   useEffect(() => {
     const t = getTest(id);
     if (!t) {
-      router.replace("/author");
+      router.replace("/admin/tests");
       return;
     }
     setTest(t);
@@ -221,7 +221,7 @@ export default function EditTestPage({
   return (
     <div className="space-y-6 text-[#1B2130]">
       <div className="flex items-center justify-between gap-3">
-        <LinkButton href="/author" variant="secondary">
+        <LinkButton href="/admin/tests" variant="secondary">
           <ArrowLeftIcon /> Back
         </LinkButton>
         <div className="flex items-center gap-3">

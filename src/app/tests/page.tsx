@@ -872,7 +872,7 @@ function EmptyState({
           : "Try clearing the search or switching filters to see more tests."}
       </p>
       {isAdmin && (
-        <LinkButton href="/author" className="mt-5">
+        <LinkButton href="/admin/tests" className="mt-5">
           <Sparkles className="h-4 w-4" />
           {mode === "none" ? "Create a test" : "Author a new test"}
           <ArrowRight className="h-4 w-4" />
