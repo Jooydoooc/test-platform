@@ -91,11 +91,16 @@ export default function AdminBooksPage() {
             read-only catalog on Books.
           </p>
         </div>
-        <LinkButton href="/author/upload">
-          <span className="inline-flex items-center gap-1.5">
-            <Upload className="size-4" /> Upload a unit
-          </span>
-        </LinkButton>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <LinkButton href="/admin/books/import" variant="secondary">
+            Bulk import
+          </LinkButton>
+          <LinkButton href="/author/upload">
+            <span className="inline-flex items-center gap-1.5">
+              <Upload className="size-4" /> Upload a unit
+            </span>
+          </LinkButton>
+        </div>
       </div>
 
       {loading ? (
