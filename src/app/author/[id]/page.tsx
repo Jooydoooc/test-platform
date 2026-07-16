@@ -1,8 +1,8 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Field, LinkButton } from "@/components/ui";
+import { Field, LinkButton, inputClass } from "@/components/ui";
 import { getTest, maxScore, saveTest, uid } from "@/lib/store";
 import type { Question, QuestionType, Test } from "@/lib/types";
 import { parseQuestions } from "@/lib/author/parse-questions";
@@ -31,11 +31,11 @@ const TYPE_LABELS: Record<QuestionType, string> = {
   gap: "Gap-fill",
 };
 
-// Scoped DESIGN_STYLE tokens (near-white / navy / gold). Applied here only
-// until the palette + Sora/Plex fonts are wired globally.
-const card = "rounded-xl border border-[#E3E1DB] bg-white";
-const input =
-  "w-full rounded-lg border border-[#E3E1DB] bg-white px-3 py-2.5 text-base text-[#1B2130] outline-none transition-colors placeholder:text-[#9c988e] focus:border-[#E3A82B] focus:ring-2 focus:ring-[#E3A82B]/25 sm:py-2 sm:text-sm";
+// Aligned to the app design system (indigo brand + slate neutrals). Card mirrors
+// components/ui.tsx Card; input reuses the shared inputClass so the editor stays
+// in lockstep with the rest of the product.
+const card = "rounded-xl border border-slate-200/80 bg-white shadow-card";
+const input = inputClass;
 const num = "font-mono tabular-nums";
 
 function newQuestion(type: QuestionType): Question {
@@ -106,6 +106,14 @@ export default function EditTestPage({
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
+  // Undo-on-remove: stash the last deleted question so a misclick is recoverable.
+  const [undo, setUndo] = useState<{ q: Question; index: number } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Drag-to-reorder state (collapsed rows only).
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+
   useEffect(() => {
     const t = getTest(id);
     if (!t) {
@@ -115,7 +123,51 @@ export default function EditTestPage({
     setTest(t);
   }, [id, router]);
 
-  if (!test) return <p className="text-[#6b6a63]">Loading…</p>;
+  // Debounced autosave: persist the draft shortly after the last edit so leaving
+  // the page (Back, refresh, tab close) never loses work. Flips the Saved chip on.
+  useEffect(() => {
+    if (!test || saved) return;
+    const t = setTimeout(() => {
+      saveTest(test);
+      setSaved(true);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [test, saved]);
+
+  // Belt-and-suspenders for the sub-second window before autosave fires.
+  useEffect(() => {
+    if (saved) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [saved]);
+
+  // Cmd/Ctrl+S saves the draft immediately (power-user accelerator).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (test) {
+          saveTest(test);
+          setSaved(true);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [test]);
+
+  // Clear any pending undo timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+    };
+  }, []);
+
+  if (!test) return <p className="text-slate-600">Loading…</p>;
 
   function update(patch: Partial<Test>) {
     setTest((prev) => (prev ? { ...prev, ...patch } : prev));
@@ -148,7 +200,22 @@ export default function EditTestPage({
   }
 
   function removeQuestion(qid: string) {
-    update({ questions: test!.questions.filter((q) => q.id !== qid) });
+    const index = test!.questions.findIndex((q) => q.id === qid);
+    if (index < 0) return;
+    const q = test!.questions[index];
+    update({ questions: test!.questions.filter((qq) => qq.id !== qid) });
+    setUndo({ q, index });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndo(null), 6000);
+  }
+
+  function undoRemove() {
+    if (!undo) return;
+    const next = [...test!.questions];
+    next.splice(Math.min(undo.index, next.length), 0, undo.q);
+    update({ questions: next });
+    setUndo(null);
+    if (undoTimer.current) clearTimeout(undoTimer.current);
   }
 
   function moveQuestion(index: number, dir: -1 | 1) {
@@ -156,6 +223,15 @@ export default function EditTestPage({
     if (to < 0 || to >= test!.questions.length) return;
     const next = [...test!.questions];
     [next[index], next[to]] = [next[to], next[index]];
+    update({ questions: next });
+  }
+
+  // Drag-to-reorder: move the dragged question to the drop position.
+  function reorder(from: number, to: number) {
+    if (from === to) return;
+    const next = [...test!.questions];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     update({ questions: next });
   }
 
@@ -219,25 +295,25 @@ export default function EditTestPage({
       : null;
 
   return (
-    <div className="space-y-6 text-[#1B2130]">
+    <div className="space-y-6 text-slate-900">
       <div className="flex items-center justify-between gap-3">
         <LinkButton href="/admin/tests" variant="secondary">
           <ArrowLeftIcon /> Back
         </LinkButton>
         <div className="flex items-center gap-3">
           {saved && (
-            <span className="inline-flex items-center gap-1 text-sm text-[#3F8F5F]">
+            <span className="inline-flex items-center gap-1 text-sm text-emerald-600">
               <CheckIcon /> Saved
             </span>
           )}
           {test.shareToken && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-[#c3e6cb] bg-[#f0faf3] px-2.5 py-0.5 text-xs font-medium text-[#2a6640]">
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
               <CheckIcon /> Published
             </span>
           )}
           <button
             onClick={save}
-            className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-[#E3E1DB] bg-white px-4 py-2 text-sm font-medium text-[#1B2130] transition-colors hover:border-[#E3A82B] hover:bg-[#fbf6ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] sm:min-h-0"
+            className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 transition-colors hover:border-brand-400 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:min-h-0"
           >
             Save draft
           </button>
@@ -251,7 +327,7 @@ export default function EditTestPage({
                   ? "Fix incomplete questions first"
                   : undefined
             }
-            className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-[#1B2130] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2b3346] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0"
+            className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0"
           >
             {publishing
               ? "Publishing…"
@@ -264,7 +340,7 @@ export default function EditTestPage({
 
       {/* Publish error */}
       {publishError && (
-        <div className="flex items-start gap-2 rounded-lg border border-[#e6b3ad] bg-[#fdf3f2] px-4 py-2.5 text-sm text-[#8a2c22]">
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
           <AlertIcon className="mt-px h-3.5 w-3.5 shrink-0" />
           <span>{publishError}</span>
         </div>
@@ -274,15 +350,15 @@ export default function EditTestPage({
       {shareUrl && (
         <div className={`${card} flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between`}>
           <div className="min-w-0">
-            <p className="text-sm font-medium text-[#1B2130]">
+            <p className="text-sm font-medium text-slate-900">
               Student link
             </p>
-            <p className="truncate font-mono text-xs text-[#6b6a63]">{shareUrl}</p>
+            <p className="truncate font-mono text-xs text-slate-600">{shareUrl}</p>
           </div>
           <div className="flex shrink-0 gap-2">
             <button
               onClick={() => navigator.clipboard?.writeText(shareUrl)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E3E1DB] bg-white px-3 py-1.5 text-sm font-medium text-[#1B2130] transition-colors hover:border-[#E3A82B] hover:bg-[#fbf6ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B]"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 transition-colors hover:border-brand-400 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
             >
               <CopyIcon /> Copy link
             </button>
@@ -322,7 +398,7 @@ export default function EditTestPage({
             }}
             placeholder="Untimed"
           />
-          <span className="mt-1 block text-xs text-[#6b6a63]">
+          <span className="mt-1 block text-xs text-slate-600">
             Leave blank or 0 for an untimed test. When set, the test
             auto-submits when time runs out.
           </span>
@@ -336,10 +412,10 @@ export default function EditTestPage({
                   key={s.value}
                   type="button"
                   onClick={() => update({ skillArea: s.value })}
-                  className={`inline-flex min-h-[40px] items-center rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] sm:min-h-0 ${
+                  className={`inline-flex min-h-[40px] items-center rounded-lg border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:min-h-0 ${
                     active
-                      ? "border-[#E3A82B] bg-[#fbf6ea] text-[#1B2130]"
-                      : "border-[#E3E1DB] bg-white text-[#6b6a63] hover:border-[#E3A82B] hover:bg-[#fbf6ea]"
+                      ? "border-brand-500 bg-brand-50 text-slate-900"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-brand-400 hover:bg-brand-50"
                   }`}
                 >
                   {s.label}
@@ -347,7 +423,7 @@ export default function EditTestPage({
               );
             })}
           </div>
-          <span className="mt-1 block text-xs text-[#6b6a63]">
+          <span className="mt-1 block text-xs text-slate-600">
             Required to publish. All questions in this test count toward this
             skill.
           </span>
@@ -356,11 +432,11 @@ export default function EditTestPage({
 
       {/* Questions header */}
       <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold text-[#1B2130]">
+        <h2 className="text-sm font-semibold text-slate-900">
           Questions{" "}
-          <span className={`${num} text-[#6b6a63]`}>({count})</span>
+          <span className={`${num} text-slate-600`}>({count})</span>
         </h2>
-        <span className={`${num} text-sm text-[#6b6a63]`}>
+        <span className={`${num} text-sm text-slate-600`}>
           {total} point{total === 1 ? "" : "s"}
         </span>
       </div>
@@ -370,8 +446,8 @@ export default function EditTestPage({
         <div
           className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm ${
             readiness.ready
-              ? "border border-[#c3e6cb] bg-[#f0faf3] text-[#2a6640]"
-              : "border border-[#f0d9a0] bg-[#fef9ec] text-[#7a5500]"
+              ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border border-amber-200 bg-amber-50 text-amber-700"
           }`}
         >
           {readiness.ready ? (
@@ -395,27 +471,57 @@ export default function EditTestPage({
 
       {/* Collapsible question list */}
       {count === 0 ? (
-        <div className={`${card} p-6 text-sm text-[#6b6a63]`}>
+        <div className={`${card} p-6 text-sm text-slate-600`}>
           No questions yet. Add one below.
         </div>
       ) : (
         <ul className="space-y-2">
-          {test.questions.map((q, i) => (
-            <li key={q.id} className={`${card} overflow-hidden`}>
-              <QuestionRow
-                index={i}
-                count={count}
-                question={q}
-                open={openIds.has(q.id)}
-                onToggle={() => toggleOpen(q.id)}
-                onMoveUp={() => moveQuestion(i, -1)}
-                onMoveDown={() => moveQuestion(i, 1)}
-                onDuplicate={() => duplicateQuestion(q.id)}
-                onRemove={() => removeQuestion(q.id)}
-                onChange={(patch) => updateQuestion(q.id, patch)}
-              />
-            </li>
-          ))}
+          {test.questions.map((q, i) => {
+            const collapsed = !openIds.has(q.id);
+            const isOver = overIndex === i && dragIndex !== null && dragIndex !== i;
+            return (
+              <li
+                key={q.id}
+                draggable={collapsed}
+                onDragStart={(e) => {
+                  setDragIndex(i);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragOver={(e) => {
+                  if (dragIndex !== null) {
+                    e.preventDefault();
+                    setOverIndex(i);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragIndex !== null) reorder(dragIndex, i);
+                  setDragIndex(null);
+                  setOverIndex(null);
+                }}
+                onDragEnd={() => {
+                  setDragIndex(null);
+                  setOverIndex(null);
+                }}
+                className={`${card} overflow-hidden transition-shadow ${
+                  isOver ? "ring-2 ring-brand-400" : ""
+                } ${dragIndex === i ? "opacity-50" : ""}`}
+              >
+                <QuestionRow
+                  index={i}
+                  count={count}
+                  question={q}
+                  open={openIds.has(q.id)}
+                  onToggle={() => toggleOpen(q.id)}
+                  onMoveUp={() => moveQuestion(i, -1)}
+                  onMoveDown={() => moveQuestion(i, 1)}
+                  onDuplicate={() => duplicateQuestion(q.id)}
+                  onRemove={() => removeQuestion(q.id)}
+                  onChange={(patch) => updateQuestion(q.id, patch)}
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -437,19 +543,38 @@ export default function EditTestPage({
 
       {/* Add a question */}
       <div className={`${card} space-y-3 p-5`}>
-        <h3 className="text-sm font-semibold text-[#1B2130]">Add a question</h3>
+        <h3 className="text-sm font-semibold text-slate-900">Add a question</h3>
         <div className="flex flex-wrap gap-2">
           {(Object.keys(TYPE_LABELS) as QuestionType[]).map((type) => (
             <button
               key={type}
               onClick={() => addQuestion(type)}
-              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-[#E3E1DB] bg-white px-3 py-2 text-sm font-medium text-[#1B2130] transition-colors hover:border-[#E3A82B] hover:bg-[#fbf6ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] sm:min-h-0"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 transition-colors hover:border-brand-400 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:min-h-0"
             >
               <PlusIcon /> {TYPE_LABELS[type]}
             </button>
           ))}
         </div>
       </div>
+
+      {/* Undo toast after a question is removed */}
+      {undo && (
+        <div
+          role="status"
+          className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4"
+        >
+          <div className="flex items-center gap-3 rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white shadow-card-hover">
+            <span>Question removed.</span>
+            <button
+              type="button"
+              onClick={undoRemove}
+              className="rounded font-semibold text-brand-200 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            >
+              Undo
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -488,23 +613,23 @@ function PastePanel({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-5 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] focus-visible:ring-inset"
+        className="flex w-full items-center gap-3 px-5 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset"
       >
         <Chevron open={open} />
-        <span className="flex-1 text-sm font-semibold text-[#1B2130]">
+        <span className="flex-1 text-sm font-semibold text-slate-900">
           Paste questions
         </span>
-        <span className="text-xs text-[#9c988e]">Bulk import from text</span>
+        <span className="text-xs text-slate-500">Bulk import from text</span>
       </button>
 
       {open && (
-        <div className="space-y-4 border-t border-[#E3E1DB] px-5 py-4">
+        <div className="space-y-4 border-t border-slate-200 px-5 py-4">
           {/* Format help */}
           <details className="group">
-            <summary className="cursor-pointer select-none text-xs font-medium text-[#6b6a63] hover:text-[#1B2130]">
+            <summary className="cursor-pointer select-none text-xs font-medium text-slate-600 hover:text-slate-900">
               Format help ▸
             </summary>
-            <pre className="mt-2 overflow-x-auto rounded-lg border border-[#E3E1DB] bg-[#FAFAF8] p-3 font-mono text-xs leading-relaxed text-[#4a4a40]">{`[SINGLE] What is the capital of France?
+            <pre className="mt-2 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-700">{`[SINGLE] What is the capital of France?
 A) Berlin
 B) Paris *
 C) Madrid
@@ -526,15 +651,15 @@ Answer: carbon dioxide | CO2
 [GAP] She ___ to school every morning.
 Answer: goes
 (2 pts)`}</pre>
-            <p className="mt-2 text-xs text-[#6b6a63]">
+            <p className="mt-2 text-xs text-slate-600">
               Separate questions with a blank line. Type tags are optional — the
               parser infers the type. Correct choices end with{" "}
-              <code className="rounded bg-[#f0ede8] px-1">*</code> or{" "}
-              <code className="rounded bg-[#f0ede8] px-1">(correct)</code>.
+              <code className="rounded bg-slate-100 px-1">*</code> or{" "}
+              <code className="rounded bg-slate-100 px-1">(correct)</code>.
               Accepted answers for Short/Gap are split on{" "}
-              <code className="rounded bg-[#f0ede8] px-1">|</code>,{" "}
-              <code className="rounded bg-[#f0ede8] px-1">/</code>, or{" "}
-              <code className="rounded bg-[#f0ede8] px-1">,</code>.
+              <code className="rounded bg-slate-100 px-1">|</code>,{" "}
+              <code className="rounded bg-slate-100 px-1">/</code>, or{" "}
+              <code className="rounded bg-slate-100 px-1">,</code>.
             </p>
           </details>
 
@@ -550,25 +675,25 @@ Answer: goes
           {/* Live preview */}
           {count > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-[#6b6a63]">
+              <p className="text-xs font-medium text-slate-600">
                 {count} question{count === 1 ? "" : "s"} detected
               </p>
               <ul className="space-y-1.5">
                 {parsed.map(({ question: q, warnings }, idx) => (
                   <li
                     key={idx}
-                    className="rounded-lg border border-[#E3E1DB] bg-[#FAFAF8] px-3 py-2 text-sm"
+                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
                   >
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <span className="shrink-0 rounded-full border border-[#E3E1DB] bg-white px-2 py-0.5 text-xs font-medium text-[#6b6a63]">
+                      <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600">
                         {TYPE_LABELS[q.type]}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[#1B2130]">
+                      <span className="min-w-0 flex-1 truncate text-slate-900">
                         {q.prompt.trim() || (
-                          <span className="text-[#9c988e]">Untitled</span>
+                          <span className="text-slate-500">Untitled</span>
                         )}
                       </span>
-                      <span className="shrink-0 text-xs text-[#9c988e]">
+                      <span className="shrink-0 text-xs text-slate-500">
                         → {correctSummary(q)}
                       </span>
                     </div>
@@ -577,7 +702,7 @@ Answer: goes
                         {warnings.map((w, wi) => (
                           <li
                             key={wi}
-                            className="flex items-start gap-1 text-xs text-[#9a6b00]"
+                            className="flex items-start gap-1 text-xs text-amber-700"
                           >
                             <AlertIcon className="mt-px h-3 w-3 shrink-0" />
                             {w}
@@ -592,7 +717,7 @@ Answer: goes
           )}
 
           {!pasteText.trim() && (
-            <p className="text-xs text-[#9c988e]">
+            <p className="text-xs text-slate-500">
               Questions will appear here as you type or paste.
             </p>
           )}
@@ -603,19 +728,19 @@ Answer: goes
               type="button"
               disabled={count === 0}
               onClick={() => onAdd(parsed.map((p) => p.question))}
-              className="inline-flex min-h-[36px] items-center justify-center rounded-lg bg-[#1B2130] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2b3346] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] disabled:pointer-events-none disabled:opacity-40"
+              className="inline-flex min-h-[36px] items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-40"
             >
               Add {count > 0 ? count : ""} question{count === 1 ? "" : "s"}
             </button>
             <button
               type="button"
               onClick={onClear}
-              className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-[#E3E1DB] bg-white px-4 py-2 text-sm font-medium text-[#1B2130] transition-colors hover:border-[#E3A82B] hover:bg-[#fbf6ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B]"
+              className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 transition-colors hover:border-brand-400 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
             >
               Clear
             </button>
             {confirm && (
-              <span className="inline-flex items-center gap-1 text-sm text-[#3F8F5F]">
+              <span className="inline-flex items-center gap-1 text-sm text-emerald-600">
                 <CheckIcon /> Added!
               </span>
             )}
@@ -662,37 +787,46 @@ function QuestionRow({
     <>
       {/* Summary row */}
       <div className="flex items-center gap-1 pr-2">
+        {!open && (
+          <span
+            className="hidden shrink-0 cursor-grab pl-2 text-slate-300 sm:block"
+            aria-hidden
+            title="Drag to reorder"
+          >
+            <GripIcon />
+          </span>
+        )}
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={open}
           aria-controls={bodyId}
-          className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] focus-visible:ring-inset"
+          className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset"
         >
           <Chevron open={open} />
           <span
-            className={`${num} shrink-0 text-sm font-semibold text-[#1B2130]`}
+            className={`${num} shrink-0 text-sm font-semibold text-slate-900`}
           >
             Q{index + 1}
           </span>
-          <span className="shrink-0 rounded-full border border-[#E3E1DB] bg-[#FAFAF8] px-2 py-0.5 text-xs font-medium text-[#6b6a63]">
+          <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
             {TYPE_LABELS[q.type]}
           </span>
           <span
             className={`min-w-0 flex-1 truncate text-sm ${
-              q.prompt.trim() ? "text-[#1B2130]" : "text-[#9c988e]"
+              q.prompt.trim() ? "text-slate-900" : "text-slate-500"
             }`}
           >
             {previewText(q)}
           </span>
-          <span className={`${num} shrink-0 text-xs text-[#6b6a63]`}>
+          <span className={`${num} shrink-0 text-xs text-slate-600`}>
             {q.points} pt{q.points === 1 ? "" : "s"}
           </span>
           {/* Validation status chip */}
           {!valid && (
             <span
               title={issues.join("\n")}
-              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#f0d9a0] bg-[#fef9ec] px-2 py-0.5 text-xs font-medium text-[#7a5500]"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700"
             >
               <AlertIcon className="h-3 w-3" />
               Incomplete
@@ -729,15 +863,15 @@ function QuestionRow({
       {open && (
         <div
           id={bodyId}
-          className="space-y-4 border-t border-[#E3E1DB] px-3 py-4"
+          className="space-y-4 border-t border-slate-200 px-3 py-4"
         >
           {/* Inline validation issues */}
           {issues.length > 0 && (
-            <ul className="space-y-1 rounded-lg border border-[#f0d9a0] bg-[#fef9ec] px-3 py-2">
+            <ul className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
               {issues.map((issue, i) => (
                 <li
                   key={i}
-                  className="flex items-start gap-1.5 text-xs text-[#7a5500]"
+                  className="flex items-start gap-1.5 text-xs text-amber-700"
                 >
                   <AlertIcon className="mt-px h-3.5 w-3.5 shrink-0" />
                   {issue}
@@ -806,7 +940,7 @@ function QuestionBody({
           }
         />
         {q.type === "gap" && (
-          <span className="mt-1 block text-xs text-[#6b6a63]">
+          <span className="mt-1 block text-xs text-slate-600">
             Mark the blank with two or more underscores (___). The student types
             the missing word.
           </span>
@@ -815,9 +949,9 @@ function QuestionBody({
 
       {(q.type === "single" || q.type === "multiple") && (
         <div className="space-y-2">
-          <span className="text-sm font-medium text-[#1B2130]">
+          <span className="text-sm font-medium text-slate-900">
             Choices{" "}
-            <span className="font-normal text-[#9c988e]">
+            <span className="font-normal text-slate-500">
               (check the correct one{q.type === "multiple" ? "(s)" : ""})
             </span>
           </span>
@@ -828,7 +962,7 @@ function QuestionBody({
                 checked={q.correct.includes(c.id)}
                 onChange={() => toggleCorrect(c.id)}
                 aria-label="Mark correct"
-                className="h-4 w-4 shrink-0 accent-[#E3A82B]"
+                className="h-4 w-4 shrink-0 accent-brand-600"
               />
               <input
                 className={input}
@@ -848,7 +982,7 @@ function QuestionBody({
           <button
             type="button"
             onClick={addChoice}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#E3E1DB] bg-white px-3 py-1.5 text-sm font-medium text-[#1B2130] transition-colors hover:border-[#E3A82B] hover:bg-[#fbf6ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 transition-colors hover:border-brand-400 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           >
             <PlusIcon /> Add choice
           </button>
@@ -917,8 +1051,8 @@ function IconButton({
 }) {
   const hover =
     tone === "danger"
-      ? "hover:bg-[#f7e9e7] hover:text-[#C1473A]"
-      : "hover:bg-[#FAFAF8] hover:text-[#1B2130]";
+      ? "hover:bg-red-50 hover:text-red-600"
+      : "hover:bg-slate-50 hover:text-slate-900";
   return (
     <button
       type="button"
@@ -926,7 +1060,7 @@ function IconButton({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#6b6a63] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E3A82B] disabled:pointer-events-none disabled:opacity-30 ${hover}`}
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-30 ${hover}`}
     >
       {children}
     </button>
@@ -951,7 +1085,7 @@ function Chevron({ open }: { open: boolean }) {
   return (
     <svg
       {...svg}
-      className={`shrink-0 text-[#6b6a63] transition-transform duration-150 ${
+      className={`shrink-0 text-slate-600 transition-transform duration-150 ${
         open ? "rotate-90" : ""
       }`}
     >
@@ -964,6 +1098,19 @@ function PlusIcon() {
   return (
     <svg {...svg} width={16} height={16}>
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function GripIcon() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <circle cx="9" cy="6" r="1.4" />
+      <circle cx="15" cy="6" r="1.4" />
+      <circle cx="9" cy="12" r="1.4" />
+      <circle cx="15" cy="12" r="1.4" />
+      <circle cx="9" cy="18" r="1.4" />
+      <circle cx="15" cy="18" r="1.4" />
     </svg>
   );
 }
