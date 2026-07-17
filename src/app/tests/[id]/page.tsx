@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Card } from "@/components/ui";
 import { QuestionRunner, type SubmitMeta } from "@/components/QuestionRunner";
 import {
@@ -13,6 +13,7 @@ import {
   maxScore,
   saveAttempt,
   uid,
+  useAttempts,
 } from "@/lib/store";
 import { type Question, type Test } from "@/lib/types";
 import { loadConfig, sendMessage } from "@/lib/telegram-client";
@@ -74,7 +75,10 @@ export default function TakeTestPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const wantReview = searchParams.get("review") === "1";
   const { user } = useSession();
+  const attempts = useAttempts();
   const [test, setTest] = useState<Test | null>(null);
   const [phase, setPhase] = useState<Phase>("start");
 
@@ -93,6 +97,23 @@ export default function TakeTestPage({
     }
     setTest(t);
   }, [id, router]);
+
+  // Review mode (?review=1): jump straight to the graded breakdown of the
+  // student's most recent attempt at this test. Read-only — never re-saves.
+  useEffect(() => {
+    if (!test || !wantReview) return;
+    const me = takerName.trim().toLowerCase();
+    const latest = attempts
+      .filter(
+        (a) => a.testId === test.id && a.takerName.trim().toLowerCase() === me,
+      )
+      .sort((a, b) => b.submittedAt - a.submittedAt)[0];
+    if (latest) {
+      setFinalAnswers(latest.answers);
+      setTimedOut(!!latest.timedOut);
+      setPhase("done");
+    }
+  }, [test, wantReview, attempts, takerName]);
 
   if (!test) {
     return (
@@ -132,6 +153,11 @@ export default function TakeTestPage({
         answers={finalAnswers}
         name={takerName}
         timedOut={timedOut}
+        reviewing={wantReview}
+        onRetake={() => {
+          router.replace(`/tests/${test.id}`);
+          setPhase("running");
+        }}
       />
     );
   }
@@ -177,11 +203,15 @@ function Results({
   answers,
   name,
   timedOut,
+  reviewing = false,
+  onRetake,
 }: {
   test: Test;
   answers: Answers;
   name: string;
   timedOut?: boolean;
+  reviewing?: boolean;
+  onRetake?: () => void;
 }) {
   const score = gradeTest(test, answers);
   const total = maxScore(test);
@@ -206,7 +236,9 @@ function Results({
         </div>
       )}
       <Card className="space-y-2 text-center">
-        <p className="text-sm text-slate-500">Results for {name}</p>
+        <p className="text-sm text-slate-500">
+          {reviewing ? "Reviewing your last attempt" : `Results for ${name}`}
+        </p>
         <h1 className="text-4xl font-bold tabular-nums">
           {score} / {total}
         </h1>
@@ -249,13 +281,22 @@ function Results({
         })}
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Link
           href="/tests"
           className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
           Back to tests
         </Link>
+        {reviewing && onRetake && (
+          <button
+            type="button"
+            onClick={onRetake}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Retake test
+          </button>
+        )}
         <Link
           href="/results"
           className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
