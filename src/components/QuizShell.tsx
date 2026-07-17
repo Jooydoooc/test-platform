@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, RotateCcw, X } from "lucide-react";
+import { ArrowRight, Check, RotateCcw, X } from "lucide-react";
 import { Card, LinkButton, ProgressBar } from "@/components/ui";
 import {
   submitVocabTest,
@@ -118,7 +118,10 @@ function buildQuestions(words: VocabWord[], config: QuizConfig): Question[] {
 // Component
 // ---------------------------------------------------------------------------
 
-const FEEDBACK_MS = 800;
+// Long enough to read the correct/wrong reveal before it moves on. Students can
+// always tap "Next" to skip ahead; when prefers-reduced-motion is set we never
+// auto-advance, so the tap is the only way forward.
+const FEEDBACK_MS = 1400;
 
 type Phase = "loading" | "not-enough" | "error" | "quiz" | "results";
 
@@ -145,6 +148,34 @@ export function QuizShell({
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
   const [score, setScore] = useState(0);
+  const advanceTimer = useRef<number | null>(null);
+  const reduceMotionRef = useRef(false);
+
+  // Track the reduced-motion preference so we can hold on the reveal instead of
+  // auto-advancing for students who ask for less movement.
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    reduceMotionRef.current = mq.matches;
+    const onChange = () => (reduceMotionRef.current = mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  // Clear any pending auto-advance when the component unmounts.
+  useEffect(
+    () => () => {
+      if (advanceTimer.current !== null)
+        window.clearTimeout(advanceTimer.current);
+    },
+    [],
+  );
+
+  const clearAdvance = useCallback(() => {
+    if (advanceTimer.current !== null) {
+      window.clearTimeout(advanceTimer.current);
+      advanceTimer.current = null;
+    }
+  }, []);
 
   // Load the unit's words from the local store (client-only: reads localStorage
   // conventions via the store, so it runs in an effect after mount).
@@ -164,12 +195,27 @@ export function QuizShell({
   }, [unitId, config]);
 
   const restart = useCallback(() => {
+    clearAdvance();
     setQuestions(buildQuestions(words, config));
     setIndex(0);
     setPicked(null);
     setScore(0);
     setPhase("quiz");
-  }, [words, config]);
+  }, [words, config, clearAdvance]);
+
+  // Move to the next question (or results). Safe to call from both the auto
+  // timer and a manual tap — clears the timer so we never double-advance.
+  const advance = useCallback(() => {
+    clearAdvance();
+    setIndex((i) => {
+      if (i + 1 >= questions.length) {
+        setPhase("results");
+        return i;
+      }
+      setPicked(null);
+      return i + 1;
+    });
+  }, [questions.length, clearAdvance]);
 
   function answer(option: string) {
     if (picked !== null) return; // lock once chosen
@@ -177,14 +223,11 @@ export function QuizShell({
     const correct = option === current.correct;
     setPicked(option);
     if (correct) setScore((s) => s + 1);
-    window.setTimeout(() => {
-      if (index + 1 >= questions.length) {
-        setPhase("results");
-      } else {
-        setIndex((i) => i + 1);
-        setPicked(null);
-      }
-    }, FEEDBACK_MS);
+    // Auto-advance after a readable pause — unless the student prefers reduced
+    // motion, in which case they tap "Next" when ready.
+    if (!reduceMotionRef.current) {
+      advanceTimer.current = window.setTimeout(advance, FEEDBACK_MS);
+    }
   }
 
   if (phase === "loading") return <QuizSkeleton />;
@@ -284,6 +327,21 @@ export function QuizShell({
           );
         })}
       </div>
+
+      {picked !== null && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={advance}
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700 active:bg-brand-800"
+          >
+            {index + 1 >= questions.length ? "See results" : "Next"}
+            {index + 1 < questions.length && (
+              <ArrowRight className="size-4" aria-hidden />
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

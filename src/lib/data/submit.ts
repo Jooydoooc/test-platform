@@ -17,6 +17,10 @@ export interface SubmitResult {
   expAwarded?: number;
   /** Names of badges unlocked by this submission (empty when none). */
   newBadges?: string[];
+  /** Points earned / possible for a freshly graded submission. Omitted on
+   *  replay (already-submitted) paths and undefined until grading completes. */
+  scoreEarned?: number;
+  scoreTotal?: number;
   error?: string;
 }
 
@@ -245,5 +249,7 @@ export async function submitAttempt(
     pendingReview: anyPending,
     expAwarded,
     newBadges,
+    scoreEarned: totalPointsEarned,
+    scoreTotal: totalPointsPossible,
   };
 }
