@@ -65,8 +65,20 @@ export async function submitVocabTest(
   const user = await getServerUser().catch(() => null);
   if (!user || user.role !== "STUDENT") return { status: "ineligible" };
 
-  // Guard against non-finite client input (Infinity/NaN) reaching the score math.
-  if (!Number.isFinite(score) || !Number.isFinite(total) || total <= 0) {
+  // Guard against non-finite / non-integer / out-of-range client input. score
+  // and total are client-reported, so we reject anything the real UI can't
+  // produce: non-integers, non-positive totals, negative scores, or score>total.
+  // Without the score>total check a tampered payload (score=9999,total=1) writes
+  // a poisoned correct_count into result_skill_scores and permanently inflates
+  // the student's VOCABULARY mastery aggregate (accuracy is clamped below, but
+  // the raw counts are summed elsewhere).
+  if (
+    !Number.isInteger(score) ||
+    !Number.isInteger(total) ||
+    total <= 0 ||
+    score < 0 ||
+    score > total
+  ) {
     return { status: "ineligible" };
   }
 
@@ -135,12 +147,15 @@ export async function submitVocabTest(
 
   // -------------------------------------------------------------------------
   // Finalize the attempt (mark submitted_at first — if a later write fails, the
-  // idempotency check above catches a retry and prevents double-award).
+  // idempotency check above catches a retry and prevents double-award). If the
+  // stamp itself fails, bail: leaving submitted_at NULL would let a retry re-run
+  // every write and produce a duplicate result / skill-score / XP row.
   // -------------------------------------------------------------------------
-  await admin
+  const { error: stampErr } = await admin
     .from("attempts")
     .update({ submitted_at: new Date().toISOString() })
     .eq("id", attemptId);
+  if (stampErr) return { status: "error" };
 
   // Insert the result row. Vocab tests are never PLACEMENT, never PENDING_REVIEW
   // (graded locally; no AI/teacher check needed).
@@ -156,15 +171,22 @@ export async function submitVocabTest(
     .single();
   if (rErr || !result) return { status: "error" };
 
-  // One result_skill_scores row for VOCABULARY (the only skill a vocab test covers).
-  const accuracy = Math.max(0, Math.min(1, score / total));
-  await admin.from("result_skill_scores").insert({
+  // One result_skill_scores row for VOCABULARY (the only skill a vocab test
+  // covers). Clamp correct_count to [0, total] as defense-in-depth (the input
+  // guard already enforces score<=total) so a bad row can never poison the
+  // sum(correct_count)/sum(total_count) mastery aggregate. If this insert fails,
+  // bail: granting XP while the skill-progress record is missing would show the
+  // student XP with no matching mastery/badge credit.
+  const clampedScore = Math.max(0, Math.min(score, total));
+  const accuracy = Math.max(0, Math.min(1, clampedScore / total));
+  const { error: skillErr } = await admin.from("result_skill_scores").insert({
     result_id: result.id,
     skill_area: "VOCABULARY" as const,
-    correct_count: score,
+    correct_count: clampedScore,
     total_count: total,
     accuracy,
   });
+  if (skillErr) return { status: "error" };
 
   // -------------------------------------------------------------------------
   // EXP: score-proportional, granted once per unit via the deduped ledger.
