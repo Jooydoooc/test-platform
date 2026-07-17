@@ -29,7 +29,6 @@ import {
   Star,
   Target,
   TrendingUp,
-  Trophy,
   Type,
   Zap,
 } from "lucide-react";
@@ -150,7 +149,16 @@ export default function TestsPage() {
   const { user } = useSession();
   const isAdmin = user?.role === "admin";
   const tests = useTests().filter((t) => t.questions.length > 0);
-  const attempts = useAttempts();
+  const allAttempts = useAttempts();
+
+  // Scope every stat below to the signed-in student. Attempts share one
+  // localStorage store, so on a shared device an unfiltered read would blend
+  // classmates' scores into this student's dashboard (matches /results).
+  const attempts = useMemo(() => {
+    if (!user) return [];
+    const me = user.name.trim().toLowerCase();
+    return allAttempts.filter((a) => a.takerName.trim().toLowerCase() === me);
+  }, [allAttempts, user]);
 
   // Per-test attempt stats keyed by testId.
   const stats = useMemo(() => {
