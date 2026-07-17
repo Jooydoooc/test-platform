@@ -212,7 +212,14 @@ export function useMyAttempts(): { attempts: MyAttempt[]; loading: boolean } {
       setLoading(false);
     }
 
-    load();
+    // If any await inside load() throws (auth/network error), clear the loading
+    // flag so the dashboard never hangs on its spinner waiting for this hook.
+    load().catch(() => {
+      if (active) {
+        setAttempts([]);
+        setLoading(false);
+      }
+    });
 
     return () => {
       active = false;
