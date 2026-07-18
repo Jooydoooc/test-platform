@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getServerUser } from "@/lib/auth-server";
@@ -235,12 +236,17 @@ export async function submitAttempt(
 
   // Post the result to the class Telegram channel (no-op unless configured).
   // correct/total carry POINTS here, matching the points-weighted accuracy above.
-  await notifyGroupOfResult({
-    studentId: user.id,
-    testTitle: test.title,
-    correct: totalPointsEarned,
-    total: totalPointsPossible,
-    pendingReview: anyPending,
+  // Runs AFTER the response is sent (via next/server `after`) so Telegram's
+  // network latency never delays the student's submit; `after` keeps the
+  // serverless function alive so the message still sends reliably.
+  after(() => {
+    void notifyGroupOfResult({
+      studentId: user.id,
+      testTitle: test.title,
+      correct: totalPointsEarned,
+      total: totalPointsPossible,
+      pendingReview: anyPending,
+    });
   });
 
   return {

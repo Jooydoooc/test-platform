@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getServerUser } from "@/lib/auth-server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SUPABASE_ENABLED } from "@/lib/supabase/env";
@@ -324,17 +324,24 @@ export async function POST(req: Request) {
   }
 
   // Post the result to the class Telegram channel (no-op unless configured).
-  // Best-effort: notifyGroupOfResult swallows its own errors.
-  const { data: htmlTest } = await admin
-    .from("html_tests")
-    .select("title")
-    .eq("id", attempt.html_test_id)
-    .maybeSingle();
-  await notifyGroupOfResult({
-    studentId: user.id,
-    testTitle: htmlTest?.title ?? "a test",
-    correct: totalCorrect,
-    total: totalQuestions,
+  // Best-effort: notifyGroupOfResult swallows its own errors. Runs AFTER the
+  // response is sent so the title lookup + Telegram round-trip never delay the
+  // student's submit; `after` keeps the function alive so it still delivers.
+  // Capture before the closure: `after` may run later, which loses the earlier
+  // non-null narrowing of attempt.html_test_id.
+  const htmlTestId = attempt.html_test_id;
+  after(async () => {
+    const { data: htmlTest } = await admin
+      .from("html_tests")
+      .select("title")
+      .eq("id", htmlTestId)
+      .maybeSingle();
+    await notifyGroupOfResult({
+      studentId: user.id,
+      testTitle: htmlTest?.title ?? "a test",
+      correct: totalCorrect,
+      total: totalQuestions,
+    });
   });
 
   return NextResponse.json({ ok: true, resultId: result.id, expAwarded, newBadges });

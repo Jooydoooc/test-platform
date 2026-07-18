@@ -27,14 +27,28 @@ export async function getGroupLeaderboard(): Promise<Leaderboard> {
   const { data, error } = await supabase.rpc("group_leaderboard");
   if (error) throw error;
 
-  const ranked: LeaderboardRow[] = (data ?? []).map((r, i) => ({
-    studentId: r.student_id,
-    displayName: r.display_name,
-    avgAccuracy: r.avg_accuracy,
-    resultsCount: r.results_count,
-    isMe: r.is_me,
-    rank: i + 1,
-  }));
+  // Standard competition ranking ("1224"): students tied on the same
+  // (avg_accuracy, results_count) share a rank instead of getting arbitrary
+  // consecutive numbers off the array index. The RPC already returns rows in
+  // rank order with a deterministic tiebreak (migration 0021), so a group is
+  // just a run of rows with an identical sort key.
+  let tieKey: string | null = null;
+  let tieRank = 0;
+  const ranked: LeaderboardRow[] = (data ?? []).map((r, i) => {
+    const key = `${r.avg_accuracy}:${r.results_count}`;
+    if (key !== tieKey) {
+      tieKey = key;
+      tieRank = i + 1; // first row of a new tie group takes its position
+    }
+    return {
+      studentId: r.student_id,
+      displayName: r.display_name,
+      avgAccuracy: r.avg_accuracy,
+      resultsCount: r.results_count,
+      isMe: r.is_me,
+      rank: tieRank,
+    };
+  });
 
   return {
     top: ranked.slice(0, PUBLIC_TOP_N),
