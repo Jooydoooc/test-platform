@@ -189,8 +189,22 @@ export default function DashboardPage() {
 
   // ---------------------------------------------------------------------------
   // Whether real Supabase data is still loading. Show skeleton until resolved.
+  //
+  // Safety net: if a data hook stalls (e.g. a network request that never
+  // settles), don't trap the page on the spinner forever — after a few seconds
+  // render with whatever resolved (zeros/empties are the safe defaults). The
+  // per-hook `.catch` handles thrown errors; this handles indefinite hangs.
   // ---------------------------------------------------------------------------
-  const dataLoading = SUPABASE_ENABLED && (attLoading || masteryLoading || streakLoading);
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setLoadTimedOut(true), 8000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const dataLoading =
+    SUPABASE_ENABLED &&
+    !loadTimedOut &&
+    (attLoading || masteryLoading || streakLoading);
 
   // ---------------------------------------------------------------------------
   // Stats: sourced from Supabase when enabled, localStorage otherwise.

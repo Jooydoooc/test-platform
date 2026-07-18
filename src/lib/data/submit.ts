@@ -6,6 +6,7 @@ import { getServerUser } from "@/lib/auth-server";
 import { gradeQuestion } from "@/lib/data/grading";
 import { computeTestExp, testExpKey } from "@/lib/data/exp";
 import { evaluateAndUnlockBadges } from "@/lib/data/badges";
+import { notifyGroupOfResult } from "@/lib/telegram-notify";
 import type { Json, SkillArea } from "@/lib/database.types";
 
 export interface SubmitResult {
@@ -16,6 +17,10 @@ export interface SubmitResult {
   expAwarded?: number;
   /** Names of badges unlocked by this submission (empty when none). */
   newBadges?: string[];
+  /** Points earned / possible for a freshly graded submission. Omitted on
+   *  replay (already-submitted) paths and undefined until grading completes. */
+  scoreEarned?: number;
+  scoreTotal?: number;
   error?: string;
 }
 
@@ -45,7 +50,7 @@ export async function submitAttempt(
 
   const { data: test, error: testErr } = await supabase
     .from("tests")
-    .select("id, purpose")
+    .select("id, purpose, title")
     .eq("id", testId)
     .single();
   if (testErr || !test) return { ok: false, error: "Test not found." };
@@ -228,11 +233,23 @@ export async function submitAttempt(
     newBadges = [];
   }
 
+  // Post the result to the class Telegram channel (no-op unless configured).
+  // correct/total carry POINTS here, matching the points-weighted accuracy above.
+  await notifyGroupOfResult({
+    studentId: user.id,
+    testTitle: test.title,
+    correct: totalPointsEarned,
+    total: totalPointsPossible,
+    pendingReview: anyPending,
+  });
+
   return {
     ok: true,
     resultId,
     pendingReview: anyPending,
     expAwarded,
     newBadges,
+    scoreEarned: totalPointsEarned,
+    scoreTotal: totalPointsPossible,
   };
 }

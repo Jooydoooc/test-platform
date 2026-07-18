@@ -41,12 +41,60 @@ export default function TelegramPage() {
 
       {status?.configured && status?.ok && (
         <>
+          <ResultsToGroupCard hasChannel={!!status.hasChannel} />
           <SettingsCard />
           <AnnounceCard />
           <StudentChatsCard />
         </>
       )}
     </div>
+  );
+}
+
+function ResultsToGroupCard({ hasChannel }: { hasChannel: boolean }) {
+  return (
+    <Card className="space-y-3">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="font-semibold">Post results to the group</h2>
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+            hasChannel
+              ? "bg-emerald-50 text-emerald-700"
+              : "bg-slate-100 text-slate-600"
+          }`}
+        >
+          <StatusDot color={hasChannel ? "bg-emerald-500" : "bg-slate-400"} />
+          {hasChannel ? "Active" : "Off"}
+        </span>
+      </div>
+      <p className="text-sm text-slate-600">
+        When a student submits a test, the bot posts their score to your class
+        channel automatically — a live results feed for the group.
+      </p>
+      {hasChannel ? (
+        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          Results are being posted to the channel set in{" "}
+          <code className="rounded bg-white px-1">TELEGRAM_CHANNEL_CHAT_ID</code>
+          . Make sure the bot is an admin of that channel so it can post.
+        </p>
+      ) : (
+        <div className="space-y-1 rounded-lg bg-slate-50 p-4 text-sm text-slate-700">
+          <p className="font-medium">Turn it on:</p>
+          <ol className="list-decimal space-y-1 pl-5">
+            <li>Add the bot to your class channel/group as an admin.</li>
+            <li>
+              Set{" "}
+              <code className="rounded bg-white px-1">
+                TELEGRAM_CHANNEL_CHAT_ID
+              </code>{" "}
+              in <code className="rounded bg-white px-1">.env.local</code> (e.g.{" "}
+              <code className="rounded bg-white px-1">-1001234567890</code>).
+            </li>
+            <li>Restart the server and press Re-check above.</li>
+          </ol>
+        </div>
+      )}
+    </Card>
   );
 }
 

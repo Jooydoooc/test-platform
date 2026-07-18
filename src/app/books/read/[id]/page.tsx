@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Info, Sparkles, X } from "lucide-react";
 import { Card, LinkButton } from "@/components/ui";
 import { getBookForRead, type BookForRead } from "@/lib/books-client";
+import { CONTENT_TYPE_LABELS } from "@/lib/books";
 import {
   addExternalWord,
   getCollectedEntries,
@@ -78,6 +79,7 @@ export default function BookReadPage({
 
   const book = data.book;
   const hasGlossary = data.glossary.length > 0;
+  const hasQuestions = data.questionCount > 0;
   const collectedSet = new Set(collected);
   const canPractise = collected.length >= MIN_TO_PRACTISE;
 
@@ -108,7 +110,9 @@ export default function BookReadPage({
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <p className="text-sm font-medium text-slate-500">Vocabulary · Reading</p>
+        <p className="text-sm font-medium text-slate-500">
+          {CONTENT_TYPE_LABELS[book.content_type]}
+        </p>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           {book.title}
         </h1>
@@ -126,6 +130,22 @@ export default function BookReadPage({
           )}
         </p>
       </header>
+
+      {hasQuestions && (
+        <Card className="flex flex-wrap items-center justify-between gap-3 border-brand-200 bg-brand-50/40">
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-900">Comprehension questions</p>
+            <p className="text-sm text-slate-600">
+              {data.questionCount} question{data.questionCount === 1 ? "" : "s"} on this
+              passage.
+            </p>
+          </div>
+          <LinkButton href={`/books/practice/${id}`} className="shrink-0 gap-1.5">
+            Practise
+            <ArrowRight className="size-4" />
+          </LinkButton>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <Card className="text-[17px] leading-9 text-slate-800">

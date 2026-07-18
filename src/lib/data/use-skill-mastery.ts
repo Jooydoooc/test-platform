@@ -149,7 +149,14 @@ export function useSkillMastery(): UseSkillMasteryResult {
       setLoading(false);
     }
 
-    load();
+    // If any await inside load() throws, clear loading so the dashboard's
+    // combined loading gate can never hang on this hook.
+    load().catch(() => {
+      if (active) {
+        setMastery(EMPTY_MASTERY);
+        setLoading(false);
+      }
+    });
 
     return () => {
       active = false;

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Check, Lock } from "lucide-react";
 import { Button, Card, ProgressBar } from "@/components/ui";
 import { startAttempt } from "@/lib/data/attempts";
 import { submitAttempt } from "@/lib/data/submit";
@@ -61,6 +62,13 @@ export function TestTaker({
   const [resultId, setResultId] = useState<string | undefined>();
   const [expAwarded, setExpAwarded] = useState(0);
   const [newBadges, setNewBadges] = useState<string[]>([]);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // Final graded score, once submitted. pendingReview means written answers
+  // still need the teacher, so no definitive percentage is shown yet.
+  const [score, setScore] = useState<{ earned: number; total: number } | null>(
+    null,
+  );
+  const [pendingReview, setPendingReview] = useState(false);
 
   // Forward-only: index only ever increases; past questions are locked.
   const [index, setIndex] = useState(0);
@@ -84,6 +92,12 @@ export function TestTaker({
     setResultId(res.resultId);
     setExpAwarded(res.expAwarded ?? 0);
     setNewBadges(res.newBadges ?? []);
+    setPendingReview(res.pendingReview ?? false);
+    setScore(
+      res.scoreTotal != null && res.scoreEarned != null
+        ? { earned: res.scoreEarned, total: res.scoreTotal }
+        : null,
+    );
     setPhase("finished");
   }, [testId, responses]);
 
@@ -165,14 +179,47 @@ export function TestTaker({
   }
 
   if (phase === "finished") {
+    const pct =
+      score && score.total > 0
+        ? Math.round((score.earned / score.total) * 100)
+        : null;
+    const tone =
+      pct == null
+        ? "text-slate-900"
+        : pct >= 80
+          ? "text-success"
+          : pct >= 50
+            ? "text-brand-600"
+            : "text-error";
     return (
       <Card className="mx-auto max-w-md text-center">
         <h1 className="text-lg font-bold text-slate-900">Test submitted</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          {expAwarded > 0
-            ? `You earned ${expAwarded} EXP.`
-            : "Your answers were recorded."}
-        </p>
+
+        {pendingReview ? (
+          <p className="mt-3 text-sm text-slate-600">
+            Your answers were recorded. Your teacher will grade the written
+            questions, then your score appears in your results.
+          </p>
+        ) : pct != null ? (
+          <div className="mt-4">
+            <p className={`font-mono text-5xl font-bold tabular-nums ${tone}`}>
+              {pct}%
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              {score!.earned} of {score!.total} points
+            </p>
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-slate-600">
+            Your answers were recorded.
+          </p>
+        )}
+
+        {expAwarded > 0 && (
+          <p className="mt-3 text-sm font-semibold text-brand-600">
+            +{expAwarded} EXP earned
+          </p>
+        )}
         {newBadges.length > 0 && (
           <p className="mt-1 text-sm font-medium text-amber-700">
             New badge{newBadges.length > 1 ? "s" : ""}: {newBadges.join(", ")}
@@ -180,9 +227,9 @@ export function TestTaker({
         )}
         <Link
           href={resultId ? `/results?r=${resultId}` : "/tests"}
-          className="mt-4 inline-block text-sm font-semibold text-brand-600 hover:text-brand-700"
+          className="mt-5 inline-block text-sm font-semibold text-brand-600 hover:text-brand-700"
         >
-          {resultId ? "View your result" : "Back to Tests"}
+          {resultId ? "View full result" : "Back to Tests"}
         </Link>
       </Card>
     );
@@ -238,22 +285,28 @@ export function TestTaker({
         </div>
         {remaining != null && (
           <span
+            role="timer"
+            aria-live={remaining <= 30 ? "assertive" : "off"}
             className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold tabular-nums ${
               remaining <= 30
                 ? "bg-red-50 text-red-600"
                 : "bg-slate-100 text-slate-700"
             }`}
           >
+            <span className="sr-only">Time remaining: </span>
             {Math.floor(remaining / 60)}:
             {String(remaining % 60).padStart(2, "0")}
+            {remaining <= 30 && <span className="sr-only"> — hurry</span>}
           </span>
         )}
       </div>
 
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <ProgressBar value={((index + 1) / questions.length) * 100} />
-        <p className="text-xs text-slate-500">
-          Question {index + 1} of {questions.length} · you can’t go back
+        <p className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+          <Lock className="size-3.5 text-slate-400" aria-hidden />
+          Question {index + 1} of {questions.length} · answers lock when you
+          move on
         </p>
       </div>
 
@@ -279,13 +332,14 @@ export function TestTaker({
                   }`}
                 >
                   <span
-                    className={`flex size-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
+                    aria-hidden
+                    className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${
                       on
                         ? "border-brand-500 bg-brand-500 text-white"
-                        : "border-slate-300 text-transparent"
+                        : "border-slate-300"
                     }`}
                   >
-                    ✓
+                    {on && <Check className="size-3" strokeWidth={3} />}
                   </span>
                   {c.text}
                 </button>
@@ -305,19 +359,103 @@ export function TestTaker({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1.5">
         {isLast ? (
-          <Button onClick={finishSubmit} disabled={!answered || submitting}>
+          <Button
+            onClick={() => setConfirmOpen(true)}
+            disabled={!answered || submitting}
+          >
             {submitting ? "Submitting…" : "Submit test"}
           </Button>
         ) : (
-          <Button
-            onClick={() => setIndex((i) => i + 1)}
-            disabled={!answered}
-          >
+          <Button onClick={() => setIndex((i) => i + 1)} disabled={!answered}>
             Next question
           </Button>
         )}
+        {answered && (
+          <p className="text-xs text-slate-500">
+            {isLast
+              ? "You can’t change answers after submitting."
+              : "This locks your answer — you can’t come back."}
+          </p>
+        )}
+      </div>
+
+      {confirmOpen && (
+        <ConfirmSubmit
+          answered={Object.keys(responses).length}
+          total={questions.length}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={() => {
+            setConfirmOpen(false);
+            finishSubmit();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConfirmSubmit({
+  answered,
+  total,
+  onCancel,
+  onConfirm,
+}: {
+  answered: number;
+  total: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    document.getElementById("taker-confirm-submit")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  const unanswered = total - answered;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="taker-confirm-title"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          id="taker-confirm-title"
+          className="text-lg font-bold text-slate-900"
+        >
+          Submit test?
+        </h2>
+        <p className="mt-2 text-sm text-slate-600">
+          You answered{" "}
+          <span className="font-mono tabular-nums">{answered}</span> of{" "}
+          <span className="font-mono tabular-nums">{total}</span>. This can’t be
+          undone — each test is taken once.
+        </p>
+        {unanswered > 0 && (
+          <p className="mt-1 text-sm text-amber-700">
+            {unanswered} unanswered question{unanswered > 1 ? "s" : ""} will
+            score zero.
+          </p>
+        )}
+        <div className="mt-5 flex justify-end gap-3">
+          <Button variant="secondary" onClick={onCancel}>
+            Keep working
+          </Button>
+          <Button id="taker-confirm-submit" onClick={onConfirm}>
+            Submit test
+          </Button>
+        </div>
       </div>
     </div>
   );

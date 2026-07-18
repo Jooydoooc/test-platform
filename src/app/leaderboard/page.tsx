@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Flame, Gem, Trophy, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui";
 
 const XP_PER_LESSON = 60; // rough estimate used only to phrase "complete N more lessons"
 const PUBLIC_TOP_N = 5; // only the top N are shown publicly; each student always sees their own row
@@ -11,6 +12,7 @@ const PUBLIC_TOP_N = 5; // only the top N are shown publicly; each student alway
 // Real leaderboard rows come from the group_xp_leaderboard() RPC: EXP summed from
 // tests + exercises + vocab practice, scoped to the caller's own group, full names.
 type Player = {
+  id: string;
   name: string;
   streak: number;
   xpWeek: number;
@@ -428,9 +430,8 @@ function PodiumCard({ player, rank, isMe }: { player: PlayerWithXp; rank: number
   );
 }
 
-function RankRow({ player, rank, isMe, pool }: { player: PlayerWithXp; rank: number; isMe: boolean; pool: PlayerWithXp[] }) {
+function RankRow({ player, rank, isMe, badges }: { player: PlayerWithXp; rank: number; isMe: boolean; badges: Badge[] }) {
   const tier = player.tier;
-  const badges = getBadges(player, pool);
   return (
     <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isMe ? "bg-brand-50" : "hover:bg-slate-50"}`}>
       <span className={`text-sm font-bold w-7 text-center shrink-0 tabular-nums ${rank <= 3 ? "text-slate-700" : "text-slate-500"}`}>#{rank}</span>
@@ -524,25 +525,38 @@ export default function LeaderboardPage() {
   // Real data: group_xp_leaderboard() sums EXP from tests + exercises + vocab
   // practice, scoped by RLS to the caller's own group. Client read (RPC is
   // grant-execute to authenticated); the function itself does the group scoping.
+  // Extracted so the failed state can offer a "Try again" without a full reload.
+  const mounted = useRef(true);
   useEffect(() => {
-    const supabase = createClient();
-    let active = true;
-    supabase.rpc("group_xp_leaderboard").then(({ data, error }) => {
-      if (!active) return;
-      if (error) {
-        setFailed(true);
-        setRows([]);
-      } else {
-        setRows((data ?? []) as LeaderRow[]);
-      }
-    });
+    mounted.current = true;
     return () => {
-      active = false;
+      mounted.current = false;
     };
   }, []);
 
+  const loadBoard = useCallback(() => {
+    setRows(null);
+    setFailed(false);
+    createClient()
+      .rpc("group_xp_leaderboard")
+      .then(({ data, error }) => {
+        if (!mounted.current) return;
+        if (error) {
+          setFailed(true);
+          setRows([]);
+        } else {
+          setRows((data ?? []) as LeaderRow[]);
+        }
+      });
+  }, []);
+
+  useEffect(() => {
+    loadBoard();
+  }, [loadBoard]);
+
   const withXp = useMemo<PlayerWithXp[]>(() => {
     const players: Player[] = (rows ?? []).map((r) => ({
+      id: r.student_id,
       name: r.display_name || "Student",
       streak: r.streak,
       xpWeek: r.xp_week,
@@ -565,12 +579,22 @@ export default function LeaderboardPage() {
     return map;
   }, [withXp]);
 
+  // Compute each player's badges once (getBadges scans the whole pool for the
+  // week leader), instead of recomputing per row on every render.
+  const badgesByPlayer = useMemo(() => {
+    const map = new Map<string, Badge[]>();
+    for (const p of withXp) map.set(p.id, getBadges(p, withXp));
+    return map;
+  }, [withXp]);
+
   const me = ranked.find((p) => p.isMe) ?? null;
   const myRank = me ? ranked.findIndex((p) => p.isMe) + 1 : 0;
   const personAbove = me && myRank > 1 ? ranked[myRank - 2] : null;
   const xpToPass = personAbove && me ? personAbove.xp - me.xp + 1 : 0;
 
-  // Rank + division are pinned to ALL-TIME XP — never demoted by the period toggle.
+  // Tier + division are pinned to ALL-TIME XP so the period toggle never demotes a
+  // student's rank badge. The numeric position (#myRank) intentionally tracks the
+  // selected period — labeled "this week / overall" in the card so the two agree.
   const myTier = me ? tierFor(me.xpTotal) : TIERS[0];
   const myDiv = me ? divisionInfo(me.xpTotal, myTier) : null;
   const myTierIdx = tierIndex(myTier);
@@ -583,7 +607,7 @@ export default function LeaderboardPage() {
         ? `${lessonsToNextDiv} more lesson${lessonsToNextDiv === 1 ? "" : "s"}`
         : "a few more lessons";
   const proximityWord = myDiv && myDiv.progressPct >= 60 ? "close to" : "on your way to";
-  const myBadges = me ? getBadges(me, withXp) : [];
+  const myBadges = me ? (badgesByPlayer.get(me.id) ?? []) : [];
 
   // Rank-journey ladder: by default show only tiers that carry meaning right now —
   // populated tiers plus the viewer's own tier and its immediate neighbours. Empty
@@ -602,8 +626,8 @@ export default function LeaderboardPage() {
   const legendBadges: Badge[] = [];
   {
     const seen = new Set<string>();
-    for (const p of withXp)
-      for (const b of getBadges(p, withXp))
+    for (const list of badgesByPlayer.values())
+      for (const b of list)
         if (!seen.has(b.label)) {
           seen.add(b.label);
           legendBadges.push(b);
@@ -649,7 +673,12 @@ export default function LeaderboardPage() {
       ) : failed ? (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-10 text-center">
           <p className="text-lg font-bold text-slate-900">Couldn&apos;t load standings</p>
-          <p className="mt-1 text-sm text-slate-600">The leaderboard is temporarily unavailable. Please try again shortly.</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-slate-600">The leaderboard is temporarily unavailable. Check your connection and try again.</p>
+          <div className="mt-4 flex justify-center">
+            <Button variant="secondary" onClick={loadBoard}>
+              Try again
+            </Button>
+          </div>
         </div>
       ) : (
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6 lg:items-start">
@@ -737,7 +766,7 @@ export default function LeaderboardPage() {
         <p className="text-sm font-semibold text-slate-700 px-1">Top 3 {period === "total" ? "of all time" : period === "week" ? "this week" : "this month"}</p>
         <div className="flex items-end gap-3 overflow-x-auto pb-1 sm:overflow-visible">
           {top3.map((p, i) => (
-            <PodiumCard key={p.name + i} player={p} rank={i + 1} isMe={p.isMe} />
+            <PodiumCard key={p.id} player={p} rank={i + 1} isMe={p.isMe} />
           ))}
         </div>
       </div>
@@ -754,14 +783,14 @@ export default function LeaderboardPage() {
         </div>
         <div className="bg-white rounded-2xl border border-slate-200 shadow-card divide-y divide-slate-100 overflow-hidden">
           {visible.map((p, i) => (
-            <RankRow key={p.name + i} player={p} rank={i + 1} isMe={p.isMe} pool={withXp} />
+            <RankRow key={p.id} player={p} rank={i + 1} isMe={p.isMe} badges={badgesByPlayer.get(p.id) ?? []} />
           ))}
           {!showAll && !meVisible && myRow && (
             <>
               <div className="text-center text-slate-300 text-xs py-1 select-none" aria-hidden="true">
                 ···
               </div>
-              <RankRow player={myRow} rank={myListIdx + 1} isMe pool={withXp} />
+              <RankRow player={myRow} rank={myListIdx + 1} isMe badges={badgesByPlayer.get(myRow.id) ?? []} />
             </>
           )}
         </div>

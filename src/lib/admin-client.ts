@@ -64,3 +64,17 @@ export async function createGroup(
   const body = (await res.json()) as { group: GroupOption };
   return body.group;
 }
+
+export async function updateGroup(
+  id: string,
+  payload: { name?: string; level?: Level },
+): Promise<GroupOption> {
+  const res = await fetch(`/api/admin/groups/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const body = (await res.json()) as { group: GroupOption };
+  return body.group;
+}

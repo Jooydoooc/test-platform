@@ -75,6 +75,8 @@ export interface TelegramStatus {
   ok?: boolean;
   username?: string | null;
   hasAdminChat?: boolean;
+  /** Whether TELEGRAM_CHANNEL_CHAT_ID is set — the auto-post-to-group switch. */
+  hasChannel?: boolean;
   error?: string | null;
 }
 

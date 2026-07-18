@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   const { data, error } = await admin
     .from("groups")
     .insert({ name, level: body.level, owner_id: gate.user.id })
-    .select("id, name")
+    .select("id, name, level")
     .single();
 
   if (error || !data) {

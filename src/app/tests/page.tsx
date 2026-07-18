@@ -43,7 +43,6 @@ import {
   useTests,
 } from "@/lib/store";
 import {
-  LEVEL_TESTS,
   TEST_GROUPS,
   type Attempt,
   type Test,
@@ -185,7 +184,6 @@ export default function TestsPage() {
 
   // ---- UI state ----
   const [group, setGroup] = useState<TestGroup>(MENU_GROUPS[0]);
-  const [activeLevel, setActiveLevel] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [status, setStatus] =
@@ -271,11 +269,6 @@ export default function TestsPage() {
   // ---- filtered + sorted list for the main column ----
   const shown = useMemo(() => {
     let list = tests.filter((t) => groupOf(t) === group);
-    if (group === "Level Tests" && activeLevel) {
-      list = list.filter(
-        (t) => t.title.toLowerCase() === activeLevel.toLowerCase(),
-      );
-    }
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -299,7 +292,7 @@ export default function TestsPage() {
     else sorted.sort((a, b) => b.questions.length - a.questions.length);
     return sorted;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tests, group, activeLevel, query, category, status, duration, sort, stats]);
+  }, [tests, group, query, category, status, duration, sort, stats]);
 
   const noTestsAtAll = tests.length === 0;
 
@@ -420,71 +413,43 @@ export default function TestsPage() {
                 const Icon = meta.icon;
                 const count = tests.filter((t) => groupOf(t) === g).length;
                 const isActive = g === group;
-                const isLevel = g === "Level Tests";
                 return (
-                  <div key={g}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setGroup(g);
-                        setActiveLevel(null);
-                      }}
-                      aria-current={isActive ? "page" : undefined}
-                      className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold transition ${
-                        isActive
-                          ? "bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-[0_8px_20px_-6px_rgba(90,63,202,0.55)]"
-                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                      }`}
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
-                            isActive
-                              ? "bg-white/20 text-white"
-                              : "bg-brand-50 text-brand-600"
-                          }`}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <span className="truncate">{g}</span>
-                      </span>
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => {
+                      setGroup(g);
+                      setSidebarOpen(false);
+                    }}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold transition ${
+                      isActive
+                        ? "bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-[0_8px_20px_-6px_rgba(90,63,202,0.55)]"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
                       <span
-                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[11.5px] font-bold ${
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
                           isActive
-                            ? "border-transparent bg-white/20 text-white"
-                            : "border-slate-200 bg-slate-50 text-slate-400"
+                            ? "bg-white/20 text-white"
+                            : "bg-brand-50 text-brand-600"
                         }`}
                       >
-                        {count}
+                        <Icon className="h-4 w-4" />
                       </span>
-                    </button>
-
-                    {isLevel && isActive && (
-                      <div className="my-2 ml-[22px] space-y-0.5 border-l-2 border-slate-200 pl-2">
-                        {LEVEL_TESTS.map((name) => {
-                          const isSel =
-                            activeLevel?.toLowerCase() === name.toLowerCase();
-                          return (
-                            <button
-                              key={name}
-                              type="button"
-                              onClick={() =>
-                                setActiveLevel(isSel ? null : name)
-                              }
-                              aria-current={isSel ? "true" : undefined}
-                              className={`block w-full truncate rounded-lg px-3 py-1.5 text-left text-[13px] transition ${
-                                isSel
-                                  ? "bg-brand-50 font-bold text-brand-700"
-                                  : "font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-                              }`}
-                            >
-                              {name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                      <span className="truncate">{g}</span>
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[11.5px] font-bold ${
+                        isActive
+                          ? "border-transparent bg-white/20 text-white"
+                          : "border-slate-200 bg-slate-50 text-slate-400"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
                 );
               })}
             </nav>
@@ -498,7 +463,7 @@ export default function TestsPage() {
           {noTestsAtAll ? (
             <EmptyState mode="none" isAdmin={isAdmin} />
           ) : shown.length === 0 ? (
-            <EmptyState mode="filtered" label={activeLevel ?? group} isAdmin={isAdmin} />
+            <EmptyState mode="filtered" label={group} isAdmin={isAdmin} />
           ) : (
             <div className="grid gap-5 md:grid-cols-2">
               {shown.map((t) => (
@@ -621,7 +586,9 @@ export default function TestsPage() {
             </div>
             <div className="mt-4 flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-700">
               <Flame className="h-4 w-4" />
-              {dash.streak}-day streak — keep it alive!
+              {dash.streak > 0
+                ? `${dash.streak}-day streak — keep it alive!`
+                : "Finish a test today to start a streak."}
             </div>
           </Card>
         </aside>
@@ -793,7 +760,7 @@ function TestCard({
           {completed ? (
             <>
               <RotateCcw className="h-4 w-4" />
-              Continue
+              Retake
             </>
           ) : (
             <>
@@ -806,7 +773,7 @@ function TestCard({
 
         {completed && (
           <LinkButton
-            href={`/tests/${test.id}`}
+            href={`/tests/${test.id}?review=1`}
             variant="secondary"
             className="flex-1"
           >
@@ -872,7 +839,7 @@ function EmptyState({
           : "Try clearing the search or switching filters to see more tests."}
       </p>
       {isAdmin && (
-        <LinkButton href="/author" className="mt-5">
+        <LinkButton href="/admin/tests" className="mt-5">
           <Sparkles className="h-4 w-4" />
           {mode === "none" ? "Create a test" : "Author a new test"}
           <ArrowRight className="h-4 w-4" />

@@ -22,9 +22,12 @@ export const CONTENT_TYPE_LABELS: Record<BookContentType, string> = {
   ARTICLES: "Articles",
 };
 
-/** Grammar & Vocabulary hold quiz questions; Reading & Articles hold a text + glossary. */
+/**
+ * Question units hold a drilling CSV (quiz items); Articles hold a text + glossary.
+ * Reading uploads the AI-generated drilling CSV too — only Articles stay passage-based.
+ */
 export function isQuestionBook(type: BookContentType): boolean {
-  return type === "GRAMMAR" || type === "VOCABULARY";
+  return type === "GRAMMAR" || type === "VOCABULARY" || type === "READING";
 }
 
 export const LEVEL_OPTIONS: { value: Level; label: string }[] = [
