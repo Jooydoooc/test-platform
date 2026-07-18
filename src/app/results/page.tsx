@@ -5,23 +5,67 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Card, LinkButton } from "@/components/ui";
 import { useAttempts } from "@/lib/store";
+import { useMyAttempts } from "@/lib/data/my-attempts";
+import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 import { useSession } from "@/lib/auth";
+
+// A single row shape the table renders, sourced from either the real Supabase
+// history (useMyAttempts) or the localStorage prototype store (useAttempts).
+interface ResultRow {
+  id: string;
+  testId: string;
+  testTitle: string;
+  score: number;
+  maxScore: number;
+  submittedAt: number;
+  /** Where "Take again" points, or null when we can't reconstruct a take URL
+   *  (Supabase-graded tests are taken via /t/<token>, not /tests/<id>). */
+  retakeHref: string | null;
+}
 
 export default function ResultsPage() {
   const { user } = useSession();
-  const attempts = useAttempts();
+  // Both hooks are called unconditionally (rules of hooks); we pick the source
+  // below. When Supabase is off, useMyAttempts returns [] immediately; when it's
+  // on, the localStorage store is empty for server-graded tests.
+  const { attempts: supaAttempts, loading: supaLoading } = useMyAttempts();
+  const localAttempts = useAttempts();
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("r") ?? null;
   const highlightRef = useRef<HTMLTableRowElement | null>(null);
 
-  // Filter to current user only — shared-device safety.
-  const mine = useMemo(() => {
+  const loading = SUPABASE_ENABLED ? supaLoading : false;
+
+  // Normalise the active source to ResultRow[], newest first. useMyAttempts
+  // already scopes to the signed-in student and sorts; the local store is a
+  // shared array, so we filter it by the signed-in name for shared-device safety.
+  const mine = useMemo<ResultRow[]>(() => {
+    if (SUPABASE_ENABLED) {
+      return supaAttempts.map((a) => ({
+        id: a.id,
+        testId: a.testId,
+        testTitle: a.testTitle,
+        score: a.score,
+        maxScore: a.maxScore,
+        submittedAt: a.submittedAt,
+        retakeHref: null,
+      }));
+    }
     if (!user) return [];
     const name = user.name.trim().toLowerCase();
-    return attempts
+    return localAttempts
       .filter((a) => a.takerName.trim().toLowerCase() === name)
-      .sort((a, b) => b.submittedAt - a.submittedAt);
-  }, [attempts, user]);
+      .sort((a, b) => b.submittedAt - a.submittedAt)
+      .map((a) => ({
+        id: a.id,
+        testId: a.testId,
+        testTitle: a.testTitle,
+        score: a.score,
+        maxScore: a.maxScore,
+        submittedAt: a.submittedAt,
+        retakeHref: `/tests/${a.testId}`,
+      }));
+  }, [supaAttempts, localAttempts, user]);
 
   // Scroll the highlighted row into view after render.
   useEffect(() => {
@@ -39,7 +83,12 @@ export default function ResultsPage() {
         </p>
       </div>
 
-      {mine.length === 0 ? (
+      {loading ? (
+        <Card className="py-12 text-center">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-600" />
+          <p className="text-sm text-slate-500">Loading your results…</p>
+        </Card>
+      ) : mine.length === 0 ? (
         <Card className="py-12 text-center">
           <p className="text-sm text-slate-600">No results yet. Take a test to see your results here.</p>
           <LinkButton href="/tests" variant="secondary" className="mt-4">
@@ -95,12 +144,14 @@ export default function ResultsPage() {
                       {new Date(a.submittedAt).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
-                      <Link
-                        href={`/tests/${a.testId}`}
-                        className="text-xs font-semibold text-brand-600 hover:text-brand-700"
-                      >
-                        Take again
-                      </Link>
+                      {a.retakeHref && (
+                        <Link
+                          href={a.retakeHref}
+                          className="text-xs font-semibold text-brand-600 hover:text-brand-700"
+                        >
+                          Take again
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 );

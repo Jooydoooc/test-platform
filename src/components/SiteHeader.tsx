@@ -119,9 +119,11 @@ export function SiteHeader() {
                   <p className="truncate text-sm font-medium text-slate-900">
                     {user.name}
                   </p>
-                  <p className="truncate text-xs text-slate-500">
-                    @{user.username}
-                  </p>
+                  {user.username && (
+                    <p className="truncate text-xs text-slate-500">
+                      @{user.username}
+                    </p>
+                  )}
                 </div>
                 <MenuSeparator />
                 <MenuItem render={<Link href="/dashboard" />}>
@@ -210,9 +212,11 @@ export function SiteHeader() {
               <p className="truncate text-sm font-medium text-slate-900">
                 {user.name}
               </p>
-              <p className="truncate text-xs text-slate-500">
-                @{user.username}
-              </p>
+              {user.username && (
+                <p className="truncate text-xs text-slate-500">
+                  @{user.username}
+                </p>
+              )}
             </div>
             {isAdmin && (
               <ShieldCheckIcon

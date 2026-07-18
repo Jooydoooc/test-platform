@@ -27,6 +27,9 @@ export function useSupabaseSession(): { user: User | null; loading: boolean } {
         .eq("id", userId)
         .single();
       if (!active) return;
+      // Supabase profiles have no username column; derive a stable handle from
+      // the email local-part so the header shows "@jane" instead of "@undefined".
+      const handle = email ? email.split("@")[0] : undefined;
       if (profile) {
         const name =
           `${profile.first_name} ${profile.last_name}`.trim() || email;
@@ -34,10 +37,17 @@ export function useSupabaseSession(): { user: User | null; loading: boolean } {
           id: userId,
           email,
           name,
+          username: handle,
           role: toAppRole(profile.role),
         });
       } else {
-        setUser({ id: userId, email, name: email, role: "student" });
+        setUser({
+          id: userId,
+          email,
+          name: email,
+          username: handle,
+          role: "student",
+        });
       }
       setLoading(false);
     }

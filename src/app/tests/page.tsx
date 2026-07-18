@@ -34,6 +34,10 @@ import {
 } from "lucide-react";
 import { Badge, Button, Card, LinkButton, ProgressBar } from "@/components/ui";
 import { useSession } from "@/lib/auth";
+import { useStudentXp } from "@/lib/xp";
+import { useStreak } from "@/lib/data/use-streak";
+import { useMyAttempts } from "@/lib/data/my-attempts";
+import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 import {
   bookOf,
   groupOf,
@@ -231,6 +235,39 @@ export default function TestsPage() {
     };
   }, [tests, attempts, stats]);
 
+  // Identity/progress stats must match the header XP pill and the dashboard,
+  // which read real Supabase data. When Supabase is on we source XP, level,
+  // streak, completed count, and average from the same hooks the dashboard uses
+  // (the localStorage `dash` above only ever saw prototype/practice attempts, so
+  // it contradicted the pill). "Total Tests" stays the local catalog size — it
+  // describes the tests visible on this page. When Supabase is off we fall back
+  // to the local `dash` so the prototype keeps working. These hooks are called
+  // unconditionally and self-gate on SUPABASE_ENABLED.
+  const { xp: realXp, level: realLevel } = useStudentXp();
+  const { current: realStreak } = useStreak();
+  const { attempts: realAttempts } = useMyAttempts();
+
+  const headerStats = useMemo(() => {
+    if (!SUPABASE_ENABLED) return dash;
+    const completedTests = new Set(realAttempts.map((a) => a.testId)).size;
+    const avg =
+      realAttempts.length > 0
+        ? Math.round(
+            (realAttempts.reduce((s, a) => s + a.accuracy, 0) /
+              realAttempts.length) *
+              100,
+          )
+        : 0;
+    return {
+      total: tests.length,
+      completed: completedTests,
+      avg,
+      xp: realXp,
+      level: realLevel.name,
+      streak: realStreak,
+    };
+  }, [dash, realAttempts, realXp, realLevel, realStreak, tests.length]);
+
   // ---- per-skill progress (avg best score across that group's tests) ----
   const skillProgress = useMemo(() => {
     return SKILL_GROUPS.map((g) => {
@@ -325,23 +362,23 @@ export default function TestsPage() {
 
           {/* Dashboard stats */}
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <StatTile icon={Layers} label="Total Tests" value={dash.total} />
+            <StatTile icon={Layers} label="Total Tests" value={headerStats.total} />
             <StatTile
               icon={CheckCircle2}
               label="Completed"
-              value={dash.completed}
+              value={headerStats.completed}
             />
             <StatTile
               icon={TrendingUp}
               label="Average Score"
-              value={`${dash.avg}%`}
+              value={`${headerStats.avg}%`}
             />
-            <StatTile icon={Award} label="Current Level" value={dash.level} />
-            <StatTile icon={Zap} label="XP Earned" value={dash.xp} />
+            <StatTile icon={Award} label="Current Level" value={headerStats.level} />
+            <StatTile icon={Zap} label="XP Earned" value={headerStats.xp} />
             <StatTile
               icon={Flame}
               label="Streak"
-              value={`${dash.streak}d`}
+              value={`${headerStats.streak}d`}
             />
           </div>
         </div>
@@ -676,7 +713,6 @@ function TestCard({
   const [preview, setPreview] = useState(false);
   const diff = difficultyOf(test);
   const mins = estMinutes(test);
-  const xp = xpReward(test);
   const points = maxScore(test);
   const typeCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -720,7 +756,7 @@ function TestCard({
         <Meta icon={ListChecks} label={`${test.questions.length} Qs`} />
         <Meta icon={Star} label={`${points} pts`} />
         <Meta icon={Clock} label={`~${mins}m`} />
-        <Meta icon={Zap} label={`${xp} XP`} />
+        <Meta icon={Zap} label="Practice" />
       </div>
 
       {/* Best score bar (only once attempted) */}
