@@ -314,6 +314,12 @@ export function FullscreenGuard({
         >
           Re-enter fullscreen
         </button>
+        <a
+          href="/tests"
+          className="mt-3 inline-block text-xs font-medium text-slate-400 transition hover:text-slate-600"
+        >
+          Leave test
+        </a>
       </div>
     </div>
   );

@@ -38,6 +38,14 @@ const PROCTOR_BLOCK = `
     background:rgba(15,23,42,.85);color:#c7d2fe;font-family:-apple-system,sans-serif;font-size:12px;font-weight:700;
     padding:6px 11px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
   #lx-pill.flag{background:#7f1d1d;color:#fecaca}
+  #lx-done{display:none;position:fixed;left:0;right:0;bottom:0;z-index:2147483646;
+    align-items:center;justify-content:center;gap:14px;padding:12px 16px;text-align:center;
+    background:rgba(255,255,255,.95);backdrop-filter:blur(8px);border-top:1px solid #e2e8f0;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+  #lx-done.show{display:flex}
+  #lx-done #lx-back{background:#4f46e5;color:#fff;font-weight:700;font-size:14px;padding:10px 22px;
+    border-radius:10px;text-decoration:none;box-shadow:0 6px 16px rgba(79,70,229,.3)}
+  #lx-done #lx-back:hover{background:#4338ca}
 </style>
 <div id="lx-gate">
   <div class="lx-panel">
@@ -55,17 +63,31 @@ const PROCTOR_BLOCK = `
 <div id="lx-guard">
   <div class="lx-panel" style="text-align:center">
     <h2>Return to secure mode</h2>
-    <p>You left fullscreen. This test is proctored and the event was recorded. Re-enter to continue.</p>
+    <p>You left fullscreen. This test is proctored and the event was recorded. Re-enter to continue, or leave the test.</p>
     <button class="lx-btn" id="lx-reenter">Re-enter fullscreen</button>
+    <a href="/tests" id="lx-leave" style="display:inline-block;margin-top:12px;font-size:13px;color:#64748b;text-decoration:none">Leave test</a>
   </div>
 </div>
 <div id="lx-pill"><span>&#128737; Secure</span><span id="lx-count"></span></div>
+<div id="lx-done">
+  <span style="font-size:14px;color:#475569;font-weight:600">Test complete.</span>
+  <a href="/tests" id="lx-back">Back to Test Center</a>
+</div>
 <script>
 (function(){
-  var started=false, integrity={violations:0,flags:{}};
+  var started=false, finished=false, integrity={violations:0,flags:{}};
   var gate=document.getElementById('lx-gate'), guard=document.getElementById('lx-guard'),
-      pill=document.getElementById('lx-pill'), count=document.getElementById('lx-count');
+      pill=document.getElementById('lx-pill'), count=document.getElementById('lx-count'),
+      done=document.getElementById('lx-done');
   function inFs(){return !!(document.fullscreenElement||document.webkitFullscreenElement);}
+  // Called once the test's score has been submitted: lift the lockdown so the
+  // student can leave fullscreen and return to the Test Center (fixes the trap
+  // where the guard kept demanding re-entry after the test was already done).
+  function release(){
+    if(finished)return;finished=true;started=false;
+    guard.style.display='none';pill.style.display='none';done.className='show';
+    if(inFs()){var ex=document.exitFullscreen||document.webkitExitFullscreen;try{ex&&ex.call(document);}catch(x){}}
+  }
   function reqFs(){var e=document.documentElement;var f=e.requestFullscreen||e.webkitRequestFullscreen;try{var r=f&&f.call(e);if(r&&r.catch)r.catch(function(){});}catch(x){}}
   function editable(el){if(!el||!el.tagName)return false;var t=el.tagName.toUpperCase();return t==='INPUT'||t==='TEXTAREA'||el.isContentEditable;}
   function render(){count.textContent=integrity.violations>0?('· '+integrity.violations):'';pill.className=integrity.violations>0?'flag':'';}
@@ -74,13 +96,21 @@ const PROCTOR_BLOCK = `
   // Attach the integrity tally to the score POST without touching the test's code.
   var _fetch=window.fetch;
   window.fetch=function(input,init){
+    var isSubmit=false;
     try{
       var lt=window.LEXORA_TEST||{};var url=(typeof input==='string')?input:(input&&input.url);
-      if(lt.submitUrl&&url&&url.indexOf(lt.submitUrl)!==-1&&init&&typeof init.body==='string'){
-        var b=JSON.parse(init.body);b.integrity={violations:integrity.violations,flags:integrity.flags};init.body=JSON.stringify(b);
+      if(lt.submitUrl&&url&&url.indexOf(lt.submitUrl)!==-1){
+        isSubmit=true;
+        if(init&&typeof init.body==='string'){
+          var b=JSON.parse(init.body);b.integrity={violations:integrity.violations,flags:integrity.flags};init.body=JSON.stringify(b);
+        }
       }
     }catch(x){}
-    return _fetch.apply(this,arguments);
+    var p=_fetch.apply(this,arguments);
+    // The hosted test POSTs its score exactly once, at the end — releasing the
+    // lockdown when that request settles lets the student navigate away.
+    if(isSubmit){try{p.then(function(){release();},function(){release();});}catch(x){}}
+    return p;
   };
 
   document.addEventListener('contextmenu',function(e){if(started){e.preventDefault();record('right_click');}});
@@ -95,7 +125,7 @@ const PROCTOR_BLOCK = `
   });
   window.addEventListener('blur',function(){if(started)record('window_blur');});
   document.addEventListener('visibilitychange',function(){if(started&&document.hidden)record('tab_switch');});
-  function onFs(){if(!started)return;if(!inFs()){record('fullscreen_exit');guard.style.display='flex';}else{guard.style.display='none';}}
+  function onFs(){if(!started||finished)return;if(!inFs()){record('fullscreen_exit');guard.style.display='flex';}else{guard.style.display='none';}}
   document.addEventListener('fullscreenchange',onFs);
   document.addEventListener('webkitfullscreenchange',onFs);
 
