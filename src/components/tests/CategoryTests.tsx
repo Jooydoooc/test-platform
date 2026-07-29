@@ -8,11 +8,12 @@
 // Ported from the former single-page /tests view (the group rail is gone — the
 // page IS the category).
 
-import { useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
   ArrowRight,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Eye,
@@ -155,7 +156,46 @@ export function CategoryTests({ group }: { group: TestGroup }) {
     return [...list].sort((a, b) => b.createdAt - a.createdAt);
   }, [hosted, group, query, status]);
 
-  const nothing = shown.length === 0 && shownHosted.length === 0;
+  // One ordered list for the carousel: hosted (interactive) tests first, then
+  // local-store tests. The page shows exactly one at a time.
+  type Item =
+    | { kind: "hosted"; hosted: HostedTest }
+    | { kind: "local"; test: Test };
+  const items = useMemo<Item[]>(
+    () => [
+      ...shownHosted.map((h) => ({ kind: "hosted", hosted: h }) as Item),
+      ...shown.map((t) => ({ kind: "local", test: t }) as Item),
+    ],
+    [shownHosted, shown],
+  );
+
+  const [current, setCurrent] = useState(0);
+  // Reset to the first card whenever the filtered set changes.
+  useEffect(() => {
+    setCurrent(0);
+  }, [query, status, duration, sort, group]);
+  // Keep the index in range if the list shrinks.
+  useEffect(() => {
+    setCurrent((c) => (c > items.length - 1 ? Math.max(0, items.length - 1) : c));
+  }, [items.length]);
+
+  const nothing = items.length === 0;
+
+  // Left/right arrow keys step through the carousel (ignored while typing).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName?.toUpperCase();
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "ArrowLeft") setCurrent((c) => Math.max(0, c - 1));
+      else if (e.key === "ArrowRight")
+        setCurrent((c) => Math.min(items.length - 1, c + 1));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [items.length]);
+
+  const item = items[current];
 
   return (
     <div className="space-y-6">
@@ -198,29 +238,108 @@ export function CategoryTests({ group }: { group: TestGroup }) {
       {nothing ? (
         <EmptyState label={group.replace(" Tests", "")} />
       ) : (
-        <div className="space-y-5">
-          {shownHosted.length > 0 && (
-            <div className="grid gap-5 md:grid-cols-2">
-              {shownHosted.map((h) => (
-                <HostedTestCard key={h.id} test={h} />
-              ))}
-            </div>
-          )}
-          {shown.length > 0 && (
-            <div className="grid gap-5 md:grid-cols-2">
-              {shown.map((t) => (
+        <div>
+          {/* Carousel: one test at a time, with side arrows on larger screens. */}
+          <div className="flex items-stretch gap-3">
+            <CarouselArrow
+              dir="prev"
+              onClick={() => setCurrent((c) => Math.max(0, c - 1))}
+              disabled={current === 0}
+            />
+            <div className="mx-auto w-full max-w-xl">
+              {item.kind === "hosted" ? (
+                <HostedTestCard test={item.hosted} />
+              ) : (
                 <TestCard
-                  key={t.id}
-                  test={t}
-                  completed={isCompleted(t)}
-                  best={bestPctOf(t)}
+                  test={item.test}
+                  completed={isCompleted(item.test)}
+                  best={bestPctOf(item.test)}
                 />
-              ))}
+              )}
             </div>
-          )}
+            <CarouselArrow
+              dir="next"
+              onClick={() =>
+                setCurrent((c) => Math.min(items.length - 1, c + 1))
+              }
+              disabled={current === items.length - 1}
+            />
+          </div>
+
+          {/* Counter + mobile arrows + dots */}
+          <div className="mt-5 flex flex-col items-center gap-3">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setCurrent((c) => Math.max(0, c - 1))}
+                disabled={current === 0}
+                aria-label="Previous test"
+                className="rounded-full border border-slate-200 bg-white p-2 text-slate-600 shadow-card transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-40 sm:hidden"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <span className="text-sm font-semibold text-slate-600 tabular-nums">
+                {current + 1} <span className="text-slate-400">of</span>{" "}
+                {items.length}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setCurrent((c) => Math.min(items.length - 1, c + 1))
+                }
+                disabled={current === items.length - 1}
+                aria-label="Next test"
+                className="rounded-full border border-slate-200 bg-white p-2 text-slate-600 shadow-card transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-40 sm:hidden"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+            {items.length > 1 && items.length <= 12 && (
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                {items.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setCurrent(i)}
+                    aria-label={`Go to test ${i + 1}`}
+                    aria-current={i === current}
+                    className={`h-2 rounded-full transition-all ${
+                      i === current
+                        ? "w-5 bg-brand-600"
+                        : "w-2 bg-slate-300 hover:bg-slate-400"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+// Side navigation arrow (hidden on small screens, where the inline arrows show).
+function CarouselArrow({
+  dir,
+  onClick,
+  disabled,
+}: {
+  dir: "prev" | "next";
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  const Icon = dir === "prev" ? ChevronLeft : ChevronRight;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={dir === "prev" ? "Previous test" : "Next test"}
+      className="hidden shrink-0 items-center self-center rounded-full border border-slate-200 bg-white p-2.5 text-slate-600 shadow-card transition hover:border-brand-300 hover:text-brand-600 disabled:pointer-events-none disabled:opacity-30 sm:flex"
+    >
+      <Icon className="h-5 w-5" />
+    </button>
   );
 }
 
