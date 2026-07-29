@@ -211,12 +211,8 @@ export default function TestCenterPage() {
             <Link
               key={c.group}
               href={c.href}
-              className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-card-hover"
+              className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-card-hover"
             >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(90,63,202,0.10),transparent_70%)]"
-              />
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
                 <Icon className="h-6 w-6" />
               </span>
@@ -225,7 +221,7 @@ export default function TestCenterPage() {
               </h2>
               <p className="mt-1 flex-1 text-sm text-slate-600">{c.blurb}</p>
               <div className="mt-4 flex items-center justify-between">
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500 tabular-nums">
                   {count} test{count === 1 ? "" : "s"}
                 </span>
                 <span className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600">
@@ -247,7 +243,7 @@ export default function TestCenterPage() {
         {recent ? (
           <div className="mt-3 flex items-center gap-3">
             <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-              <span className="text-sm font-extrabold leading-none">
+              <span className="text-sm font-extrabold leading-none tabular-nums">
                 {Math.round(recent.accuracy * 100)}
               </span>
               <span className="text-[9px] font-semibold">%</span>
@@ -256,7 +252,7 @@ export default function TestCenterPage() {
               <p className="truncate text-sm font-semibold text-slate-900">
                 {recent.testTitle}
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 tabular-nums">
                 {recent.score}/{recent.maxScore} · {timeAgo(recent.submittedAt)}
               </p>
             </div>
@@ -284,7 +280,7 @@ function StatTile({
         <Icon className="h-3.5 w-3.5" />
         <span className="truncate">{label}</span>
       </div>
-      <div className="mt-1.5 truncate text-xl font-extrabold leading-tight sm:text-2xl">
+      <div className="mt-1.5 truncate text-xl font-extrabold leading-tight tabular-nums sm:text-2xl">
         {value}
       </div>
     </div>

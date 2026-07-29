@@ -87,7 +87,7 @@ export function CategoryTests({ group }: { group: TestGroup }) {
   const { user } = useSession();
   const tests = useTests().filter((t) => t.questions.length > 0);
   const allAttempts = useAttempts();
-  const { hosted } = useHostedTests();
+  const { hosted, loading: hostedLoading } = useHostedTests();
 
   // Scope stats to the signed-in student (attempts share one localStorage store).
   const attempts = useMemo(() => {
@@ -195,7 +195,9 @@ export function CategoryTests({ group }: { group: TestGroup }) {
         </div>
       </Card>
 
-      {nothing ? (
+      {hostedLoading && nothing ? (
+        <SkeletonGrid />
+      ) : nothing ? (
         <EmptyState label={group.replace(" Tests", "")} />
       ) : (
         <div className="space-y-5">
@@ -230,11 +232,7 @@ export function CategoryTests({ group }: { group: TestGroup }) {
 
 function HostedTestCard({ test }: { test: HostedTest }) {
   return (
-    <article className="relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition hover:-translate-y-0.5 hover:shadow-card-hover">
-      <span
-        aria-hidden
-        className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(90,63,202,0.10),transparent_70%)]"
-      />
+    <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge tone="brand">{scopeLabel(test.skillScope)}</Badge>
         {test.level && (
@@ -290,11 +288,7 @@ function TestCard({
   }, [test]);
 
   return (
-    <article className="relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition hover:-translate-y-0.5 hover:shadow-card-hover">
-      <span
-        aria-hidden
-        className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(90,63,202,0.10),transparent_70%)]"
-      />
+    <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge tone="brand">{groupOf(test).replace(" Tests", "")}</Badge>
         {test.category && <Badge tone="neutral">{test.category}</Badge>}
@@ -325,7 +319,7 @@ function TestCard({
         <div className="mt-4">
           <div className="mb-1 flex items-center justify-between text-xs font-semibold">
             <span className="text-slate-500">Best score</span>
-            <span className="text-brand-700">{best}%</span>
+            <span className="text-brand-700 tabular-nums">{best}%</span>
           </div>
           <ProgressBar
             value={best}
@@ -435,6 +429,39 @@ function FilterSelect({
       </select>
       <ChevronDown className="pointer-events-none absolute right-2.5 h-4 w-4 text-slate-400" />
     </label>
+  );
+}
+
+// Loading placeholder shown while hosted tests resolve. Skeleton over spinner
+// (product register): mirrors the card shape so layout doesn't jump on load.
+// Motion is a single pulse, neutralised under prefers-reduced-motion globally.
+function SkeletonGrid() {
+  return (
+    <div
+      className="grid gap-5 md:grid-cols-2"
+      aria-busy="true"
+      aria-label="Loading tests"
+    >
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div
+          key={i}
+          className="animate-pulse rounded-2xl border border-slate-200 bg-white p-6 shadow-card"
+        >
+          <div className="flex gap-1.5">
+            <div className="h-5 w-16 rounded-full bg-slate-100" />
+            <div className="h-5 w-20 rounded-full bg-slate-100" />
+          </div>
+          <div className="mt-3 h-6 w-3/4 rounded bg-slate-100" />
+          <div className="mt-2 h-4 w-full rounded bg-slate-100" />
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="h-8 rounded-lg bg-slate-100" />
+            <div className="h-8 rounded-lg bg-slate-100" />
+            <div className="h-8 rounded-lg bg-slate-100" />
+          </div>
+          <div className="mt-5 h-11 rounded-xl bg-slate-100" />
+        </div>
+      ))}
+    </div>
   );
 }
 
