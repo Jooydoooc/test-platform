@@ -25,6 +25,7 @@ import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 import { groupOf, useAttempts, useTests } from "@/lib/store";
 import { type TestGroup } from "@/lib/types";
 import { useHostedTests, type HostedTest } from "@/lib/data/hosted-tests";
+import { TestNav } from "@/components/tests/TestNav";
 import type { TestSkillScope } from "@/lib/database.types";
 
 type IconType = ComponentType<{ className?: string }>;
@@ -198,6 +199,8 @@ export default function TestCenterPage() {
           </div>
         </div>
       </header>
+
+      <TestNav />
 
       {/* Category tiles */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
