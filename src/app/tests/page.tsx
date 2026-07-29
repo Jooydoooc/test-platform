@@ -51,6 +51,12 @@ import {
   type Test,
   type TestGroup,
 } from "@/lib/types";
+import {
+  useHostedTests,
+  HOSTED_LEVEL_LABEL,
+  type HostedTest,
+} from "@/lib/data/hosted-tests";
+import type { TestSkillScope } from "@/lib/database.types";
 
 type IconType = ComponentType<{ className?: string }>;
 
@@ -64,6 +70,24 @@ const GROUP_META: Record<TestGroup, { icon: IconType; skill: boolean }> = {
   "Writing Tests": { icon: PenLine, skill: true },
 };
 
+/**
+ * Hosted HTML tests (html_tests.skill_scope) -> Test Center group.
+ * MIXED has no single skill home, so it surfaces in every skill group.
+ */
+const SCOPE_TO_GROUP: Record<TestSkillScope, TestGroup | null> = {
+  GRAMMAR: "Grammar Tests",
+  VOCABULARY: "Vocabulary Tests",
+  READING: "Reading Tests",
+  LISTENING: "Listening Tests",
+  MIXED: null,
+};
+
+/** Short label for a hosted test's skill scope, matching TestCard's group badge. */
+function scopeLabel(scope: TestSkillScope): string {
+  const g = SCOPE_TO_GROUP[scope];
+  return g ? g.replace(" Tests", "") : "Mixed";
+}
+
 /** Groups hidden from the Tests page (still valid elsewhere in the model). */
 const HIDDEN_GROUPS: readonly TestGroup[] = [
   "Level Tests",
@@ -75,6 +99,13 @@ const HIDDEN_GROUPS: readonly TestGroup[] = [
 const MENU_GROUPS = TEST_GROUPS.filter((g) => !HIDDEN_GROUPS.includes(g));
 
 const SKILL_GROUPS = MENU_GROUPS.filter((g) => GROUP_META[g].skill);
+
+/** Does a hosted test belong in the given Test Center group? */
+function hostedInGroup(h: HostedTest, g: TestGroup): boolean {
+  const mapped = SCOPE_TO_GROUP[h.skillScope];
+  // MIXED (mapped === null) shows in any skill group.
+  return mapped === null ? GROUP_META[g].skill : mapped === g;
+}
 
 const DAY = 86_400_000;
 
@@ -154,6 +185,8 @@ export default function TestsPage() {
   const isAdmin = user?.role === "admin";
   const tests = useTests().filter((t) => t.questions.length > 0);
   const allAttempts = useAttempts();
+  // Hosted HTML tests (Supabase) — browsable alongside the local-store tests.
+  const { hosted } = useHostedTests();
 
   // Scope every stat below to the signed-in student. Attempts share one
   // localStorage store, so on a shared device an unfiltered read would blend
@@ -339,7 +372,17 @@ export default function TestsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tests, group, query, category, status, duration, sort, stats]);
 
-  const noTestsAtAll = tests.length === 0;
+  // Hosted tests for the selected group. They have no local category/duration/
+  // completion data, so only the group + search query filter them; they sort
+  // newest-first and render above the local test cards.
+  const shownHosted = useMemo(() => {
+    let list = hosted.filter((h) => hostedInGroup(h, group));
+    const q = query.trim().toLowerCase();
+    if (q) list = list.filter((h) => h.title.toLowerCase().includes(q));
+    return [...list].sort((a, b) => b.createdAt - a.createdAt);
+  }, [hosted, group, query]);
+
+  const noTestsAtAll = tests.length === 0 && hosted.length === 0;
 
   return (
     <div className="space-y-6">
@@ -456,7 +499,9 @@ export default function TestsPage() {
               {MENU_GROUPS.map((g) => {
                 const meta = GROUP_META[g];
                 const Icon = meta.icon;
-                const count = tests.filter((t) => groupOf(t) === g).length;
+                const count =
+                  tests.filter((t) => groupOf(t) === g).length +
+                  hosted.filter((h) => hostedInGroup(h, g)).length;
                 const isActive = g === group;
                 return (
                   <button
@@ -507,18 +552,29 @@ export default function TestsPage() {
         <main className="min-w-0">
           {noTestsAtAll ? (
             <EmptyState mode="none" isAdmin={isAdmin} />
-          ) : shown.length === 0 ? (
+          ) : shown.length === 0 && shownHosted.length === 0 ? (
             <EmptyState mode="filtered" label={group} isAdmin={isAdmin} />
           ) : (
-            <div className="grid gap-5 md:grid-cols-2">
-              {shown.map((t) => (
-                <TestCard
-                  key={t.id}
-                  test={t}
-                  completed={isCompleted(t)}
-                  best={bestPctOf(t)}
-                />
-              ))}
+            <div className="space-y-5">
+              {shownHosted.length > 0 && (
+                <div className="grid gap-5 md:grid-cols-2">
+                  {shownHosted.map((h) => (
+                    <HostedTestCard key={h.id} test={h} />
+                  ))}
+                </div>
+              )}
+              {shown.length > 0 && (
+                <div className="grid gap-5 md:grid-cols-2">
+                  {shown.map((t) => (
+                    <TestCard
+                      key={t.id}
+                      test={t}
+                      completed={isCompleted(t)}
+                      best={bestPctOf(t)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </main>
@@ -698,6 +754,59 @@ function FilterSelect({
       </select>
       <ChevronDown className="pointer-events-none absolute right-2.5 h-4 w-4 text-slate-400" />
     </label>
+  );
+}
+
+// Card for a hosted HTML test. Unlike TestCard there are no local question rows,
+// score history, or difficulty — the test grades itself and links out to
+// /ht/<share_token>. Kept visually consistent with TestCard (same shell/badges).
+function HostedTestCard({ test }: { test: HostedTest }) {
+  return (
+    <article className="relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition hover:-translate-y-0.5 hover:shadow-card-hover">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(90,63,202,0.10),transparent_70%)]"
+      />
+
+      {/* Badges */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge tone="brand">{scopeLabel(test.skillScope)}</Badge>
+        {test.level && (
+          <Badge tone="neutral">{HOSTED_LEVEL_LABEL[test.level]}</Badge>
+        )}
+        <Badge tone="success">
+          <Sparkles className="h-3 w-3" />
+          Interactive
+        </Badge>
+      </div>
+
+      {/* Title */}
+      <h2 className="mt-3 text-lg font-extrabold tracking-tight text-slate-900">
+        {test.title}
+      </h2>
+      <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-slate-600">
+        A self-contained, auto-graded test. Your score saves to your progress.
+      </p>
+
+      {/* Meta stats */}
+      <div className="mt-4 grid grid-cols-2 gap-2 text-[13px] font-semibold text-slate-600 sm:grid-cols-3">
+        <Meta icon={Sparkles} label="Interactive" />
+        <Meta icon={CheckCircle2} label="Auto-graded" />
+        <Meta icon={Zap} label="Earns XP" />
+      </div>
+
+      {/* Action */}
+      <div className="mt-5 flex flex-wrap gap-2">
+        <LinkButton
+          href={`/ht/${test.shareToken}`}
+          className="group min-w-[8rem] flex-1 bg-gradient-to-br from-brand-500 to-brand-600 shadow-[0_10px_24px_-8px_rgba(90,63,202,0.5)] hover:from-brand-600 hover:to-brand-700"
+        >
+          <PlayCircle className="h-4 w-4" />
+          Start Test
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+        </LinkButton>
+      </div>
+    </article>
   );
 }
 
