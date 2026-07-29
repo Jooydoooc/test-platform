@@ -37,9 +37,17 @@ export interface SubmitResult {
 //
 // [Fixes High #7] Per-skill accuracy is now POINTS-weighted, not question-count-
 // weighted. See the perSkill accumulator below.
+// Client-reported proctor tally (see Proctor.tsx / migration 0024). Best-effort
+// integrity signal for teachers; never affects grading or XP.
+export interface AttemptIntegrity {
+  violations: number;
+  flags: Record<string, number>;
+}
+
 export async function submitAttempt(
   testId: string,
   responses: Record<string, unknown>, // questionId -> raw response JSON
+  integrity?: AttemptIntegrity | null,
 ): Promise<SubmitResult> {
   const user = await getServerUser();
   if (!user) return { ok: false, error: "Not signed in." };
@@ -223,6 +231,21 @@ export async function submitAttempt(
       pendingReview: rpcRow.status === "PENDING_REVIEW",
       expAwarded: 0,
     };
+  }
+
+  // Record proctor integrity on the result (best-effort, additive column from
+  // migration 0024). Never blocks the submit: if the column doesn't exist yet
+  // or the write fails, we swallow it — integrity is a teacher hint, not part of
+  // the graded transaction. Only written when the client reported a violation.
+  if (integrity && integrity.violations > 0) {
+    await admin
+      .from("results")
+      .update({
+        integrity_violations: integrity.violations,
+        integrity_flags: integrity.flags,
+      })
+      .eq("id", resultId);
+    // Intentionally ignore the returned error — see note above.
   }
 
   // Badges reuse the shared catalog/rule; best-effort so a failure never blocks

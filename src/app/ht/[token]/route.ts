@@ -3,6 +3,109 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 
+// ---------------------------------------------------------------------------
+// Proctor lockdown injected into every hosted test (strict mode). It is a
+// self-contained inline block (allowed by the page CSP's script-src/style-src
+// 'unsafe-inline') that adds, around whatever the hosted HTML does:
+//   * a "Begin secure test" gate that enters fullscreen on click;
+//   * a re-enter guard when the student leaves fullscreen;
+//   * blocking of copy/cut/paste, right-click, text-selection and devtools keys;
+//   * recording of tab-switch / blur / fullscreen-exit as integrity events;
+//   * a fetch() wrapper that attaches the integrity tally to the score POST, so
+//     hosted tests report proctor data without any change to their own code.
+//
+// Event-type keys match the React proctor (Proctor.tsx) so teacher-facing data
+// is uniform. TRUST NOTE: browser-side deterrence only — a hint, never proof,
+// and it never alters the self-computed score.
+const PROCTOR_BLOCK = `
+<style>
+  #lx-gate,#lx-guard{position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;padding:16px;
+    background:linear-gradient(135deg,#0f172a,#312e81);color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+  #lx-guard{display:none;background:rgba(15,23,42,.9);backdrop-filter:blur(6px)}
+  .lx-panel{max-width:420px;width:100%;background:#fff;color:#1e293b;border-radius:20px;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+  .lx-badge{display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#4338ca;font-size:12px;font-weight:700;
+    padding:5px 11px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em}
+  .lx-panel h2{margin:14px 0 6px;font-size:22px;letter-spacing:-.02em}
+  .lx-panel p{margin:0 0 12px;font-size:14px;color:#475569}
+  .lx-rules{list-style:none;margin:0 0 18px;padding:0;font-size:13.5px;color:#334155}
+  .lx-rules li{display:flex;gap:9px;align-items:flex-start;margin:9px 0}
+  .lx-rules li b{color:#1e293b}
+  .lx-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:#6366f1;margin-top:6px}
+  .lx-btn{width:100%;border:none;cursor:pointer;background:#4f46e5;color:#fff;font-size:15px;font-weight:700;
+    padding:13px;border-radius:12px;box-shadow:0 8px 20px rgba(79,70,229,.35)}
+  .lx-btn:hover{background:#4338ca}
+  #lx-pill{position:fixed;top:12px;right:12px;z-index:2147483645;display:none;align-items:center;gap:6px;
+    background:rgba(15,23,42,.85);color:#c7d2fe;font-family:-apple-system,sans-serif;font-size:12px;font-weight:700;
+    padding:6px 11px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+  #lx-pill.flag{background:#7f1d1d;color:#fecaca}
+</style>
+<div id="lx-gate">
+  <div class="lx-panel">
+    <span class="lx-badge">&#128737; Proctored exam</span>
+    <h2>Secure mode</h2>
+    <p>This is a monitored, single-attempt test. Before you begin:</p>
+    <ul class="lx-rules">
+      <li><span class="lx-dot"></span><span>It runs in <b>fullscreen</b>. Leaving fullscreen is recorded.</span></li>
+      <li><span class="lx-dot"></span><span><b>Switching tabs or apps is recorded</b> as an integrity flag.</span></li>
+      <li><span class="lx-dot"></span><span>Copy, paste and right-click are disabled.</span></li>
+    </ul>
+    <button class="lx-btn" id="lx-begin">&#128737; Begin secure test</button>
+  </div>
+</div>
+<div id="lx-guard">
+  <div class="lx-panel" style="text-align:center">
+    <h2>Return to secure mode</h2>
+    <p>You left fullscreen. This test is proctored and the event was recorded. Re-enter to continue.</p>
+    <button class="lx-btn" id="lx-reenter">Re-enter fullscreen</button>
+  </div>
+</div>
+<div id="lx-pill"><span>&#128737; Secure</span><span id="lx-count"></span></div>
+<script>
+(function(){
+  var started=false, integrity={violations:0,flags:{}};
+  var gate=document.getElementById('lx-gate'), guard=document.getElementById('lx-guard'),
+      pill=document.getElementById('lx-pill'), count=document.getElementById('lx-count');
+  function inFs(){return !!(document.fullscreenElement||document.webkitFullscreenElement);}
+  function reqFs(){var e=document.documentElement;var f=e.requestFullscreen||e.webkitRequestFullscreen;try{var r=f&&f.call(e);if(r&&r.catch)r.catch(function(){});}catch(x){}}
+  function editable(el){if(!el||!el.tagName)return false;var t=el.tagName.toUpperCase();return t==='INPUT'||t==='TEXTAREA'||el.isContentEditable;}
+  function render(){count.textContent=integrity.violations>0?('· '+integrity.violations):'';pill.className=integrity.violations>0?'flag':'';}
+  function record(t){integrity.flags[t]=(integrity.flags[t]||0)+1;integrity.violations++;render();}
+
+  // Attach the integrity tally to the score POST without touching the test's code.
+  var _fetch=window.fetch;
+  window.fetch=function(input,init){
+    try{
+      var lt=window.LEXORA_TEST||{};var url=(typeof input==='string')?input:(input&&input.url);
+      if(lt.submitUrl&&url&&url.indexOf(lt.submitUrl)!==-1&&init&&typeof init.body==='string'){
+        var b=JSON.parse(init.body);b.integrity={violations:integrity.violations,flags:integrity.flags};init.body=JSON.stringify(b);
+      }
+    }catch(x){}
+    return _fetch.apply(this,arguments);
+  };
+
+  document.addEventListener('contextmenu',function(e){if(started){e.preventDefault();record('right_click');}});
+  document.addEventListener('copy',function(e){if(started){e.preventDefault();record('copy');}});
+  document.addEventListener('cut',function(e){if(started){e.preventDefault();record('cut');}});
+  document.addEventListener('paste',function(e){if(started){e.preventDefault();record('paste');}});
+  document.addEventListener('selectstart',function(e){if(started&&!editable(e.target))e.preventDefault();});
+  document.addEventListener('keydown',function(e){
+    if(!started)return;var k=(e.key||'').toLowerCase();var m=e.ctrlKey||e.metaKey;
+    if(e.key==='F12'||(m&&e.shiftKey&&(k==='i'||k==='j'||k==='c'))||(m&&k==='u')){e.preventDefault();record('devtools_key');return;}
+    if(m&&(k==='c'||k==='x'||k==='v'||k==='p'||k==='s'))e.preventDefault();
+  });
+  window.addEventListener('blur',function(){if(started)record('window_blur');});
+  document.addEventListener('visibilitychange',function(){if(started&&document.hidden)record('tab_switch');});
+  function onFs(){if(!started)return;if(!inFs()){record('fullscreen_exit');guard.style.display='flex';}else{guard.style.display='none';}}
+  document.addEventListener('fullscreenchange',onFs);
+  document.addEventListener('webkitfullscreenchange',onFs);
+
+  document.getElementById('lx-begin').addEventListener('click',function(){
+    started=true;gate.style.display='none';pill.style.display='inline-flex';render();reqFs();
+  });
+  document.getElementById('lx-reenter').addEventListener('click',function(){reqFs();guard.style.display='none';});
+})();
+</script>`;
+
 // Serve a hosted HTML test at /ht/<share_token>. Login is required (closed
 // platform, like /t/<token>). The bucket is private and students have no direct
 // object access, so we resolve the token under the caller's RLS, then stream the
@@ -107,15 +210,18 @@ export async function GET(
   //   window.LEXORA_TEST.submitUrl  — the endpoint to POST to
   // Only inject when we have a real attemptId (the attempt must exist before
   // the HTML can submit a score against it).
-  if (attemptId) {
-    const bridge = `<script>window.LEXORA_TEST={attemptId:"${attemptId}",submitUrl:"/api/tests/html/submit"};</script>`;
-    const bodyClose = html.search(/<\/body>/i);
-    if (bodyClose !== -1) {
-      html = html.slice(0, bodyClose) + bridge + html.slice(bodyClose);
-    } else {
-      // No </body> — append to the end (some minimal test HTML omits it).
-      html = html + bridge;
-    }
+  // Bridge (score reporting) needs a real attempt; the proctor lockdown is
+  // injected regardless so the exam is secured even if scoring is unavailable.
+  const bridge = attemptId
+    ? `<script>window.LEXORA_TEST={attemptId:"${attemptId}",submitUrl:"/api/tests/html/submit"};</script>`
+    : "";
+  const inject = bridge + PROCTOR_BLOCK;
+  const bodyClose = html.search(/<\/body>/i);
+  if (bodyClose !== -1) {
+    html = html.slice(0, bodyClose) + inject + html.slice(bodyClose);
+  } else {
+    // No </body> — append to the end (some minimal test HTML omits it).
+    html = html + inject;
   }
 
   // -------------------------------------------------------------------------

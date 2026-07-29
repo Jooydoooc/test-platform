@@ -2,10 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Lock } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Clock,
+  Lock,
+  Maximize,
+  ShieldCheck,
+} from "lucide-react";
 import { Button, Card, ProgressBar } from "@/components/ui";
 import { startAttempt } from "@/lib/data/attempts";
 import { submitAttempt } from "@/lib/data/submit";
+import { useProctor, FullscreenGuard, type Integrity } from "@/components/Proctor";
 import type { Json, QuestionFormat } from "@/lib/database.types";
 
 export interface TakerQuestion {
@@ -63,6 +71,9 @@ export function TestTaker({
   const [expAwarded, setExpAwarded] = useState(0);
   const [newBadges, setNewBadges] = useState<string[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Secure-mode gate: the exam only reveals its questions after the student
+  // clicks "Begin" (which enters fullscreen — fullscreen needs a user gesture).
+  const [secureStarted, setSecureStarted] = useState(false);
   // Final graded score, once submitted. pendingReview means written answers
   // still need the teacher, so no definitive percentage is shown yet.
   const [score, setScore] = useState<{ earned: number; total: number } | null>(
@@ -77,12 +88,22 @@ export function TestTaker({
   const [remaining, setRemaining] = useState<number | null>(null);
 
   const submittingRef = useRef(false);
+  // The proctor is engaged after finishSubmit is defined; finishSubmit reads the
+  // tally through this ref to avoid a definition cycle with useProctor.
+  const getIntegrityRef = useRef<() => Integrity>(() => ({
+    violations: 0,
+    flags: {},
+  }));
 
   const finishSubmit = useCallback(async () => {
     if (submittingRef.current) return;
     submittingRef.current = true;
     setPhase("submitting");
-    const res = await submitAttempt(testId, responses);
+    const res = await submitAttempt(
+      testId,
+      responses,
+      getIntegrityRef.current(),
+    );
     if (!res.ok) {
       setError(res.error ?? "Could not submit.");
       setPhase("taking");
@@ -100,6 +121,21 @@ export function TestTaker({
     );
     setPhase("finished");
   }, [testId, responses]);
+
+  // Proctor (strict lockdown). Enabled while the exam is live; auto-submits when
+  // the student switches tabs/windows. getIntegrity feeds the submit payload.
+  const proctor = useProctor({
+    enabled: phase === "taking" || phase === "submitting",
+    onAutoSubmit: finishSubmit,
+  });
+  getIntegrityRef.current = proctor.getIntegrity;
+
+  // Release the lockdown (and exit fullscreen) once the exam is over.
+  useEffect(() => {
+    if (phase === "finished" || phase === "done" || phase === "blocked") {
+      proctor.disengage();
+    }
+  }, [phase, proctor]);
 
   // Start (or resume) the single attempt, server-side.
   useEffect(() => {
@@ -133,9 +169,10 @@ export function TestTaker({
     };
   }, [testId, questions.length]);
 
-  // Timer tick + auto-submit on expiry.
+  // Timer tick + auto-submit on expiry. Only counts down once the student has
+  // begun (secureStarted), matching when questions become visible.
   useEffect(() => {
-    if (phase !== "taking" || deadline == null) return;
+    if (phase !== "taking" || deadline == null || !secureStarted) return;
     const tick = () => {
       const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
       setRemaining(left);
@@ -144,8 +181,16 @@ export function TestTaker({
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [phase, deadline, finishSubmit]);
+  }, [phase, deadline, secureStarted, finishSubmit]);
 
+  const beginSecure = useCallback(() => {
+    setSecureStarted(true);
+    void proctor.engage();
+  }, [proctor]);
+
+  // -------------------------------------------------------------------------
+  // Terminal / gate screens
+  // -------------------------------------------------------------------------
   if (phase === "loading") {
     return <p className="py-16 text-center text-slate-500">Loading test…</p>;
   }
@@ -246,10 +291,77 @@ export function TestTaker({
     );
   }
 
+  // Secure-start screen: premium pre-exam briefing + the gesture that enters
+  // fullscreen and engages the proctor.
+  if (!secureStarted) {
+    return (
+      <div className="mx-auto max-w-lg">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-card-hover">
+          <div className="relative bg-gradient-to-br from-slate-900 via-brand-900 to-brand-800 p-7 text-white">
+            <div className="pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full bg-brand-500/30 blur-3xl" />
+            <span className="relative inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-brand-100 ring-1 ring-inset ring-white/20">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Proctored exam
+            </span>
+            <h1 className="relative mt-4 text-2xl font-extrabold tracking-tight">
+              {title}
+            </h1>
+            {description && (
+              <p className="relative mt-1.5 text-sm text-brand-100/90">
+                {description}
+              </p>
+            )}
+          </div>
+          <div className="space-y-4 p-7">
+            <p className="text-sm text-slate-600">
+              This is a secure, single-attempt test. Before you begin, please
+              read how it’s monitored:
+            </p>
+            <ul className="space-y-2.5 text-sm text-slate-700">
+              <RuleItem icon={Maximize}>
+                It runs in <b>fullscreen</b>. Leaving fullscreen is recorded.
+              </RuleItem>
+              <RuleItem icon={AlertTriangle}>
+                <b>Switching tabs or apps ends the test</b> and submits your
+                answers automatically.
+              </RuleItem>
+              <RuleItem icon={Lock}>
+                Copy, paste and right-click are disabled. Answers lock as you
+                advance.
+              </RuleItem>
+              {timeLimitSec ? (
+                <RuleItem icon={Clock}>
+                  Time limit:{" "}
+                  <b>
+                    {Math.floor(timeLimitSec / 60)} minute
+                    {timeLimitSec >= 120 ? "s" : ""}
+                  </b>
+                  . The timer runs on the server.
+                </RuleItem>
+              ) : null}
+            </ul>
+            <Button onClick={beginSecure} className="w-full justify-center">
+              <ShieldCheck className="h-4 w-4" />
+              Begin secure test
+            </Button>
+            <p className="text-center text-xs text-slate-400">
+              {questions.length} question{questions.length === 1 ? "" : "s"} ·
+              one attempt
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Live exam
+  // -------------------------------------------------------------------------
   const q = questions[index];
   const isLast = index === questions.length - 1;
   const answered = responses[q.id] !== undefined;
   const submitting = phase === "submitting";
+  const lowTime = remaining != null && remaining <= 30;
 
   const setChoiceSingle = (choiceId: string) =>
     setResponses((r) => ({ ...r, [q.id]: { selected: [choiceId] } }));
@@ -276,30 +388,52 @@ export function TestTaker({
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">{title}</h1>
-          {description && (
-            <p className="text-sm text-slate-600">{description}</p>
-          )}
+      {proctor.needsFullscreen && (
+        <FullscreenGuard onReenter={proctor.reenterFullscreen} />
+      )}
+
+      {/* Premium exam header */}
+      <header className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-900 via-brand-900 to-brand-800 p-5 text-white shadow-card">
+        <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-brand-500/25 blur-3xl" />
+        <div className="relative flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand-100 ring-1 ring-inset ring-white/20">
+              <ShieldCheck className="h-3 w-3" />
+              Secure mode
+            </span>
+            <h1 className="mt-2 truncate text-lg font-bold tracking-tight">
+              {title}
+            </h1>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {proctor.violations > 0 && (
+              <span
+                className="inline-flex items-center gap-1 rounded-lg bg-red-500/20 px-2.5 py-1.5 text-sm font-semibold text-red-200 ring-1 ring-inset ring-red-400/30"
+                title="Proctor flags recorded for your teacher"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {proctor.violations}
+              </span>
+            )}
+            {remaining != null && (
+              <span
+                role="timer"
+                aria-live={lowTime ? "assertive" : "off"}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold tabular-nums ${
+                  lowTime
+                    ? "bg-red-500/25 text-red-100 ring-1 ring-inset ring-red-400/40"
+                    : "bg-white/10 text-white ring-1 ring-inset ring-white/20"
+                }`}
+              >
+                <Clock className="h-3.5 w-3.5" />
+                <span className="sr-only">Time remaining: </span>
+                {Math.floor(remaining / 60)}:
+                {String(remaining % 60).padStart(2, "0")}
+              </span>
+            )}
+          </div>
         </div>
-        {remaining != null && (
-          <span
-            role="timer"
-            aria-live={remaining <= 30 ? "assertive" : "off"}
-            className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold tabular-nums ${
-              remaining <= 30
-                ? "bg-red-50 text-red-600"
-                : "bg-slate-100 text-slate-700"
-            }`}
-          >
-            <span className="sr-only">Time remaining: </span>
-            {Math.floor(remaining / 60)}:
-            {String(remaining % 60).padStart(2, "0")}
-            {remaining <= 30 && <span className="sr-only"> — hurry</span>}
-          </span>
-        )}
-      </div>
+      </header>
 
       <div className="space-y-1.5">
         <ProgressBar value={((index + 1) / questions.length) * 100} />
@@ -310,7 +444,7 @@ export function TestTaker({
         </p>
       </div>
 
-      <Card className="space-y-4">
+      <Card className="space-y-4 select-none">
         <p className="font-medium text-slate-900">{q.prompt}</p>
 
         {isChoice ? (
@@ -393,6 +527,23 @@ export function TestTaker({
         />
       )}
     </div>
+  );
+}
+
+function RuleItem({
+  icon: Icon,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="flex items-start gap-2.5">
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <span className="min-w-0">{children}</span>
+    </li>
   );
 }
 

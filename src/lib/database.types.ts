@@ -191,6 +191,10 @@ export type ResultRow = {
   status: ResultStatus;
   excluded_from_progress: boolean;
   created_at: string;
+  // Anti-cheat telemetry (migration 0024). Client-reported, best-effort; null/0
+  // when nothing was reported. Never affects grading.
+  integrity_violations: number;
+  integrity_flags: Json | null;
 };
 
 export type ResultSkillScoreRow = {

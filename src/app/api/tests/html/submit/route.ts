@@ -22,6 +22,31 @@ const SKILL_AREAS: SkillArea[] = [
   "SPEAKING",
 ];
 
+// Sanitize the client-reported proctor tally (migration 0024). Best-effort
+// telemetry: we never reject a submit over bad integrity data — we just drop it.
+// Caps guard against a tampered payload bloating the row.
+function sanitizeIntegrity(
+  raw: unknown,
+): { violations: number; flags: Record<string, number> } | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  const v = obj.violations;
+  if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return null;
+  const violations = Math.min(Math.floor(v), 100_000);
+  const flags: Record<string, number> = {};
+  if (typeof obj.flags === "object" && obj.flags !== null) {
+    let keys = 0;
+    for (const [k, val] of Object.entries(obj.flags as Record<string, unknown>)) {
+      if (keys >= 20) break; // cap distinct types
+      if (typeof val === "number" && Number.isFinite(val) && val > 0) {
+        flags[k.slice(0, 40)] = Math.min(Math.floor(val), 100_000);
+        keys++;
+      }
+    }
+  }
+  return { violations, flags };
+}
+
 // ---------------------------------------------------------------------------
 // TRUST LEVEL: HTML-test scores are SELF-REPORTED (lower-trust).
 //
@@ -96,7 +121,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { attemptId, skills } = body as Record<string, unknown>;
+  const { attemptId, skills, integrity } = body as Record<string, unknown>;
 
   if (typeof attemptId !== "string" || attemptId.trim() === "") {
     return NextResponse.json(
@@ -301,6 +326,21 @@ export async function POST(req: Request) {
         { status: 500 },
       );
     }
+  }
+
+  // Proctor telemetry (best-effort, additive column from migration 0024). Done
+  // as a SEPARATE update AFTER the result exists — never part of the insert — so
+  // a missing column or bad payload can't fail the submission. Only written when
+  // the client reported a violation; the returned error is intentionally ignored.
+  const integrityCols = sanitizeIntegrity(integrity);
+  if (integrityCols) {
+    await admin
+      .from("results")
+      .update({
+        integrity_violations: integrityCols.violations,
+        integrity_flags: integrityCols.flags,
+      })
+      .eq("id", result.id);
   }
 
   // ---------------------------------------------------------------------------
