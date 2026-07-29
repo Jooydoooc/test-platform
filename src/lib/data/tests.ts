@@ -4,6 +4,8 @@ import type {
   QuestionFormat,
   SkillArea,
   Json,
+  Level,
+  TestSkillScope,
 } from "@/lib/database.types";
 
 // Server-side reads for tests. RLS ensures only logged-in users read content and
@@ -35,6 +37,14 @@ export interface TestShareLink {
   token: string;
 }
 
+export interface HostedTestShareLink {
+  id: string;
+  title: string;
+  token: string;
+  skillScope: TestSkillScope;
+  level: Level | null;
+}
+
 // Teacher-facing: tests with their share tokens, for building /t/<token> links.
 // RLS lets any signed-in user read tests; callers must gate this to teachers.
 export async function listTestShareLinks(): Promise<TestShareLink[]> {
@@ -48,6 +58,31 @@ export async function listTestShareLinks(): Promise<TestShareLink[]> {
     id: t.id,
     title: t.title,
     token: t.share_token,
+  }));
+}
+
+// Teacher-facing: hosted HTML tests with their share tokens, for building
+// /ht/<token> links. Mirrors listTestShareLinks; callers must gate to admins.
+export async function listHostedTestShareLinks(): Promise<HostedTestShareLink[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("html_tests")
+    .select("id, title, share_token, skill_scope, level")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  const rows = (data ?? []) as Array<{
+    id: string;
+    title: string;
+    share_token: string;
+    skill_scope: TestSkillScope;
+    level: Level | null;
+  }>;
+  return rows.map((t) => ({
+    id: t.id,
+    title: t.title,
+    token: t.share_token,
+    skillScope: t.skill_scope,
+    level: t.level,
   }));
 }
 
