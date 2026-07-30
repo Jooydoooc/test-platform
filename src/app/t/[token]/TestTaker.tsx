@@ -13,7 +13,13 @@ import {
 import { Button, Card, ProgressBar } from "@/components/ui";
 import { startAttempt } from "@/lib/data/attempts";
 import { submitAttempt } from "@/lib/data/submit";
-import { useProctor, FullscreenGuard, type Integrity } from "@/components/Proctor";
+import {
+  useProctor,
+  FullscreenGuard,
+  ProctorWarning,
+  fullscreenSupported,
+  type Integrity,
+} from "@/components/Proctor";
 import type { Json, QuestionFormat } from "@/lib/database.types";
 
 export interface TakerQuestion {
@@ -80,6 +86,11 @@ export function TestTaker({
     null,
   );
   const [pendingReview, setPendingReview] = useState(false);
+  // Why the attempt was submitted, so the result screen can explain an
+  // automatic submit instead of showing a bare "Test submitted".
+  const [submitCause, setSubmitCause] = useState<"manual" | "timeout" | "left">(
+    "manual",
+  );
 
   // Forward-only: index only ever increases; past questions are locked.
   const [index, setIndex] = useState(0);
@@ -95,9 +106,12 @@ export function TestTaker({
     flags: {},
   }));
 
-  const finishSubmit = useCallback(async () => {
+  const finishSubmit = useCallback(async (
+    cause: "manual" | "timeout" | "left" = "manual",
+  ) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
+    setSubmitCause(cause);
     setPhase("submitting");
     const res = await submitAttempt(
       testId,
@@ -126,7 +140,7 @@ export function TestTaker({
   // the student switches tabs/windows. getIntegrity feeds the submit payload.
   const proctor = useProctor({
     enabled: phase === "taking" || phase === "submitting",
-    onAutoSubmit: finishSubmit,
+    onAutoSubmit: () => finishSubmit("left"),
   });
   getIntegrityRef.current = proctor.getIntegrity;
 
@@ -176,7 +190,7 @@ export function TestTaker({
     const tick = () => {
       const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
       setRemaining(left);
-      if (left <= 0) finishSubmit();
+      if (left <= 0) finishSubmit("timeout");
     };
     tick();
     const t = setInterval(tick, 1000);
@@ -239,6 +253,14 @@ export function TestTaker({
     return (
       <Card className="mx-auto max-w-md text-center">
         <h1 className="text-lg font-bold text-slate-900">Test submitted</h1>
+
+        {submitCause !== "manual" && (
+          <p className="mx-auto mt-2 max-w-xs rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">
+            {submitCause === "timeout"
+              ? "Time ran out, so your answers were submitted automatically."
+              : "You left the exam, so your answers were submitted automatically."}
+          </p>
+        )}
 
         {pendingReview ? (
           <p className="mt-3 text-sm text-slate-600">
@@ -318,12 +340,14 @@ export function TestTaker({
               read how it’s monitored:
             </p>
             <ul className="space-y-2.5 text-sm text-slate-700">
-              <RuleItem icon={Maximize}>
-                It runs in <b>fullscreen</b>. Leaving fullscreen is recorded.
-              </RuleItem>
+              {fullscreenSupported() && (
+                <RuleItem icon={Maximize}>
+                  It runs in <b>fullscreen</b>. Leaving fullscreen is recorded.
+                </RuleItem>
+              )}
               <RuleItem icon={AlertTriangle}>
-                <b>Switching tabs or apps ends the test</b> and submits your
-                answers automatically.
+                <b>Stay on this tab.</b> Switching tabs or apps is recorded —
+                leaving twice submits your test automatically.
               </RuleItem>
               <RuleItem icon={Lock}>
                 Copy, paste and right-click are disabled. Answers lock as you
@@ -340,11 +364,11 @@ export function TestTaker({
                 </RuleItem>
               ) : null}
             </ul>
-            <Button onClick={beginSecure} className="w-full justify-center">
+            <Button autoFocus onClick={beginSecure} className="w-full justify-center">
               <ShieldCheck className="h-4 w-4" />
               Begin secure test
             </Button>
-            <p className="text-center text-xs text-slate-400">
+            <p className="text-center text-xs text-slate-500">
               {questions.length} question{questions.length === 1 ? "" : "s"} ·
               one attempt
             </p>
@@ -390,6 +414,9 @@ export function TestTaker({
     <div className="mx-auto max-w-2xl space-y-5">
       {proctor.needsFullscreen && (
         <FullscreenGuard onReenter={proctor.reenterFullscreen} />
+      )}
+      {proctor.tabWarning && !proctor.needsFullscreen && (
+        <ProctorWarning onDismiss={proctor.dismissTabWarning} />
       )}
 
       {/* Premium exam header */}
@@ -448,38 +475,14 @@ export function TestTaker({
         <p className="font-medium text-slate-900">{q.prompt}</p>
 
         {isChoice ? (
-          <div className="space-y-2">
-            {choicesOf(q).map((c) => {
-              const on = selected.includes(c.id);
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() =>
-                    isMulti ? toggleChoiceMulti(c.id) : setChoiceSingle(c.id)
-                  }
-                  aria-pressed={on}
-                  className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition ${
-                    on
-                      ? "border-brand-500 bg-brand-50 text-slate-900 ring-1 ring-brand-500"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                  }`}
-                >
-                  <span
-                    aria-hidden
-                    className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${
-                      on
-                        ? "border-brand-500 bg-brand-500 text-white"
-                        : "border-slate-300"
-                    }`}
-                  >
-                    {on && <Check className="size-3" strokeWidth={3} />}
-                  </span>
-                  {c.text}
-                </button>
-              );
-            })}
-          </div>
+          <ChoiceList
+            choices={choicesOf(q)}
+            selected={selected}
+            multi={isMulti}
+            groupLabel={q.prompt}
+            onSelectSingle={setChoiceSingle}
+            onToggleMulti={toggleChoiceMulti}
+          />
         ) : (
           <textarea
             value={textValue}
@@ -526,6 +529,99 @@ export function TestTaker({
           }}
         />
       )}
+    </div>
+  );
+}
+
+// Accessible answer options. Single-choice / true-false render as an ARIA
+// radiogroup with roving tabindex + arrow-key selection; multi renders as a
+// group of checkboxes (each tab-focusable, Space/Enter toggles). Visuals are
+// identical to the prior button list — this only adds screen-reader semantics
+// and keyboard navigation.
+function ChoiceList({
+  choices,
+  selected,
+  multi,
+  groupLabel,
+  onSelectSingle,
+  onToggleMulti,
+}: {
+  choices: Choice[];
+  selected: string[];
+  multi: boolean;
+  groupLabel: string;
+  onSelectSingle: (id: string) => void;
+  onToggleMulti: (id: string) => void;
+}) {
+  const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  btnRefs.current = [];
+
+  // For a radiogroup, exactly one option is tab-focusable: the selected one, or
+  // the first when nothing is picked yet.
+  const activeIdx = (() => {
+    const i = choices.findIndex((c) => selected.includes(c.id));
+    return i === -1 ? 0 : i;
+  })();
+
+  const moveAndSelect = (from: number, dir: 1 | -1) => {
+    const n = choices.length;
+    if (n === 0) return;
+    const to = ((from + dir) % n + n) % n;
+    btnRefs.current[to]?.focus();
+    onSelectSingle(choices[to].id);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent, i: number) => {
+    if (multi) return; // checkbox group: native tab + Space/Enter is correct
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+      e.preventDefault();
+      moveAndSelect(i, 1);
+    } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+      e.preventDefault();
+      moveAndSelect(i, -1);
+    }
+  };
+
+  return (
+    <div
+      role={multi ? "group" : "radiogroup"}
+      aria-label={groupLabel}
+      className="space-y-2"
+    >
+      {choices.map((c, i) => {
+        const on = selected.includes(c.id);
+        return (
+          <button
+            key={c.id}
+            ref={(el) => {
+              btnRefs.current[i] = el;
+            }}
+            type="button"
+            role={multi ? "checkbox" : "radio"}
+            aria-checked={on}
+            tabIndex={multi ? 0 : i === activeIdx ? 0 : -1}
+            onKeyDown={(e) => onKeyDown(e, i)}
+            onClick={() => (multi ? onToggleMulti(c.id) : onSelectSingle(c.id))}
+            className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition ${
+              on
+                ? "border-brand-500 bg-brand-50 text-slate-900 ring-1 ring-brand-500"
+                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${
+                on
+                  ? "border-brand-500 bg-brand-500 text-white"
+                  : "border-slate-300"
+              }`}
+            >
+              {on && <Check className="size-3" strokeWidth={3} />}
+            </span>
+            {c.text}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -98,14 +98,32 @@ export interface ProctorApi {
   needsFullscreen: boolean;
   /** Re-enter fullscreen from the overlay button. */
   reenterFullscreen: () => void;
+  /** True after the first tab/window switch, until acknowledged. */
+  tabWarning: boolean;
+  /** Acknowledge the one-time tab-switch warning. */
+  dismissTabWarning: () => void;
   /** Snapshot for the submit payload. */
   getIntegrity: () => Integrity;
+}
+
+/** Whether this browser can enter element fullscreen (false on iPhone Safari). */
+export function fullscreenSupported(): boolean {
+  if (typeof document === "undefined") return false;
+  const el = document.documentElement as unknown as {
+    requestFullscreen?: unknown;
+    webkitRequestFullscreen?: unknown;
+  };
+  return Boolean(el.requestFullscreen || el.webkitRequestFullscreen);
 }
 
 export function useProctor({ onAutoSubmit, enabled }: UseProctorOptions): ProctorApi {
   const [engaged, setEngaged] = useState(false);
   const [violations, setViolations] = useState(0);
   const [needsFullscreen, setNeedsFullscreen] = useState(false);
+  // Warn-then-submit: the first tab/window switch shows a warning on return;
+  // a second one submits. One accidental tap should never end a learner's test.
+  const [tabWarning, setTabWarning] = useState(false);
+  const tabStrikesRef = useRef(0);
 
   // Mutable tally read at submit time (avoids stale closure over state).
   const flagsRef = useRef<IntegrityFlags>({});
@@ -170,12 +188,18 @@ export function useProctor({ onAutoSubmit, enabled }: UseProctorOptions): Procto
     const onVisibility = () => {
       if (!engagedRef.current) return;
       if (document.hidden) {
+        // Left the exam. Always recorded. First strike is a warning; a second
+        // strike submits. This makes an accidental notification/app-switch
+        // recoverable instead of instantly ending the attempt.
         record("tab_switch");
-        // Strict rule: switching away from the exam ends it.
-        if (!autoSubmittedRef.current) {
+        tabStrikesRef.current += 1;
+        if (tabStrikesRef.current >= 2 && !autoSubmittedRef.current) {
           autoSubmittedRef.current = true;
           onAutoSubmitRef.current();
         }
+      } else if (tabStrikesRef.current === 1 && !autoSubmittedRef.current) {
+        // Returned after the first strike — surface the one-time warning.
+        setTabWarning(true);
       }
     };
     const onBlur = () => {
@@ -263,6 +287,8 @@ export function useProctor({ onAutoSubmit, enabled }: UseProctorOptions): Procto
     };
   }, [enabled, record]);
 
+  const dismissTabWarning = useCallback(() => setTabWarning(false), []);
+
   return {
     engage,
     disengage,
@@ -270,6 +296,8 @@ export function useProctor({ onAutoSubmit, enabled }: UseProctorOptions): Procto
     violations,
     needsFullscreen,
     reenterFullscreen,
+    tabWarning,
+    dismissTabWarning,
     getIntegrity,
   };
 }
@@ -309,6 +337,7 @@ export function FullscreenGuard({
         </p>
         <button
           type="button"
+          autoFocus
           onClick={onReenter}
           className="mt-5 w-full rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
         >
@@ -320,6 +349,49 @@ export function FullscreenGuard({
         >
           Leave test
         </a>
+      </div>
+    </div>
+  );
+}
+
+// One-time warning shown when the student returns after their first tab/window
+// switch. The next switch will submit — this makes the rule fair, not a trap.
+export function ProctorWarning({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-md"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="proctor-warn-title"
+    >
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white p-6 text-center shadow-2xl">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="h-6 w-6"
+            aria-hidden
+          >
+            <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          </svg>
+        </div>
+        <h2 id="proctor-warn-title" className="mt-4 text-lg font-bold text-slate-900">
+          You left the exam
+        </h2>
+        <p className="mt-2 text-sm text-slate-600">
+          This was recorded. If you switch tabs or apps again, your test will be
+          submitted automatically.
+        </p>
+        <button
+          type="button"
+          autoFocus
+          onClick={onDismiss}
+          className="mt-5 w-full rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+        >
+          Continue test
+        </button>
       </div>
     </div>
   );

@@ -31,7 +31,7 @@ export function TestNav() {
             key={t.href}
             href={t.href}
             aria-current={active ? "page" : undefined}
-            className={`flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
+            className={`flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
               active
                 ? "bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-[0_8px_20px_-8px_rgba(90,63,202,0.6)]"
                 : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
