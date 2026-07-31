@@ -34,6 +34,7 @@ import {
   HOSTED_LEVEL_LABEL,
   type HostedTest,
 } from "@/lib/data/hosted-tests";
+import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 import type { TestSkillScope } from "@/lib/database.types";
 
 type IconType = ComponentType<{ className?: string }>;
@@ -85,7 +86,12 @@ const SORT_OPTS = ["Newest", "Shortest", "Most Questions"] as const;
 
 export function CategoryTests({ group }: { group: TestGroup }) {
   const { user } = useSession();
-  const tests = useTests().filter((t) => t.questions.length > 0);
+  // Local-store tests are prototype/offline data with no share token and no
+  // server grading. Tests are link-gated (migration 0025), so once the real
+  // backend is on they must not be browsable here — a student reaches a test
+  // only through the link an admin sends them.
+  const localTests = useTests().filter((t) => t.questions.length > 0);
+  const tests = SUPABASE_ENABLED ? [] : localTests;
   const allAttempts = useAttempts();
   const { hosted, loading: hostedLoading } = useHostedTests();
 
@@ -149,9 +155,10 @@ export function CategoryTests({ group }: { group: TestGroup }) {
     let list = hosted.filter((h) => hostedInGroup(h, group));
     const q = query.trim().toLowerCase();
     if (q) list = list.filter((h) => h.title.toLowerCase().includes(q));
-    // Hosted tests have no completion tracking here, so hide them when the
-    // student filters to "Completed" only.
-    if (status === "Completed") list = [];
+    if (status !== "All") {
+      const wantDone = status === "Completed";
+      list = list.filter((h) => (h.completedAt !== null) === wantDone);
+    }
     return [...list].sort((a, b) => b.createdAt - a.createdAt);
   }, [hosted, group, query, status]);
 
@@ -231,6 +238,7 @@ export function CategoryTests({ group }: { group: TestGroup }) {
 // ============================================================
 
 function HostedTestCard({ test }: { test: HostedTest }) {
+  const completed = test.completedAt !== null;
   return (
     <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
       <div className="flex flex-wrap items-center gap-1.5">
@@ -242,25 +250,41 @@ function HostedTestCard({ test }: { test: HostedTest }) {
           <Sparkles className="h-3 w-3" />
           Interactive
         </Badge>
+        {completed && (
+          <Badge tone="success">
+            <CheckCircle2 className="h-3 w-3" />
+            Completed
+          </Badge>
+        )}
       </div>
       <h2 className="mt-3 text-lg font-extrabold tracking-tight text-slate-900">
         {test.title}
       </h2>
       <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-slate-600">
-        A self-contained, auto-graded test. Your score saves to your progress.
+        {completed
+          ? "You've already completed this test. You can reopen it to review, but it won't be scored again."
+          : "A self-contained, auto-graded test. Your score saves to your progress."}
       </p>
       <div className="mt-4 grid grid-cols-3 gap-2 text-[13px] font-semibold text-slate-600">
         <Meta icon={Sparkles} label="Interactive" />
         <Meta icon={CheckCircle2} label="Auto-graded" />
-        <Meta icon={Zap} label="Earns XP" />
+        <Meta icon={Zap} label={completed ? "Scored" : "Earns XP"} />
       </div>
       <div className="mt-5 flex flex-wrap gap-2">
         <LinkButton
           href={`/ht/${test.shareToken}`}
-          className="group min-w-[8rem] flex-1 bg-gradient-to-br from-brand-500 to-brand-600 shadow-[0_10px_24px_-8px_rgba(90,63,202,0.5)] hover:from-brand-600 hover:to-brand-700"
+          className={
+            completed
+              ? "group min-w-[8rem] flex-1 bg-slate-700 hover:bg-slate-800"
+              : "group min-w-[8rem] flex-1 bg-gradient-to-br from-brand-500 to-brand-600 shadow-[0_10px_24px_-8px_rgba(90,63,202,0.5)] hover:from-brand-600 hover:to-brand-700"
+          }
         >
-          <PlayCircle className="h-4 w-4" />
-          Start Test
+          {completed ? (
+            <RotateCcw className="h-4 w-4" />
+          ) : (
+            <PlayCircle className="h-4 w-4" />
+          )}
+          {completed ? "Reopen (not scored)" : "Start Test"}
           <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </LinkButton>
       </div>
@@ -472,11 +496,11 @@ function EmptyState({ label }: { label: string }) {
         <FileText className="h-8 w-8" />
       </div>
       <h2 className="mt-4 text-lg font-bold text-slate-900">
-        No {label} tests yet
+        No {label} tests unlocked
       </h2>
       <p className="mt-1.5 max-w-sm text-sm text-slate-600">
-        Tests will appear here once your teacher adds them, or try clearing the
-        search and filters.
+        Your teacher sends tests as a private link. Open the link they give you
+        and the test appears here — nothing to browse until then.
       </p>
     </div>
   );

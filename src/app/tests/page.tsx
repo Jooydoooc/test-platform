@@ -9,6 +9,7 @@ import {
   BookText,
   CheckCircle2,
   Flame,
+  Headphones,
   Layers,
   Sparkles,
   Star,
@@ -57,6 +58,12 @@ const CATEGORIES: {
     icon: BookText,
     blurb: "Comprehension and reading skills.",
   },
+  {
+    group: "Listening Tests",
+    href: "/tests/listening",
+    icon: Headphones,
+    blurb: "Train your ear with audio-based tests.",
+  },
 ];
 
 const SCOPE_TO_GROUP: Record<TestSkillScope, TestGroup | null> = {
@@ -90,7 +97,11 @@ function timeAgo(ts: number): string {
 
 export default function TestCenterPage() {
   const { user } = useSession();
-  const tests = useTests().filter((t) => t.questions.length > 0);
+  // Prototype/offline tests only. Tests are link-gated (migration 0025): with
+  // the real backend on, the Test Center lists only what an admin's link has
+  // unlocked for this student, never a browsable catalog.
+  const localTests = useTests().filter((t) => t.questions.length > 0);
+  const tests = SUPABASE_ENABLED ? [] : localTests;
   const allAttempts = useAttempts();
   const { hosted } = useHostedTests();
 
@@ -132,7 +143,12 @@ export default function TestCenterPage() {
         streak: 0,
       };
     }
-    const completed = new Set(realAttempts.map((a) => a.testId)).size;
+    // Hosted tests submit against html_test_id, so they never appear in
+    // useMyAttempts (test_id only) — count them separately or "Completed" reads
+    // 0 for a student whose whole history is hosted tests.
+    const completed =
+      new Set(realAttempts.map((a) => a.testId)).size +
+      hosted.filter((h) => h.completedAt !== null).length;
     const avg =
       realAttempts.length > 0
         ? Math.round(
@@ -149,7 +165,15 @@ export default function TestCenterPage() {
       level: realLevel.name,
       streak: realStreak,
     };
-  }, [localAttempts, realAttempts, realXp, realLevel, realStreak, totalTests]);
+  }, [
+    localAttempts,
+    realAttempts,
+    realXp,
+    realLevel,
+    realStreak,
+    totalTests,
+    hosted,
+  ]);
 
   const countFor = (g: TestGroup) =>
     tests.filter((t) => groupOf(t) === g).length +
@@ -175,10 +199,11 @@ export default function TestCenterPage() {
             Test Center
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-brand-100/90 sm:text-[15px]">
-            Choose a category to start practising and track your progress.
+            Tests are sent to you as a private link. Everything your teacher has
+            unlocked for you lives here.
           </p>
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <StatTile icon={Layers} label="Total Tests" value={headerStats.total} />
+            <StatTile icon={Layers} label="Unlocked" value={headerStats.total} />
             <StatTile
               icon={CheckCircle2}
               label="Completed"
@@ -203,7 +228,7 @@ export default function TestCenterPage() {
       <TestNav />
 
       {/* Category tiles */}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {CATEGORIES.map((c) => {
           const Icon = c.icon;
           const count = countFor(c.group);

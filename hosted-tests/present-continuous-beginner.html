@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Present Continuous — Beginner Grammar Test | Lexora</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --indigo:#4f46e5;--indigo-deep:#4338ca;--indigo-tint:#eef2ff;--indigo-ring:#6366f1;
+  --ink-head:#0f172a;--ink-body:#334155;--ink-muted:#64748b;
+  --success:#0d9488;--error:#dc2626;--amber:#b45309;
+  --border:#e2e8f0;--white:#ffffff;--bg:#f8fafc;
+  --radius:16px;--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+}
+html{font-family:var(--font);background:var(--bg);color:var(--ink-body);-webkit-font-smoothing:antialiased}
+body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:0 0 80px}
+
+/* ── Header ── */
+.lx-header{
+  width:100%;background:var(--white);border-bottom:1px solid var(--border);
+  padding:14px 20px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.lx-logo{font-size:1.1rem;font-weight:700;color:var(--indigo);letter-spacing:-.02em}
+.lx-meta{font-size:.8rem;color:var(--ink-muted);font-variant-numeric:tabular-nums}
+
+/* ── Progress bar ── */
+.progress-wrap{width:100%;height:4px;background:var(--border);position:sticky;top:57px;z-index:99}
+.progress-fill{height:100%;background:var(--indigo);transition:width .2s ease-out;width:0%}
+@media(prefers-reduced-motion:reduce){.progress-fill{transition:none}}
+
+/* ── Cards ── */
+.card{
+  width:100%;max-width:640px;background:var(--white);border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:0 1px 4px rgba(0,0,0,.06);
+  padding:24px 20px;margin-top:24px;
+}
+@media(min-width:640px){.card{padding:32px 36px}}
+
+/* ── Question meta ── */
+.q-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.q-num{font-size:.75rem;font-weight:600;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.06em;font-variant-numeric:tabular-nums}
+.q-type-badge{
+  font-size:.7rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  padding:3px 9px;border-radius:99px;
+}
+.badge-mc{background:#ede9fe;color:#5b21b6}
+.badge-wo{background:#fef3c7;color:#92400e}
+.badge-tr{background:#d1fae5;color:#065f46}
+
+/* ── Prompt ── */
+.q-prompt{
+  font-size:1.08rem;font-weight:600;color:var(--ink-head);line-height:1.5;
+  margin-bottom:22px;
+}
+
+/* ── MC Options ── */
+.mc-group{display:flex;flex-direction:column;gap:10px;outline:none}
+.mc-option{
+  display:flex;align-items:center;gap:12px;padding:14px 16px;
+  border:2px solid var(--border);border-radius:12px;cursor:pointer;
+  transition:border-color .15s ease-out,background .15s ease-out;
+  min-height:44px;user-select:none;position:relative;
+}
+.mc-option:focus-within,.mc-option:focus{
+  outline:none;border-color:var(--indigo-ring);box-shadow:0 0 0 3px rgba(99,102,241,.18);
+}
+.mc-option[aria-checked="true"]{
+  border-color:var(--indigo);background:var(--indigo-tint);
+}
+.mc-option input[type=radio]{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
+.mc-indicator{
+  width:20px;height:20px;min-width:20px;border-radius:50%;border:2px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color .15s,background .15s;
+}
+.mc-option[aria-checked="true"] .mc-indicator{border-color:var(--indigo);background:var(--indigo)}
+.mc-indicator svg{display:none}
+.mc-option[aria-checked="true"] .mc-indicator svg{display:block}
+.mc-letter{
+  font-size:.75rem;font-weight:700;color:var(--ink-muted);min-width:18px;
+  text-transform:uppercase;
+}
+.mc-option[aria-checked="true"] .mc-letter{color:var(--indigo-deep)}
+.mc-text{font-size:.97rem;color:var(--ink-body);line-height:1.4}
+.mc-option[aria-checked="true"] .mc-text{color:var(--ink-head);font-weight:500}
+
+/* ── Word order ── */
+.wo-instruction{font-size:.82rem;color:var(--ink-muted);margin-bottom:12px}
+.wo-answer-area{
+  min-height:52px;border:2px dashed var(--border);border-radius:10px;
+  padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;
+  transition:border-color .15s;background:var(--indigo-tint);
+}
+.wo-answer-area.has-tiles{border-style:solid;border-color:var(--indigo)}
+.wo-pool{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.tile{
+  padding:9px 14px;border-radius:8px;border:1.5px solid var(--border);
+  background:var(--white);cursor:pointer;font-size:.92rem;color:var(--ink-body);
+  min-height:40px;display:flex;align-items:center;
+  transition:border-color .15s,background .15s,transform .1s;
+  font-weight:500;
+}
+.tile:hover{border-color:var(--indigo);background:var(--indigo-tint);color:var(--indigo-deep)}
+.tile:focus{outline:2px solid var(--indigo-ring);outline-offset:2px}
+.tile.placed{background:var(--indigo);color:var(--white);border-color:var(--indigo)}
+.tile.placed:hover{background:var(--indigo-deep);border-color:var(--indigo-deep)}
+.wo-reset{
+  font-size:.8rem;color:var(--ink-muted);background:none;border:1px solid var(--border);
+  border-radius:8px;padding:6px 14px;cursor:pointer;
+  transition:color .15s,border-color .15s;
+}
+.wo-reset:hover{color:var(--indigo);border-color:var(--indigo)}
+.wo-reset:focus{outline:2px solid var(--indigo-ring);outline-offset:2px}
+
+/* ── Translation ── */
+.tr-label{font-size:.85rem;font-weight:600;color:var(--ink-muted);margin-bottom:8px;display:block}
+.tr-input{
+  width:100%;padding:13px 16px;border:2px solid var(--border);border-radius:10px;
+  font-size:1rem;font-family:var(--font);color:var(--ink-head);
+  transition:border-color .15s,box-shadow .15s;background:var(--white);
+}
+.tr-input:focus{outline:none;border-color:var(--indigo);box-shadow:0 0 0 3px rgba(99,102,241,.18)}
+.tr-hint{font-size:.78rem;color:var(--ink-muted);margin-top:7px}
+
+/* ── Navigation ── */
+.nav-row{
+  width:100%;max-width:640px;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;margin-top:20px;padding:0 4px;
+}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:13px 22px;border-radius:12px;font-size:.95rem;font-weight:600;
+  cursor:pointer;border:none;transition:background .15s,box-shadow .15s,opacity .15s;
+  min-height:48px;
+}
+.btn:focus{outline:2px solid var(--indigo-ring);outline-offset:2px}
+.btn-ghost{background:var(--white);color:var(--ink-muted);border:1.5px solid var(--border)}
+.btn-ghost:hover:not(:disabled){background:var(--bg);border-color:var(--ink-muted)}
+.btn-primary{background:var(--indigo);color:var(--white);flex:1;max-width:200px}
+.btn-primary:hover:not(:disabled){background:var(--indigo-deep);box-shadow:0 2px 8px rgba(79,70,229,.3)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-danger{background:var(--error);color:var(--white);flex:1;max-width:220px}
+.btn-danger:hover:not(:disabled){background:#b91c1c}
+.btn-danger:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── Live counter ── */
+.answered-strip{
+  width:100%;max-width:640px;margin-top:10px;padding:0 4px;
+  font-size:.82rem;color:var(--ink-muted);text-align:right;font-variant-numeric:tabular-nums;
+}
+
+/* ── Screens ── */
+.screen{display:none;width:100%;max-width:640px;flex-direction:column;align-items:center}
+.screen.active{display:flex}
+
+/* ── Confirm screen ── */
+.confirm-card{
+  background:var(--white);border:1px solid var(--border);border-radius:var(--radius);
+  padding:32px 28px;text-align:center;width:100%;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);
+}
+.confirm-card h2{font-size:1.25rem;font-weight:700;color:var(--ink-head);margin-bottom:10px}
+.confirm-card p{font-size:.95rem;color:var(--ink-body);margin-bottom:6px;line-height:1.5}
+.confirm-warning{
+  background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;
+  padding:12px 16px;margin:18px 0;font-size:.85rem;color:var(--amber);line-height:1.5;
+  text-align:left;
+}
+.confirm-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:22px}
+.btn-outline{background:var(--white);color:var(--indigo);border:2px solid var(--indigo);min-height:44px;padding:11px 22px;border-radius:12px;font-size:.95rem;font-weight:600;cursor:pointer;transition:background .15s}
+.btn-outline:hover{background:var(--indigo-tint)}
+.btn-outline:focus{outline:2px solid var(--indigo-ring);outline-offset:2px}
+
+/* ── Results ── */
+.results-hero{text-align:center;padding:36px 20px 0}
+.score-big{font-size:3.5rem;font-weight:800;color:var(--indigo);font-variant-numeric:tabular-nums;line-height:1}
+.score-denom{font-size:1.4rem;font-weight:500;color:var(--ink-muted)}
+.score-pct{font-size:1rem;color:var(--ink-muted);margin-top:6px;font-variant-numeric:tabular-nums}
+.breakdown-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+  width:100%;margin:22px 0 0;
+}
+.breakdown-item{
+  background:var(--white);border:1px solid var(--border);border-radius:12px;
+  padding:16px 10px;text-align:center;
+}
+.breakdown-item .num{font-size:1.5rem;font-weight:700;color:var(--ink-head);font-variant-numeric:tabular-nums}
+.breakdown-item .lbl{font-size:.7rem;color:var(--ink-muted);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+
+/* ── Review list ── */
+.review-title{font-size:1rem;font-weight:700;color:var(--ink-head);margin:28px 0 12px}
+.review-list{display:flex;flex-direction:column;gap:14px;width:100%}
+.review-item{
+  background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px;
+  border-left:4px solid var(--border);
+}
+.review-item.correct{border-left-color:var(--success)}
+.review-item.wrong{border-left-color:var(--error)}
+.review-item-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.review-num{font-size:.75rem;font-weight:700;color:var(--ink-muted);text-transform:uppercase;font-variant-numeric:tabular-nums}
+.review-icon{width:18px;height:18px;min-width:18px}
+.review-prompt{font-size:.9rem;font-weight:600;color:var(--ink-head);line-height:1.4;flex:1}
+.review-detail{font-size:.83rem;color:var(--ink-muted);line-height:1.5}
+.review-detail span{font-weight:600}
+.review-detail .stu-ans{color:var(--ink-body)}
+.review-detail .cor-ans{color:var(--success)}
+.review-detail .stu-wrong{color:var(--error)}
+
+/* ── Question navigator (jump between questions) ── */
+.q-nav{width:100%;max-width:640px;margin-top:14px;padding:14px 16px;background:var(--white);
+  border:1px solid var(--border);border-radius:12px}
+.q-nav-title{font-size:.72rem;font-weight:700;color:var(--ink-muted);text-transform:uppercase;
+  letter-spacing:.05em;margin-bottom:10px}
+.q-nav-grid{display:grid;grid-template-columns:repeat(10,1fr);gap:6px}
+@media(max-width:520px){.q-nav-grid{grid-template-columns:repeat(6,1fr)}}
+.q-nav-cell{aspect-ratio:1;min-height:34px;border:1.5px solid var(--border);border-radius:8px;
+  background:var(--white);color:var(--ink-muted);font-size:.8rem;font-weight:600;cursor:pointer;
+  font-variant-numeric:tabular-nums;display:flex;align-items:center;justify-content:center;
+  transition:border-color .15s,background .15s,color .15s}
+.q-nav-cell:hover{border-color:var(--indigo)}
+.q-nav-cell:focus{outline:2px solid var(--indigo-ring);outline-offset:1px}
+.q-nav-cell.answered{background:var(--indigo-tint);border-color:var(--indigo);color:var(--indigo-deep)}
+.q-nav-cell.current{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(99,102,241,.35)}
+.q-nav-legend{display:flex;gap:16px;margin-top:11px;font-size:.7rem;color:var(--ink-muted);flex-wrap:wrap}
+.q-nav-legend span{display:inline-flex;align-items:center;gap:5px}
+.q-nav-dot{width:11px;height:11px;border-radius:3px;border:1.5px solid var(--border)}
+.q-nav-dot.a{background:var(--indigo-tint);border-color:var(--indigo)}
+.q-nav-dot.c{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(99,102,241,.35)}
+
+/* ── Small instruction line (all question types) ── */
+.q-hint{font-size:.82rem;color:var(--ink-muted);margin-bottom:14px;line-height:1.45}
+
+/* ── Review explanation ── */
+.review-explain{margin-top:9px;padding:9px 12px;background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;font-size:.8rem;color:var(--ink-body);line-height:1.5}
+.review-explain b{color:var(--ink-head);font-weight:600}
+
+/* ── Submit status (score post-back) ── */
+.submit-status{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;justify-content:center;
+  max-width:640px;margin:0 auto 1rem;padding:.75rem 1rem;border-radius:12px;
+  font-size:.9rem;line-height:1.45;background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
+.submit-status.saved{background:#ecfdf5;color:#065f46;border-color:#6ee7b7}
+.submit-status.saved #btnRetrySubmit{display:none}
+.submit-status #btnRetrySubmit{flex:none}
+
+/* ── Misc ── */
+.spacer{flex:1}
+.hidden{display:none!important}
+@media(prefers-reduced-motion:reduce){.tile,.mc-option,.btn{transition:none}}
+</style>
+</head>
+<body>
+
+<header class="lx-header" role="banner">
+  <span class="lx-logo">Lexora</span>
+  <span class="lx-meta" id="headerMeta" aria-live="polite">Present Continuous · Beginner</span>
+</header>
+<div class="progress-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Test progress" id="progressBar">
+  <div class="progress-fill" id="progressFill"></div>
+</div>
+
+<!-- TEST SCREEN -->
+<div id="screenTest" class="screen active" aria-label="Test questions">
+  <div class="card" id="qCard">
+    <div class="q-meta">
+      <span class="q-num" id="qNum" aria-live="polite">Question 1 of 30</span>
+      <span class="q-type-badge" id="qBadge"></span>
+    </div>
+    <div class="q-prompt" id="qPrompt" role="heading" aria-level="2" tabindex="-1"></div>
+    <div id="qBody"></div>
+  </div>
+
+  <div class="answered-strip">
+    Answered: <span id="answeredCount" aria-live="polite" aria-atomic="true">0</span> / <span id="answeredTotal">30</span>
+  </div>
+
+  <nav class="q-nav" aria-label="Jump to any question">
+    <div class="q-nav-title">Jump to a question</div>
+    <div class="q-nav-grid" id="qNavGrid"></div>
+    <div class="q-nav-legend">
+      <span><span class="q-nav-dot c"></span> Current</span>
+      <span><span class="q-nav-dot a"></span> Answered</span>
+      <span><span class="q-nav-dot"></span> Not answered yet</span>
+    </div>
+  </nav>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" id="btnBack" onclick="navigate(-1)" aria-label="Previous question">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back
+    </button>
+    <button class="btn btn-primary" id="btnNext" onclick="navigate(1)" aria-label="Next question">
+      Next
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="btn btn-danger hidden" id="btnSubmit" onclick="goConfirm()" aria-label="Submit test">
+      Submit
+    </button>
+  </div>
+</div>
+
+<!-- CONFIRM SCREEN -->
+<div id="screenConfirm" class="screen" aria-label="Confirm submission">
+  <div class="card confirm-card">
+    <h2 id="confirmHeading" tabindex="-1">Ready to submit?</h2>
+    <p id="confirmMsg"></p>
+    <div class="confirm-warning" role="alert">
+      Once submitted you cannot change your answers.
+    </div>
+    <div class="confirm-btns">
+      <button class="btn-outline" onclick="backToTest()">Review answers</button>
+      <button class="btn btn-danger" id="btnFinalSubmit" onclick="submitTest()">Submit test</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESULTS SCREEN -->
+<div id="screenResults" class="screen" aria-label="Test results">
+  <div class="results-hero">
+    <div role="status" aria-live="assertive" aria-label="Your score">
+      <div><span class="score-big" id="scoreBig" tabindex="-1">0</span><span class="score-denom">/<span id="scoreDenom">30</span></span></div>
+      <div class="score-pct" id="scorePct"></div>
+    </div>
+  </div>
+  <div class="submit-status hidden" id="submitStatus" role="status" aria-live="polite">
+    <span id="submitStatusText"></span>
+    <button class="btn-outline" id="btnRetrySubmit" onclick="postScore()">Try again</button>
+  </div>
+  <div class="breakdown-grid" id="breakdownGrid"></div>
+  <div class="review-title" role="heading" aria-level="2">Question Review</div>
+  <div class="review-list" id="reviewList" aria-label="Per-question review"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// BANK (50 questions)
+// ─────────────────────────────────────────────────────────────────────────────
+const BANK = [
+  // MC positive (8 items needed → ids 31-33,38-41 + one more from remaining mc pos)
+  {id:31,type:"mc",pol:"pos",prompt:"My sister ___ in her room now.",choices:["is dancing","is danceing","are dancing","dances"],correct:0},
+  {id:32,type:"mc",pol:"pos",prompt:"I ___ some water at the moment.",choices:["is drinking","am drinking","am drink","drinking"],correct:1},
+  {id:33,type:"mc",pol:"pos",prompt:"The boys ___ their homework now.",choices:["is doing","are doing","are do","doing"],correct:1},
+  {id:38,type:"mc",pol:"pos",prompt:"Listen! The bird is ___.",choices:["singging","singeing","singing","sings"],correct:2},
+  {id:39,type:"mc",pol:"pos",prompt:"Bek is ___ a photo.",choices:["takeing","taking","takking","takes"],correct:1},
+  {id:40,type:"mc",pol:"pos",prompt:"The cat is ___ near the door.",choices:["siting","sit","sitting","sits"],correct:2},
+  {id:41,type:"mc",pol:"pos",prompt:"They are ___ at a small hotel.",choices:["staying","stayying","staing","stays"],correct:0},
+  // Bank holds 7 mc pos, 7 mc neg, 6 mc q. The draw takes 4 from each bucket,
+  // so every bucket must keep at least 4 items — see DRAW_PLAN in drawQuestions().
+  // MC negative
+  {id:34,type:"mc",pol:"neg",prompt:"Kamola ___ to school today.",choices:["doesn't walking","aren't walking","isn't walking","not walking"],correct:2},
+  {id:35,type:"mc",pol:"neg",prompt:"We ___ lunch at the moment.",choices:["don't eating","isn't eating","are eat","aren't eating"],correct:3},
+  {id:43,type:"mc",pol:"neg",prompt:"The teacher isn't ___ on the board.",choices:["writeing","writing","writting","writes"],correct:1},
+  {id:44,type:"mc",pol:"neg",prompt:"I ___ using my phone right now.",choices:["am not","is not","don't","not"],correct:0},
+  {id:47,type:"mc",pol:"neg",prompt:"Sam and Tim ___ sleeping now.",choices:["isn't","don't","doesn't","aren't"],correct:3},
+  {id:48,type:"mc",pol:"neg",prompt:"My mother ___ shopping today.",choices:["doesn't going","isn't going","aren't going","not go"],correct:1},
+  {id:50,type:"mc",pol:"neg",prompt:"The boy ___ riding his bicycle now.",choices:["aren't","doesn't","isn't","not"],correct:2},
+  // MC question
+  {id:36,type:"mc",pol:"q",prompt:"___ your father driving now?",choices:["Is","Are","Do","Does"],correct:0},
+  {id:37,type:"mc",pol:"q",prompt:"Why ___ you laughing?",choices:["is","are","do","am"],correct:1},
+  {id:42,type:"mc",pol:"q",prompt:"Are you ___ to the party?",choices:["comeing","comming","coming","come"],correct:2},
+  {id:45,type:"mc",pol:"q",prompt:"___ it raining outside?",choices:["Are","Does","Is","Do"],correct:2},
+  {id:46,type:"mc",pol:"q",prompt:"Who ___ she talking to?",choices:["are","do","is","does"],correct:2},
+  {id:49,type:"mc",pol:"q",prompt:"Choose the correct question.",choices:["Is the plane flying?","Does the plane flying?","Are the plane flying?","Is flying the plane?"],correct:0},
+  // WO positive
+  {id:51,type:"wo",pol:"pos",tiles:["My father","is","washing","the car"]},
+  {id:52,type:"wo",pol:"pos",tiles:["The girls","are","dancing","in the room"]},
+  {id:53,type:"wo",pol:"pos",tiles:["I","am","taking","a photo"]},
+  {id:54,type:"wo",pol:"pos",tiles:["The sun","is","shining","today"]},
+  {id:55,type:"wo",pol:"pos",tiles:["We","are","having","breakfast","now"]},
+  // WO negative
+  {id:56,type:"wo",pol:"neg",tiles:["The dog","is","not","sleeping","outside"]},
+  {id:57,type:"wo",pol:"neg",tiles:["They","are","not","coming","with us"]},
+  {id:58,type:"wo",pol:"neg",tiles:["Aziza","is","not","using","her computer"]},
+  {id:59,type:"wo",pol:"neg",tiles:["I","am","not","writing","a message"]},
+  {id:60,type:"wo",pol:"neg",tiles:["The boys","are","not","swimming","today"]},
+  // WO question
+  {id:61,type:"wo",pol:"q",tiles:["Is","your mother","cooking","dinner"]},
+  {id:62,type:"wo",pol:"q",tiles:["Are","the students","sitting","quietly"]},
+  {id:63,type:"wo",pol:"q",tiles:["Where","are","you","going"]},
+  {id:64,type:"wo",pol:"q",tiles:["What","is","Nodir","carrying"]},
+  {id:65,type:"wo",pol:"q",tiles:["Why","are","they","running"]},
+  // TR positive
+  {id:66,type:"tr",pol:"pos",uz:"Dilnoza hozir raqs tushyapti.",accepted:["dilnoza is dancing now"]},
+  {id:67,type:"tr",pol:"pos",uz:"Men derazani ochyapman.",accepted:["i am opening the window"]},
+  {id:68,type:"tr",pol:"pos",uz:"O'quvchilar ingliz tilini o'rganishyapti.",accepted:["the students are learning english","students are learning english"]},
+  {id:69,type:"tr",pol:"pos",uz:"Otam hozir mashina haydayapti.",accepted:["my father is driving now","my father is driving a car now"]},
+  {id:70,type:"tr",pol:"pos",uz:"Mushuk stol tagida yotibdi.",accepted:["the cat is lying under the table","the cat is laying under the table"]},
+  // TR negative
+  {id:71,type:"tr",pol:"neg",uz:"Akmal hozir gazeta o'qimayapti.",accepted:["akmal is not reading a newspaper now","akmal is not reading newspaper now"]},
+  {id:72,type:"tr",pol:"neg",uz:"Biz o'qituvchini kutmayapmiz.",accepted:["we are not waiting for the teacher"]},
+  {id:73,type:"tr",pol:"neg",uz:"Singlim tort tayyorlamayapti.",accepted:["my sister is not making a cake","my sister is not baking a cake"]},
+  {id:74,type:"tr",pol:"neg",uz:"Men polda o'tirmayapman.",accepted:["i am not sitting on the floor"]},
+  {id:75,type:"tr",pol:"neg",uz:"Bolalar tashqarida o'ynashmayapti.",accepted:["the children are not playing outside","children are not playing outside"]},
+  // TR question
+  {id:76,type:"tr",pol:"q",uz:"Siz elektron xat yozyapsizmi?",accepted:["are you writing an email","are you writing an e-mail"]},
+  {id:77,type:"tr",pol:"q",uz:"Madina bog'da yuguryaptimi?",accepted:["is madina running in the park"]},
+  {id:78,type:"tr",pol:"q",uz:"Bolalar nima yeyishyapti?",accepted:["what are the children eating","what are children eating"]},
+  {id:79,type:"tr",pol:"q",uz:"O'qituvchi nega jilmayyapti?",accepted:["why is the teacher smiling"]},
+  {id:80,type:"tr",pol:"q",uz:"Biz hozir uyga ketyapmizmi?",accepted:["are we going home now"]},
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function fisherYates(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+
+function canon(s){
+  s=(s||"").toLowerCase().replace(/['']/g,"'").trim().replace(/\s+/g," ").replace(/[.?!]+$/,"");
+  const map={"isn't":"is not","aren't":"are not","i'm":"i am","she's":"she is","he's":"he is","it's":"it is","we're":"we are","they're":"they are","what's":"what is","where's":"where is","who's":"who is","that's":"that is","doesn't":"does not","don't":"do not"};
+  for(const k in map){s=s.split(k).join(map[k]);}
+  // Contractions on names/nouns ("Dilnoza's dancing") are correct English too, but
+  // only when the next word is the -ing verb — otherwise 's is a possessive
+  // ("my sister's cake") and must be left alone.
+  s=s.replace(/'s (?=\S+ing\b)/g," is ");
+  s=s.replace(/'re (?=\S+ing\b)/g," are ");
+  s=s.replace(/'m (?=\S+ing\b)/g," am ");
+  return s.replace(/\s+/g," ").trim();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DRAW 30 BALANCED QUESTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+function drawQuestions(){
+  const buckets={mc:{pos:[],neg:[],q:[]},wo:{pos:[],neg:[],q:[]},tr:{pos:[],neg:[],q:[]}};
+  for(const q of BANK) buckets[q.type][q.pol].push(q);
+
+  // MC: 4 pos + 4 neg + 4 q = 12
+  // WO: 3 pos + 3 neg + 3 q = 9
+  // TR: 3 pos + 3 neg + 3 q = 9  → 30 total
+  const DRAW_PLAN=[
+    ["mc","pos",4],["mc","neg",4],["mc","q",4],
+    ["wo","pos",3],["wo","neg",3],["wo","q",3],
+    ["tr","pos",3],["tr","neg",3],["tr","q",3],
+  ];
+
+  const drawn=[];
+  for(const [type,pol,n] of DRAW_PLAN){
+    const bucket=buckets[type][pol];
+    // A bucket that has shrunk below its quota would silently yield a short test,
+    // so make it loud rather than letting the count drift.
+    if(bucket.length<n) console.error(`[Lexora] bank bucket ${type}/${pol} has ${bucket.length} items but the draw needs ${n} — this attempt will be short.`);
+    drawn.push(...fisherYates(bucket).slice(0,n));
+  }
+
+  // Deep-copy and shuffle MC choices, shuffle combined
+  const processed=drawn.map(q=>{
+    if(q.type==="mc"){
+      const shuffled=fisherYates(q.choices.map((c,i)=>({text:c,orig:i})));
+      const newCorrect=shuffled.findIndex(c=>c.orig===q.correct);
+      return {...q,shuffledChoices:shuffled.map(c=>c.text),shuffledCorrect:newCorrect};
+    }
+    if(q.type==="wo"){
+      return {...q,shuffledTiles:fisherYates(q.tiles)};
+    }
+    return {...q};
+  });
+
+  return fisherYates(processed);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let questions=drawQuestions();
+let TOTAL=questions.length;
+let current=0;
+// answers: for mc → chosen index; for wo → array of placed chunks; for tr → string
+let answers=Array(TOTAL).fill(null);
+// wo placed/pool per question
+let woState={}; // { qIndex: { placed:[], pool:[] } }
+let submitted=false;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IN-PROGRESS PERSISTENCE
+// A refresh or an accidental back-swipe used to wipe the attempt and re-draw a
+// different 30 questions. Persist the draw itself alongside the answers so the
+// student comes back to the exact test they were sitting.
+// ─────────────────────────────────────────────────────────────────────────────
+const STORE_KEY="lexora:present-continuous-beginner:v1:"+((window.LEXORA_TEST&&window.LEXORA_TEST.attemptId)||"local");
+
+function saveState(){
+  if(submitted) return;
+  try{
+    localStorage.setItem(STORE_KEY,JSON.stringify({questions,answers,current,woState}));
+  }catch(e){/* private mode / quota — the test still works, just without resume */}
+}
+
+function clearState(){
+  try{localStorage.removeItem(STORE_KEY);}catch(e){}
+}
+
+function restoreState(){
+  let saved;
+  try{saved=JSON.parse(localStorage.getItem(STORE_KEY)||"null");}catch(e){return false;}
+  if(!saved||!Array.isArray(saved.questions)||!saved.questions.length) return false;
+  if(!Array.isArray(saved.answers)||saved.answers.length!==saved.questions.length) return false;
+  questions=saved.questions;
+  TOTAL=questions.length;
+  answers=saved.answers;
+  woState=saved.woState&&typeof saved.woState==="object"?saved.woState:{};
+  current=Number.isInteger(saved.current)&&saved.current>=0&&saved.current<TOTAL?saved.current:0;
+  return true;
+}
+
+window.addEventListener("beforeunload",e=>{
+  if(submitted) return;
+  if(!answers.some(a=>a!==null)) return;
+  e.preventDefault();
+  e.returnValue="";
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+function renderQuestion(opts){
+  const q=questions[current];
+  const idx=current;
+
+  // Header meta
+  document.getElementById("qNum").textContent=`Question ${idx+1} of ${TOTAL}`;
+  document.title=`Q${idx+1}/${TOTAL} — Present Continuous | Lexora`;
+
+  // Progress — count the question you are on, so the last one reads 100%.
+  const pct=Math.round(((idx+1)/TOTAL)*100);
+  document.getElementById("progressFill").style.width=pct+"%";
+  document.getElementById("progressBar").setAttribute("aria-valuenow",pct);
+
+  // Badge
+  const badge=document.getElementById("qBadge");
+  const labels={mc:"Multiple Choice",wo:"Word Order",tr:"Translation"};
+  const cls={mc:"badge-mc",wo:"badge-wo",tr:"badge-tr"};
+  badge.textContent=labels[q.type];
+  badge.className="q-type-badge "+cls[q.type];
+
+  // Prompt
+  const promptEl=document.getElementById("qPrompt");
+  if(q.type==="tr") promptEl.textContent=q.uz;
+  else promptEl.textContent=q.prompt;
+
+  // Body
+  const body=document.getElementById("qBody");
+  body.innerHTML="";
+
+  if(q.type==="mc") renderMC(q,idx,body);
+  else if(q.type==="wo") renderWO(q,idx,body);
+  else renderTR(q,idx,body);
+
+  // Nav buttons
+  document.getElementById("btnBack").disabled=(idx===0);
+  const isLast=(idx===TOTAL-1);
+  document.getElementById("btnNext").classList.toggle("hidden",isLast);
+  document.getElementById("btnSubmit").classList.toggle("hidden",!isLast);
+
+  updateAnsweredCount();
+  saveState();
+
+  // Moving between questions replaces the card in place. Put focus on the new
+  // prompt so it is read out and so Tab continues from the right place.
+  if(opts&&opts.focus) promptEl.focus();
+}
+
+// ── MC ──
+function renderMC(q,idx,body){
+  const hint=document.createElement("p");
+  hint.className="q-hint";
+  hint.textContent="Tap the correct word to fill the gap.";
+  body.appendChild(hint);
+  const grp=document.createElement("div");
+  grp.role="radiogroup";
+  grp.setAttribute("aria-label","Choose the correct option");
+  grp.className="mc-group";
+  const letters=["A","B","C","D"];
+
+  q.shuffledChoices.forEach((text,ci)=>{
+    const opt=document.createElement("div");
+    opt.className="mc-option";
+    opt.setAttribute("role","radio");
+    const checked=(answers[idx]===ci);
+    opt.setAttribute("aria-checked",checked?"true":"false");
+    opt.setAttribute("tabindex",checked||(answers[idx]===null && ci===0)?0:-1);
+    opt.dataset.ci=ci;
+    opt.innerHTML=`
+      <div class="mc-indicator">
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
+          <path d="M1 4l3 3 5-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="mc-letter">${letters[ci]}</span>
+      <span class="mc-text">${esc(text)}</span>`;
+    opt.addEventListener("click",()=>selectMC(idx,ci));
+    opt.addEventListener("keydown",e=>{
+      if(e.key===" "||e.key==="Enter"){e.preventDefault();selectMC(idx,ci);}
+      if(e.key==="ArrowDown"||e.key==="ArrowRight"){e.preventDefault();moveMCFocus(grp,1);}
+      if(e.key==="ArrowUp"||e.key==="ArrowLeft"){e.preventDefault();moveMCFocus(grp,-1);}
+    });
+    grp.appendChild(opt);
+  });
+
+  body.appendChild(grp);
+}
+
+function moveMCFocus(grp,dir){
+  const opts=[...grp.querySelectorAll(".mc-option")];
+  const cur=opts.findIndex(o=>o===document.activeElement);
+  const next=(cur+dir+opts.length)%opts.length;
+  opts[next].focus();
+}
+
+function selectMC(idx,ci){
+  answers[idx]=ci;
+  // re-render just the options
+  const grp=document.getElementById("qBody").querySelector(".mc-group");
+  if(!grp) return;
+  grp.querySelectorAll(".mc-option").forEach(opt=>{
+    const oci=parseInt(opt.dataset.ci);
+    const sel=(oci===ci);
+    opt.setAttribute("aria-checked",sel?"true":"false");
+    opt.setAttribute("tabindex",sel?0:-1);
+  });
+  updateAnsweredCount();
+}
+
+// ── WO ──
+function renderWO(q,idx,body){
+  if(!woState[idx]){
+    woState[idx]={placed:[],pool:[...q.shuffledTiles]};
+  }
+  const state=woState[idx];
+
+  const instr=document.createElement("p");
+  instr.className="q-hint";
+  instr.textContent="Tap the words in the correct order to make a sentence. Tap a word again to send it back.";
+  body.appendChild(instr);
+
+  const answerArea=document.createElement("div");
+  answerArea.className="wo-answer-area"+(state.placed.length?" has-tiles":"");
+  answerArea.setAttribute("aria-label","Your sentence");
+  answerArea.id="woAnswer_"+idx;
+
+  const pool=document.createElement("div");
+  pool.className="wo-pool";
+  pool.setAttribute("aria-label","Available word tiles");
+  pool.id="woPool_"+idx;
+
+  function refreshWO(){
+    answerArea.innerHTML="";
+    answerArea.className="wo-answer-area"+(state.placed.length?" has-tiles":"");
+    pool.innerHTML="";
+
+    state.placed.forEach((chunk,pi)=>{
+      const t=document.createElement("button");
+      t.className="tile placed";
+      t.textContent=chunk;
+      t.setAttribute("aria-label","Remove: "+chunk);
+      t.addEventListener("click",()=>{
+        state.placed.splice(pi,1);
+        state.pool.push(chunk);
+        answers[idx]=state.placed.length>0?[...state.placed]:null;
+        updateAnsweredCount();
+        refreshWO();
+      });
+      answerArea.appendChild(t);
+    });
+
+    state.pool.forEach((chunk,pi)=>{
+      const t=document.createElement("button");
+      t.className="tile";
+      t.textContent=chunk;
+      t.setAttribute("aria-label","Add: "+chunk);
+      t.addEventListener("click",()=>{
+        state.placed.push(chunk);
+        state.pool.splice(pi,1);
+        answers[idx]=[...state.placed];
+        updateAnsweredCount();
+        refreshWO();
+      });
+      pool.appendChild(t);
+    });
+  }
+
+  const resetBtn=document.createElement("button");
+  resetBtn.className="wo-reset";
+  resetBtn.textContent="Clear / Reset";
+  resetBtn.setAttribute("aria-label","Reset word order");
+  resetBtn.addEventListener("click",()=>{
+    state.placed=[];
+    state.pool=[...q.shuffledTiles];
+    answers[idx]=null;
+    updateAnsweredCount();
+    refreshWO();
+  });
+
+  refreshWO();
+  body.appendChild(answerArea);
+  body.appendChild(pool);
+  body.appendChild(resetBtn);
+}
+
+// ── TR ──
+function renderTR(q,idx,body){
+  const label=document.createElement("label");
+  label.className="tr-label";
+  label.setAttribute("for","trInput_"+idx);
+  label.textContent="Write this sentence in English:";
+  body.appendChild(label);
+
+  const input=document.createElement("input");
+  input.type="text";
+  input.className="tr-input";
+  input.id="trInput_"+idx;
+  input.placeholder="Your English translation…";
+  input.autocomplete="off";
+  input.autocorrect="off";
+  input.autocapitalize="off";
+  input.spellcheck=false;
+  if(answers[idx]!==null) input.value=answers[idx];
+  input.addEventListener("input",()=>{
+    const v=input.value.trim();
+    answers[idx]=v.length>0?v:null;
+    updateAnsweredCount();
+  });
+  body.appendChild(input);
+
+  const hint=document.createElement("p");
+  hint.className="tr-hint";
+  hint.textContent="Use am / is / are + verb-ing. Short forms like isn't and I'm are fine.";
+  body.appendChild(hint);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NAVIGATION
+// ─────────────────────────────────────────────────────────────────────────────
+function navigate(dir){
+  const next=current+dir;
+  if(next<0||next>TOTAL-1) return;
+  current=next;
+  renderQuestion({focus:true});
+}
+
+function updateAnsweredCount(){
+  const n=answers.filter(a=>a!==null).length;
+  document.getElementById("answeredCount").textContent=n;
+  document.getElementById("answeredTotal").textContent=TOTAL;
+  renderNav();
+  saveState();
+}
+
+// Question map: tap any number to jump straight to that question. Shows which
+// are answered (filled), which is current (ring), and which are still empty.
+function renderNav(){
+  const grid=document.getElementById("qNavGrid");
+  if(!grid) return;
+  grid.innerHTML="";
+  for(let i=0;i<TOTAL;i++){
+    const done=answers[i]!==null;
+    const b=document.createElement("button");
+    b.type="button";
+    b.className="q-nav-cell"+(done?" answered":"")+(i===current?" current":"");
+    b.textContent=i+1;
+    b.setAttribute("aria-label","Go to question "+(i+1)+(done?" (answered)":" (not answered)"));
+    if(i===current) b.setAttribute("aria-current","true");
+    b.addEventListener("click",()=>{current=i;renderQuestion({focus:true});});
+    grid.appendChild(b);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIRM
+// ─────────────────────────────────────────────────────────────────────────────
+function goConfirm(){
+  const n=answers.filter(a=>a!==null).length;
+  document.getElementById("confirmMsg").textContent=`You answered ${n} of ${TOTAL} questions. ${n<TOTAL?"("+(TOTAL-n)+" unanswered) ":""}Submit your answers now?`;
+  showScreen("screenConfirm","confirmHeading");
+}
+
+function backToTest(){
+  showScreen("screenTest");
+  renderQuestion({focus:true});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GRADE + RESULTS
+// ─────────────────────────────────────────────────────────────────────────────
+function gradeQuestion(q,idx){
+  const ans=answers[idx];
+  if(ans===null||ans===undefined) return false;
+  if(q.type==="mc") return ans===q.shuffledCorrect;
+  if(q.type==="wo"){
+    if(!Array.isArray(ans)) return false;
+    if(ans.length!==q.tiles.length) return false;
+    return ans.every((chunk,i)=>chunk===q.tiles[i]);
+  }
+  if(q.type==="tr"){
+    const c=canon(ans);
+    return q.accepted.some(a=>canon(a)===c);
+  }
+  return false;
+}
+
+let postInFlight=false;
+let postSucceeded=false;
+let finalScore=0;
+
+function submitTest(){
+  if(submitted) return;
+  submitted=true;
+  clearState(); // the attempt is over — don't resume it on a later visit
+  document.getElementById("btnFinalSubmit").disabled=true;
+
+  const results=questions.map((q,idx)=>({q,idx,correct:gradeQuestion(q,idx)}));
+  const total=results.filter(r=>r.correct).length;
+  finalScore=total;
+
+  // Breakdown
+  const mc=results.filter(r=>r.q.type==="mc");
+  const wo=results.filter(r=>r.q.type==="wo");
+  const tr=results.filter(r=>r.q.type==="tr");
+  const mcC=mc.filter(r=>r.correct).length;
+  const woC=wo.filter(r=>r.correct).length;
+  const trC=tr.filter(r=>r.correct).length;
+
+  // Score display
+  document.getElementById("scoreBig").textContent=total;
+  document.getElementById("scoreDenom").textContent=TOTAL;
+  document.getElementById("scorePct").textContent=Math.round((total/TOTAL)*100)+"% correct";
+
+  // Test is done — show the progress bar as complete.
+  document.getElementById("progressFill").style.width="100%";
+  document.getElementById("progressBar").setAttribute("aria-valuenow",100);
+
+  // Breakdown grid
+  const grid=document.getElementById("breakdownGrid");
+  grid.innerHTML=`
+    <div class="breakdown-item">
+      <div class="num">${mcC}<span style="font-size:.9rem;color:var(--ink-muted)">/${mc.length}</span></div>
+      <div class="lbl">Multiple Choice</div>
+    </div>
+    <div class="breakdown-item">
+      <div class="num">${woC}<span style="font-size:.9rem;color:var(--ink-muted)">/${wo.length}</span></div>
+      <div class="lbl">Word Order</div>
+    </div>
+    <div class="breakdown-item">
+      <div class="num">${trC}<span style="font-size:.9rem;color:var(--ink-muted)">/${tr.length}</span></div>
+      <div class="lbl">Translation</div>
+    </div>`;
+
+  // Review list
+  const list=document.getElementById("reviewList");
+  list.innerHTML="";
+  results.forEach((r,i)=>{
+    const {q,correct}=r;
+    const item=document.createElement("div");
+    item.className="review-item "+(correct?"correct":"wrong");
+
+    const icon=correct
+      ?`<svg class="review-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="9" stroke="#0d9488" stroke-width="1.5"/><path d="M6 10l3 3 5-5" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+      :`<svg class="review-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="9" stroke="#dc2626" stroke-width="1.5"/><path d="M7 7l6 6M13 7l-6 6" stroke="#dc2626" stroke-width="2" stroke-linecap="round"/></svg>`;
+
+    const prompt=q.type==="tr"?q.uz:q.prompt;
+    const stuAns=formatStudentAnswer(q,r.idx);
+    const corAns=formatCorrectAnswer(q);
+
+    item.innerHTML=`
+      <div class="review-item-header">
+        ${icon}
+        <span class="review-num">Q${i+1}</span>
+        <span class="review-prompt">${esc(prompt)}</span>
+      </div>
+      <div class="review-detail">
+        Your answer: <span class="${correct?"stu-ans":"stu-wrong"}">${esc(stuAns)}</span><br>
+        Correct answer: <span class="cor-ans">${esc(corAns)}</span>
+      </div>
+      <div class="review-explain">${explainFor(q)}</div>`;
+    list.appendChild(item);
+  });
+
+  showScreen("screenResults","scoreBig");
+  window.scrollTo({top:0,behavior:"smooth"});
+
+  postScore();
+}
+
+// What the student actually answered, as plain text the server can re-grade
+// against its own key. Choice INDEXES would be meaningless server-side because
+// the options are shuffled per attempt, so send the chosen text.
+function answerPayload(){
+  return questions.map((q,i)=>{
+    const a=answers[i];
+    let value=null;
+    if(a!==null&&a!==undefined){
+      if(q.type==="mc") value=q.shuffledChoices[a];
+      else if(q.type==="wo") value=Array.isArray(a)?a.join(" "):null;
+      else value=String(a);
+    }
+    return {id:q.id,value:value};
+  });
+}
+
+// Send the score to the platform. A failure here used to be swallowed, so a
+// student could see their result while the server never recorded it — say so
+// out loud instead, and let them retry.
+function postScore(){
+  const cfg=window.LEXORA_TEST;
+  if(!cfg||!cfg.attemptId||!cfg.submitUrl) return; // opened standalone, nothing to post to
+  if(postInFlight||postSucceeded) return;
+
+  postInFlight=true;
+  setSubmitStatus("pending","Saving your result…");
+
+  fetch(cfg.submitUrl,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      attemptId:cfg.attemptId,
+      skills:[{skill:"GRAMMAR",correct:finalScore,total:TOTAL}],
+      // The server re-grades these and ignores the score above when it holds a
+      // key for this test — the client's number is a display value, not a claim.
+      answers:answerPayload()
+    })
+  })
+    .then(res=>res.ok?res.json().catch(()=>({})):Promise.reject(new Error("HTTP "+res.status)))
+    .then(data=>{
+      postSucceeded=true;
+      // The server refuses to score the same attempt twice. If this was a
+      // repeat visit, say that plainly rather than implying fresh XP.
+      setSubmitStatus("saved",data&&data.alreadySubmitted
+        ?"You already completed this test. This attempt was not scored again."
+        :"Result saved to your Lexora account.");
+    })
+    .catch(()=>{
+      setSubmitStatus("error","We couldn't save your result. Check your connection and try again — don't close this page yet.");
+    })
+    .finally(()=>{postInFlight=false;});
+}
+
+function setSubmitStatus(kind,msg){
+  const box=document.getElementById("submitStatus");
+  document.getElementById("submitStatusText").textContent=msg;
+  box.classList.remove("hidden");
+  box.classList.toggle("saved",kind==="saved");
+  document.getElementById("btnRetrySubmit").disabled=(kind==="pending");
+}
+
+// Short, beginner-level "why" note for the review screen. Keyed on the sentence
+// form so the rule matches what the question was testing.
+function explainFor(q){
+  if(q.pol==="neg") return "<b>Negative:</b> add <b>not</b> after am / is / are — isn't (is not), aren't (are not), 'm not (am not) + the verb-ing form.";
+  if(q.pol==="q") return "<b>Question:</b> put <b>am / is / are</b> before the person — (Wh-word +) is/are + subject + verb-ing?";
+  return "<b>Positive:</b> subject + <b>am / is / are</b> + verb-ing. Use <b>am</b> with I, <b>is</b> with he/she/it, <b>are</b> with you/we/they.";
+}
+
+function formatStudentAnswer(q,idx){
+  const ans=answers[idx];
+  if(ans===null||ans===undefined) return "(no answer)";
+  if(q.type==="mc"){
+    const letters=["A","B","C","D"];
+    return letters[ans]+". "+q.shuffledChoices[ans];
+  }
+  if(q.type==="wo"){
+    if(!Array.isArray(ans)||ans.length===0) return "(no answer)";
+    const punct=q.pol==="q"?"?":".";
+    return ans.join(" ")+punct;
+  }
+  return ans;
+}
+
+function formatCorrectAnswer(q){
+  if(q.type==="mc"){
+    const letters=["A","B","C","D"];
+    return letters[q.shuffledCorrect]+". "+q.shuffledChoices[q.shuffledCorrect];
+  }
+  if(q.type==="wo"){
+    const punct=q.pol==="q"?"?":".";
+    return q.tiles.join(" ")+punct;
+  }
+  // tr: show first accepted (in display form, initial cap)
+  const a=q.accepted[0];
+  return a.charAt(0).toUpperCase()+a.slice(1)+(q.pol==="q"?"?":".");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCREEN SWITCH
+// ─────────────────────────────────────────────────────────────────────────────
+// Screens swap in place, so move focus into the new one — otherwise a keyboard
+// or screen-reader user is left on a button that no longer exists.
+function showScreen(id,focusId){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  if(focusId){
+    const target=document.getElementById(focusId);
+    if(target) target.focus();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────────────────────────────────────────────
+function esc(s){
+  return String(s)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#39;");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────────────────────────────────────────
+restoreState(); // resume an interrupted attempt, if there is one
+renderQuestion();
+</script>
+</body>
+</html>

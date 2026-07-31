@@ -17,7 +17,12 @@ import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 // Event-type keys match the React proctor (Proctor.tsx) so teacher-facing data
 // is uniform. TRUST NOTE: browser-side deterrence only — a hint, never proof,
 // and it never alters the self-computed score.
-const PROCTOR_BLOCK = `
+//
+// `alreadySubmitted` changes only the entry-gate copy: the submit endpoint
+// refuses to score an attempt twice, so a student reopening a finished test must
+// be told up front that this run is review-only and will not count.
+function proctorBlock(alreadySubmitted: boolean): string {
+  return `
 <style>
   #lx-gate,#lx-guard{position:fixed;inset:0;z-index:2147483646;display:flex;align-items:center;justify-content:center;padding:16px;
     background:linear-gradient(135deg,#0f172a,#312e81);color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
@@ -49,7 +54,18 @@ const PROCTOR_BLOCK = `
 </style>
 <div id="lx-gate">
   <div class="lx-panel">
-    <span class="lx-badge">&#128737; Proctored exam</span>
+    ${
+      alreadySubmitted
+        ? `<span class="lx-badge" style="background:#ecfdf5;color:#065f46">&#10003; Already completed</span>
+    <h2>Review only</h2>
+    <p>You have already completed this test and your score has been recorded. You can open it again to practise, but:</p>
+    <ul class="lx-rules">
+      <li><span class="lx-dot" style="background:#059669"></span><span><b>This run will not be scored.</b> Your recorded result and XP stay as they are.</span></li>
+      <li><span class="lx-dot" style="background:#059669"></span><span>Whatever score the test shows you at the end is practice only.</span></li>
+    </ul>
+    <button class="lx-btn" id="lx-begin">Open for review</button>
+    <a href="/tests" style="display:block;margin-top:12px;text-align:center;font-size:13px;color:#64748b;text-decoration:none">Back to Test Center</a>`
+        : `<span class="lx-badge">&#128737; Proctored exam</span>
     <h2>Secure mode</h2>
     <p>This is a monitored, single-attempt test. Before you begin:</p>
     <ul class="lx-rules">
@@ -57,7 +73,8 @@ const PROCTOR_BLOCK = `
       <li><span class="lx-dot"></span><span><b>Switching tabs or apps is recorded</b> as an integrity flag.</span></li>
       <li><span class="lx-dot"></span><span>Copy, paste and right-click are disabled.</span></li>
     </ul>
-    <button class="lx-btn" id="lx-begin">&#128737; Begin secure test</button>
+    <button class="lx-btn" id="lx-begin">&#128737; Begin secure test</button>`
+    }
   </div>
 </div>
 <div id="lx-guard">
@@ -135,6 +152,7 @@ const PROCTOR_BLOCK = `
   document.getElementById('lx-reenter').addEventListener('click',function(){reqFs();guard.style.display='none';});
 })();
 </script>`;
+}
 
 // Serve a hosted HTML test at /ht/<share_token>. Login is required (closed
 // platform, like /t/<token>). The bucket is private and students have no direct
@@ -160,14 +178,14 @@ export async function GET(
 
   const { token } = await params;
 
-  // Resolve the share token to the test row. The user's RLS-scoped client
-  // enforces that only signed-in users can read html_tests metadata.
+  // Resolve the share token to the test row. Under migration 0025 students can
+  // no longer select html_tests rows they have no attempt on — tests are
+  // unlisted and THE LINK IS THE KEY — so resolution goes through the SECURITY
+  // DEFINER RPC, which requires a signed-in caller plus the exact token.
   const supabase = await createClient();
   const { data: test } = await supabase
-    .from("html_tests")
-    .select("id, storage_path")
-    .eq("share_token", token)
-    .maybeSingle();
+    .rpc("resolve_share_html_test", { p_token: token })
+    .maybeSingle<{ id: string; title: string; storage_path: string }>();
 
   if (!test) {
     return new Response("Test not found.", { status: 404 });
@@ -185,46 +203,25 @@ export async function GET(
   }
 
   // Create-or-resume the student's single attempt for this HTML test.
-  // We use the RLS-scoped client for the insert so the attempts_insert policy
-  // (student_id = auth.uid()) is the enforcing gate — not application logic.
   //
-  // Race handling mirrors startAttempt in src/lib/data/attempts.ts:
-  //   * existing + submitted  -> resume (student reviews); keep attemptId
-  //   * existing + in-progress -> resume the same row
-  //   * none                  -> insert; on unique-index collision re-select
+  // Migration 0026 revoked direct INSERT on `attempts` from `authenticated`, so
+  // this goes through the token-keyed SECURITY DEFINER RPC. That is the point:
+  // holding the share token — not merely knowing a test id — is what mints the
+  // attempt row that unlocks html_tests_select for this student.
+  //
+  // The RPC handles create-or-resume and the concurrent-open race internally
+  // (insert ... on conflict do nothing, then select). It returns no rows for a
+  // teacher/admin, who gets the file in unscored preview mode.
   let attemptId: string | null = null;
+  let alreadySubmitted = false;
   try {
-    const { data: existing } = await supabase
-      .from("attempts")
-      .select("id, submitted_at")
-      .eq("student_id", user.id)
-      .eq("html_test_id", test.id)
-      .maybeSingle();
+    const { data: started } = await supabase
+      .rpc("start_share_html_attempt", { p_token: token })
+      .maybeSingle<{ attempt_id: string; submitted_at: string | null }>();
 
-    if (existing) {
-      // Already have a row (submitted or in-progress) — reuse it.
-      attemptId = existing.id;
-    } else {
-      // No row yet — create one. The partial unique index makes a concurrent
-      // double-open fail the second insert rather than producing two rows.
-      const { data: created, error: insErr } = await supabase
-        .from("attempts")
-        .insert({ student_id: user.id, html_test_id: test.id })
-        .select("id")
-        .single();
-
-      if (insErr || !created) {
-        // Likely lost a concurrent race — re-select the winner.
-        const { data: raced } = await supabase
-          .from("attempts")
-          .select("id")
-          .eq("student_id", user.id)
-          .eq("html_test_id", test.id)
-          .maybeSingle();
-        attemptId = raced?.id ?? null;
-      } else {
-        attemptId = created.id;
-      }
+    if (started) {
+      attemptId = started.attempt_id;
+      alreadySubmitted = started.submitted_at !== null;
     }
   } catch {
     // Non-fatal: attempt creation failing must not block the student from
@@ -243,9 +240,9 @@ export async function GET(
   // Bridge (score reporting) needs a real attempt; the proctor lockdown is
   // injected regardless so the exam is secured even if scoring is unavailable.
   const bridge = attemptId
-    ? `<script>window.LEXORA_TEST={attemptId:"${attemptId}",submitUrl:"/api/tests/html/submit"};</script>`
+    ? `<script>window.LEXORA_TEST={attemptId:"${attemptId}",submitUrl:"/api/tests/html/submit",alreadySubmitted:${alreadySubmitted}};</script>`
     : "";
-  const inject = bridge + PROCTOR_BLOCK;
+  const inject = bridge + proctorBlock(alreadySubmitted);
   const bodyClose = html.search(/<\/body>/i);
   if (bodyClose !== -1) {
     html = html.slice(0, bodyClose) + inject + html.slice(bodyClose);

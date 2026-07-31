@@ -10,8 +10,10 @@
 // list immediately when the backend isn't configured. Read side only — uploads
 // go through /api/tests/html (admin) or the direct upload script.
 //
-// RLS: html_tests_select allows any signed-in user to read metadata, so the
-// user's RLS-scoped browser client is sufficient here (no service role).
+// RLS (migration 0025): html_tests_select returns only the tests this student
+// has an attempt on — i.e. the ones an admin's share link has unlocked. Tests
+// are not a browsable catalog; this hook is "my tests", and the filtering is
+// done by the database, not by this query. Admins still see everything.
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -31,6 +33,13 @@ export interface HostedTest {
   shareToken: string;
   /** html_tests.created_at as epoch ms (for "Newest" sorting) */
   createdAt: number;
+  /**
+   * attempts.submitted_at as epoch ms for this student's attempt on this test,
+   * or null if they haven't finished it. Hosted attempts carry html_test_id
+   * (not test_id), so useMyAttempts — which filters to test_id — never sees
+   * them; the Test Center needs this to show completion state.
+   */
+  completedAt: number | null;
 }
 
 // html_tests isn't in the hand-authored database.types subset, so type the
@@ -88,6 +97,33 @@ export function useHostedTests(): { hosted: HostedTest[]; loading: boolean } {
       }
 
       const rows = data as unknown as HtmlTestRow[];
+
+      // Which of these has the student already finished? RLS on attempts scopes
+      // this to their own rows; a failure here only costs the completion badge,
+      // so it must not blank out the test list.
+      const submittedAtByTest = new Map<string, number>();
+      if (rows.length > 0) {
+        const { data: attemptRows } = await supabase
+          .from("attempts")
+          .select("html_test_id, submitted_at")
+          .eq("student_id", authUser.id)
+          .in(
+            "html_test_id",
+            rows.map((r) => r.id),
+          )
+          .not("submitted_at", "is", null);
+
+        if (!active) return;
+        for (const a of (attemptRows ?? []) as unknown as {
+          html_test_id: string | null;
+          submitted_at: string;
+        }[]) {
+          if (a.html_test_id) {
+            submittedAtByTest.set(a.html_test_id, Date.parse(a.submitted_at));
+          }
+        }
+      }
+
       setHosted(
         rows.map((r) => ({
           id: r.id,
@@ -96,6 +132,7 @@ export function useHostedTests(): { hosted: HostedTest[]; loading: boolean } {
           level: r.level,
           shareToken: r.share_token,
           createdAt: Date.parse(r.created_at),
+          completedAt: submittedAtByTest.get(r.id) ?? null,
         })),
       );
       setLoading(false);

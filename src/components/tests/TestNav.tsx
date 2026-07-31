@@ -7,13 +7,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, BookText, LayoutGrid, Type } from "lucide-react";
+import { BookOpen, BookText, Headphones, LayoutGrid, Type } from "lucide-react";
 
 const TABS = [
   { href: "/tests", label: "Overview", icon: LayoutGrid },
   { href: "/tests/grammar", label: "Grammar", icon: Type },
   { href: "/tests/vocabulary", label: "Vocabulary", icon: BookOpen },
   { href: "/tests/reading", label: "Reading", icon: BookText },
+  { href: "/tests/listening", label: "Listening", icon: Headphones },
 ] as const;
 
 export function TestNav() {

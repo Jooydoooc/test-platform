@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, BookOpen, BookText, Type } from "lucide-react";
+import { ArrowLeft, BookOpen, BookText, Headphones, Type } from "lucide-react";
 import type { TestGroup } from "@/lib/types";
 
 // Premium hero for a single-category test page. Server-safe (no hooks).
@@ -18,6 +18,10 @@ const META: Record<
   "Reading Tests": {
     icon: BookText,
     blurb: "Sharpen comprehension and reading skills.",
+  },
+  "Listening Tests": {
+    icon: Headphones,
+    blurb: "Train your ear with audio-based tests.",
   },
 };
 
