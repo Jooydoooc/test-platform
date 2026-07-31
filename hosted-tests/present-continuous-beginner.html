@@ -335,7 +335,7 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padd
 
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
-// BANK (50 questions)
+// BANK (80 questions)
 // ─────────────────────────────────────────────────────────────────────────────
 const BANK = [
   // MC positive (8 items needed → ids 31-33,38-41 + one more from remaining mc pos)
@@ -399,6 +399,57 @@ const BANK = [
   {id:78,type:"tr",pol:"q",uz:"Bolalar nima yeyishyapti?",accepted:["what are the children eating","what are children eating"]},
   {id:79,type:"tr",pol:"q",uz:"O'qituvchi nega jilmayyapti?",accepted:["why is the teacher smiling"]},
   {id:80,type:"tr",pol:"q",uz:"Biz hozir uyga ketyapmizmi?",accepted:["are we going home now"]},
+  // ---------------------------------------------------------------------------
+  // Merged from the bilingual fixed-set test (html_test 8a6f72d4), 2026-07-31.
+  // Same 30 questions students already take there, converted to bank format so
+  // this test can draw from 80 items instead of 50. The Uzbek explanations do
+  // not carry over — this format has no per-item notes.
+  // ---------------------------------------------------------------------------
+  // mc/pos
+  {id:81,type:"mc",pol:"pos",prompt:"I ___ a book right now.",choices:["am reading","is reading","am read","reading"],correct:0},
+  // mc/neg
+  {id:82,type:"mc",pol:"neg",prompt:"Lola ___ television at the moment.",choices:["not watching","isn't watching","doesn't watching","aren't watching"],correct:1},
+  // mc/q
+  {id:83,type:"mc",pol:"q",prompt:"___ they playing football now?",choices:["Is","Am","Are","Do"],correct:2},
+  {id:84,type:"mc",pol:"q",prompt:"Is Tom ___ an email?",choices:["write","writeing","writing","writting"],correct:2},
+  // mc/pos
+  {id:85,type:"mc",pol:"pos",prompt:"We ___ dinner at the moment.",choices:["are making","is making","making","are makeing"],correct:0},
+  {id:86,type:"mc",pol:"pos",prompt:"Be quiet! The baby is ___.",choices:["sleep","sleeping","sleepping","sleeps"],correct:1},
+  {id:87,type:"mc",pol:"pos",prompt:"Anna is ___ a cake.",choices:["makeing","making","makking","makes"],correct:1},
+  {id:88,type:"mc",pol:"pos",prompt:"Look! The dog is ___ in the garden.",choices:["runing","run","running","runs"],correct:2},
+  {id:89,type:"mc",pol:"pos",prompt:"The children are ___ on the floor.",choices:["siting","sitting","sit","sits"],correct:1},
+  {id:90,type:"mc",pol:"pos",prompt:"My brother is ___ on the sofa.",choices:["lieing","lying","lieeing","lies"],correct:1},
+  // mc/neg
+  {id:91,type:"mc",pol:"neg",prompt:"We ___ listening to music now.",choices:["isn't","don't","aren't","doesn't"],correct:2},
+  // mc/q
+  {id:92,type:"mc",pol:"q",prompt:"What ___ you doing?",choices:["is","are","do","am"],correct:1},
+  // wo/pos
+  {id:93,type:"wo",pol:"pos",tiles:["Sara","is","studying","English","now"]},
+  {id:94,type:"wo",pol:"pos",tiles:["the children","are","playing","in the park"]},
+  {id:95,type:"wo",pol:"pos",tiles:["Jamshid","is","wearing","a blue shirt"]},
+  // wo/neg
+  {id:96,type:"wo",pol:"neg",tiles:["I","am","not","wearing","a jacket"]},
+  {id:97,type:"wo",pol:"neg",tiles:["Malika","is","not","working","today"]},
+  {id:98,type:"wo",pol:"neg",tiles:["we","are","not","watching","television"]},
+  // wo/q
+  {id:99,type:"wo",pol:"q",tiles:["are","you","waiting","for the bus"],accept:["you are waiting for the bus"]},
+  {id:100,type:"wo",pol:"q",tiles:["is","the teacher","speaking","now"],accept:["the teacher is speaking now"]},
+  {id:101,type:"wo",pol:"q",tiles:["why","is","the baby","crying"]},
+  {id:102,type:"wo",pol:"q",tiles:["what","are","they","making"]},
+  // tr/pos
+  {id:103,type:"tr",pol:"pos",uz:"Aziza hozir kitob o‘qiyapti.",accepted:["aziza is reading a book now","aziza is reading a book"]},
+  // tr/neg
+  {id:104,type:"tr",pol:"neg",uz:"Jasur hozir uxlamayapti.",accepted:["jasur is not sleeping now","jasur is not sleeping"]},
+  // tr/q
+  {id:105,type:"tr",pol:"q",uz:"Bolalar bog‘da yugurishyaptimi?",accepted:["are the children running in the park","are the kids running in the park"]},
+  {id:106,type:"tr",pol:"q",uz:"Siz hozir nima qilyapsiz?",accepted:["what are you doing now","what are you doing"]},
+  // tr/neg
+  {id:107,type:"tr",pol:"neg",uz:"Men hozir avtobusni kutmayapman.",accepted:["i am not waiting for the bus now","i am not waiting for the bus"]},
+  // tr/pos
+  {id:108,type:"tr",pol:"pos",uz:"Ali stulda o‘tiribdi.",accepted:["ali is sitting on a chair","ali is sitting on the chair"]},
+  // tr/q
+  {id:109,type:"tr",pol:"q",uz:"Ular hozir suzishyaptimi?",accepted:["are they swimming now","are they swimming"]},
+  {id:110,type:"tr",pol:"q",uz:"Chaqaloq nega yig‘layapti?",accepted:["why is the baby crying"]},
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -794,7 +845,11 @@ function gradeQuestion(q,idx){
   if(q.type==="wo"){
     if(!Array.isArray(ans)) return false;
     if(ans.length!==q.tiles.length) return false;
-    return ans.every((chunk,i)=>chunk===q.tiles[i]);
+    // Some sentences have more than one correct order ("Are you waiting for the
+    // bus" / "You are waiting for the bus"), so compare the built sentence
+    // against tiles plus any alternates rather than tile-by-tile.
+    const built=canon(ans.join(" "));
+    return [q.tiles.join(" ")].concat(q.accept||[]).some(a=>canon(a)===built);
   }
   if(q.type==="tr"){
     const c=canon(ans);
