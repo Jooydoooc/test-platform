@@ -67,12 +67,31 @@ export async function submitAttempt(
   // The single attempt must already exist (created by startAttempt). This is the
   // anti-cheat gate: no fresh attempt is minted here.
   const admin = createAdminClient();
-  const { data: attemptRow } = await admin
+  const { data: attemptRow, error: attemptErr } = await admin
     .from("attempts")
     .select("id, submitted_at")
     .eq("student_id", user.id)
     .eq("test_id", testId)
     .maybeSingle();
+  // Distinguish an infra failure from a genuinely-missing attempt. This used to
+  // discard `error` and fall through to "Start the test before submitting." —
+  // when the service-role key once lacked a table grant, the query 403'd,
+  // `data` came back null, and a student who HAD started the test was told it
+  // was their fault. Only a null result with NO error means "never started."
+  if (attemptErr) {
+    console.error("[submitAttempt] admin lookup of attempts failed", {
+      message: attemptErr.message,
+      code: attemptErr.code,
+      details: attemptErr.details,
+      studentId: user.id,
+      testId,
+    });
+    return {
+      ok: false,
+      error:
+        "Something went wrong on our side. Your answers were not submitted — please try again.",
+    };
+  }
   if (!attemptRow) {
     return { ok: false, error: "Start the test before submitting." };
   }
@@ -81,11 +100,29 @@ export async function submitAttempt(
   // The RPC's step-1 also handles the concurrent double-submit race atomically, so
   // this pre-check is just a cheap short-circuit for the normal "already done" case.
   if (attemptRow.submitted_at) {
-    const { data: prior } = await admin
+    const { data: prior, error: priorErr } = await admin
       .from("results")
       .select("id, status")
       .eq("attempt_id", attemptRow.id)
       .maybeSingle();
+    // Same discarded-error hazard as the attempt lookup above: a swallowed error
+    // here would report ok:true with a missing resultId instead of surfacing the
+    // real infra failure, so check it before trusting a null `prior`.
+    if (priorErr) {
+      console.error("[submitAttempt] admin lookup of prior result failed", {
+        message: priorErr.message,
+        code: priorErr.code,
+        details: priorErr.details,
+        studentId: user.id,
+        testId,
+        attemptId: attemptRow.id,
+      });
+      return {
+        ok: false,
+        error:
+          "Something went wrong on our side. Your answers were not submitted — please try again.",
+      };
+    }
     return {
       ok: true,
       resultId: prior?.id,
@@ -94,17 +131,49 @@ export async function submitAttempt(
     };
   }
 
-  const { data: items } = await admin
+  const { data: items, error: itemsErr } = await admin
     .from("test_items")
     .select("task_id")
     .eq("test_id", testId);
+  // Same hazard again: an infra error here previously read as "Test has no
+  // content," misreporting a DB/permission failure as a test-authoring problem.
+  if (itemsErr) {
+    console.error("[submitAttempt] admin lookup of test_items failed", {
+      message: itemsErr.message,
+      code: itemsErr.code,
+      details: itemsErr.details,
+      studentId: user.id,
+      testId,
+    });
+    return {
+      ok: false,
+      error:
+        "Something went wrong on our side. Your answers were not submitted — please try again.",
+    };
+  }
   const taskIds = (items ?? []).map((i) => i.task_id);
   if (taskIds.length === 0) return { ok: false, error: "Test has no content." };
 
-  const { data: questions } = await admin
+  const { data: questions, error: questionsErr } = await admin
     .from("questions")
     .select("id, format, skill_area, points, answer_key")
     .in("task_id", taskIds);
+  // Same hazard again: an infra error here previously read as "Test has no
+  // questions," misreporting a DB/permission failure as a test-authoring problem.
+  if (questionsErr) {
+    console.error("[submitAttempt] admin lookup of questions failed", {
+      message: questionsErr.message,
+      code: questionsErr.code,
+      details: questionsErr.details,
+      studentId: user.id,
+      testId,
+    });
+    return {
+      ok: false,
+      error:
+        "Something went wrong on our side. Your answers were not submitted — please try again.",
+    };
+  }
   if (!questions || questions.length === 0) {
     return { ok: false, error: "Test has no questions." };
   }
