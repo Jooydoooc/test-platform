@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "node scripts/check-supabase-env.mjs && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "predeploy": "node scripts/preflight-deploy.mjs",
+    "deploy": "node scripts/preflight-deploy.mjs && npx vercel@latest deploy --prod --yes"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
