@@ -1,4 +1,4 @@
-# Production runbook — migrations 0024–0030
+# Production migration runbook
 
 **Status: nothing in this runbook has been applied to production.**
 
@@ -34,6 +34,7 @@ Verified against production on **2026-08-01** (read-only queries; no writes):
 | `0028` revoke attempt insert | no | **no** | `has_table_privilege('authenticated','public.attempts','INSERT')` = **true** |
 | `0029` bank30 answer key | no | not verified | — |
 | `0030` explicit grants | no | **no** | `attempts` UPDATE still granted to `authenticated`; `anon` still holds DML |
+| `0031` publish gate | no | **no** | `set_test_published` / `set_html_test_published` return `PGRST202` (absent), confirmed by the deploy preflight |
 
 So **`0025`, `0026` and `0027` are already in effect but unrecorded.** Something applied
 them outside the migration workflow.
@@ -65,13 +66,15 @@ commit**.
 
 ## 2. What is actually outstanding
 
-Only three migrations remain, and only one is subtractive against the running app.
+Four migrations remain. Only one is subtractive against the running app, and one has an
+ordering constraint of its own.
 
 | Migration | Effect | Risk against the running app |
 |---|---|---|
 | `0028` | `revoke insert on attempts from authenticated` | **the one to be careful with** — §4 |
 | `0029` | answer-key content | none |
 | `0030` | enumerated per-table grants; `anon` gets nothing | none functionally, but **expected to abort** — §3 |
+| `0031` | publish gate: tests start unpublished and must be published by an admin | none for existing tests, but **the ordering matters** — §5 |
 
 An earlier version of this runbook planned a Phase 1 / Phase 2 split with an outage window,
 on the assumption that none of `0024`–`0030` were applied. That assumption was wrong:
@@ -163,7 +166,7 @@ commit, this cannot be settled from the repository.
    > `create or replace function` is idempotent, but the policy and grant statements in
    > those files must be re-read before allowing that.
 
-2. Deploy current `main` (§5) if §4's abort condition applies.
+2. Deploy current `main` (§6) if §4's abort condition applies.
 
 3. Apply, then verify:
    ```sql
@@ -184,7 +187,62 @@ or profile rows — there are live students.
 
 ---
 
-## 5. Deploying
+## 5. Applying `0031` (publish gate) — mind the ordering
+
+`0031` adds `published` to `tests` and `html_tests`, makes the token RPCs refuse
+unpublished tests, and adds ADMIN-only `set_test_published` / `set_html_test_published`.
+
+**Existing tests are backfilled as published**, so nothing changes for current students:
+in-progress attempts and completed results keep working. The backfill is guarded, so
+re-running the migration never re-publishes something an admin has since unpublished.
+
+### The trap
+
+The migration and the app that drives it ship separately, and each is unusable without the
+other — in opposite directions:
+
+- **Migration applied, app not deployed.** New uploads default to `published = false`, but
+  the deployed admin UI has no publish toggle and `set_test_published` is not called by it.
+  Newly uploaded tests are therefore **silently unusable**, with no in-app way to publish
+  them. Existing tests are unaffected.
+- **App deployed, migration not applied.** The preflight (`npm run deploy`) blocks this
+  outright, because `set_test_published` is absent. That is the guard working.
+
+So the two must land close together, and the preflight forces migration-first. Between
+applying `0031` and completing the deploy there is a window in which **no test should be
+uploaded** — anything created in it starts unpublished and cannot be published until the
+deploy lands.
+
+### Sequence
+
+1. Confirm nobody is mid-upload, and tell whoever administers tests not to upload until
+   step 4 reports success.
+2. Apply `0031`, then verify:
+   ```sql
+   select count(*) filter (where published) as published,
+          count(*) filter (where not published) as unpublished
+     from tests;
+   ```
+   > **Abort if:** any pre-existing test comes back unpublished. The backfill did not run.
+   > Do not publish them by hand one at a time — investigate why, since the same fault
+   > would apply to `html_tests`.
+3. Deploy immediately (§6). The preflight will now pass.
+4. Verify in the admin share-links page that the publish toggle renders and flips state.
+
+### Rollback
+
+The gate is the RPC bodies, not the column. To disable it without dropping data, restore
+the previous function definitions from `0025`/`0026` — the column can stay, harmless and
+ignored. Dropping the column is not necessary and would lose publish state.
+
+> **Do not** work around an unpublished test by editing `tests.published` directly in the
+> SQL editor. `authenticated` deliberately has no UPDATE on it, and the admin RPC exists so
+> that publishing is a single auditable path. Reaching around it is exactly the out-of-band
+> change that produced the history/schema divergence in §1.
+
+---
+
+## 6. Deploying
 
 A merge does not deploy. Production requires an explicit:
 
@@ -203,13 +261,15 @@ is running in production is a direct consequence of `gitDirty` deploys, and it i
 
 ---
 
-## 6. Do not
+## 7. Do not
 
 - Repair the migration history until each migration is confirmed applied *in full* (§1).
 - Weaken or bypass `0030`'s assertion block (§3).
 - Revoke `anon` DML as an undocumented side effect — it needs its own review (§3).
 - Apply `0028` before confirming the hosted-test path uses the RPC (§4).
-- Deploy from a dirty working tree (§5).
+- Upload a test between applying `0031` and completing the deploy (§5).
+- Edit `tests.published` directly in the SQL editor — publish through the admin RPC (§5).
+- Deploy from a dirty working tree (§6).
 - Disable RLS as a recovery step.
 - Delete, truncate, or overwrite student data.
 - Verify anything by opening or starting a test with a real student account.
