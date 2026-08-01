@@ -62,6 +62,8 @@ export interface StreakResult {
   current: number;
   longest: number;
   loading: boolean;
+  /** True when the fetch failed — lets the UI avoid claiming a "0-day streak". */
+  error: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +80,7 @@ export function useStreak(): StreakResult {
   const [current, setCurrent] = useState(0);
   const [longest, setLongest] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!SUPABASE_ENABLED) {
@@ -107,13 +110,18 @@ export function useStreak(): StreakResult {
       // Step 2 — fetch all points_ledger created_at values for this student.
       // Only the date matters, so we select just created_at. RLS scopes to
       // student_id = auth.uid().
-      const { data: rows, error } = await supabase
+      const { data: rows, error: qErr } = await supabase
         .from("points_ledger")
         .select("created_at")
         .eq("student_id", authUser.id);
 
       if (!active) return;
-      if (error || !rows) {
+      if (qErr) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
+      if (!rows) {
         setCurrent(0);
         setLongest(0);
         setLoading(false);
@@ -135,8 +143,7 @@ export function useStreak(): StreakResult {
     // combined loading gate can never hang on this hook.
     load().catch(() => {
       if (active) {
-        setCurrent(0);
-        setLongest(0);
+        setError(true);
         setLoading(false);
       }
     });
@@ -146,5 +153,5 @@ export function useStreak(): StreakResult {
     };
   }, []); // one-shot on mount
 
-  return { current, longest, loading };
+  return { current, longest, loading, error };
 }
