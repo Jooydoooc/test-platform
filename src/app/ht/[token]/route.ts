@@ -100,10 +100,33 @@ function proctorBlock(alreadySubmitted: boolean): string {
   // Called once the test's score has been submitted: lift the lockdown so the
   // student can leave fullscreen and return to the Test Center (fixes the trap
   // where the guard kept demanding re-entry after the test was already done).
+  // The done bar is fixed to the bottom of the viewport, and hosted tests
+  // commonly put their OWN fixed bar there (prev/next + question dots). Ours
+  // has a near-max z-index, so it silently covered theirs — after submitting,
+  // "See detailed answers" opened review with no way to reach questions 2..N.
+  // Lift anything else anchored to bottom:0 above our bar, and pad the body so
+  // normal page content can still scroll clear of it.
+  function clearBottomBar(){
+    var h=done.offsetHeight||56;
+    var all=document.body.getElementsByTagName('*');
+    for(var i=0;i<all.length;i++){
+      var el=all[i];
+      if(el===done||el===guard||el===gate||el===pill)continue;
+      try{
+        var cs=getComputedStyle(el);
+        if(cs.position==='fixed'&&Math.abs(parseFloat(cs.bottom))<1){el.style.bottom=h+'px';}
+      }catch(x){}
+    }
+    var pb=parseFloat(getComputedStyle(document.body).paddingBottom)||0;
+    if(pb<h)document.body.style.paddingBottom=h+'px';
+  }
   function release(){
     if(finished)return;finished=true;started=false;
     guard.style.display='none';pill.style.display='none';done.className='show';
     if(inFs()){var ex=document.exitFullscreen||document.webkitExitFullscreen;try{ex&&ex.call(document);}catch(x){}}
+    // Measure after the bar is displayed, and again once the test has had a
+    // chance to reveal its own review nav (which starts hidden).
+    clearBottomBar();setTimeout(clearBottomBar,300);setTimeout(clearBottomBar,1500);
   }
   function reqFs(){var e=document.documentElement;var f=e.requestFullscreen||e.webkitRequestFullscreen;try{var r=f&&f.call(e);if(r&&r.catch)r.catch(function(){});}catch(x){}}
   function editable(el){if(!el||!el.tagName)return false;var t=el.tagName.toUpperCase();return t==='INPUT'||t==='TEXTAREA'||el.isContentEditable;}
