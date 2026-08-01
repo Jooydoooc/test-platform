@@ -64,6 +64,10 @@ export interface StartAttemptResult {
 //   * already submitted  -> refuse (alreadyCompleted), no new attempt
 //   * in-progress        -> resume the same row (server start time preserved)
 //   * none               -> insert (the DB unique index makes this atomic)
+// Shown whenever a token resolves to no test: the link itself is the thing the
+// student can act on, so name it rather than reporting a generic failure.
+const BAD_LINK = "This test link isn't valid. Ask your teacher for a new one.";
+
 export async function startAttempt(token: string): Promise<StartAttemptResult> {
   const user = await getServerUser();
   if (!user) return { ok: false, error: "Not signed in." };
@@ -82,9 +86,21 @@ export async function startAttempt(token: string): Promise<StartAttemptResult> {
       time_limit_sec: number | null;
     }>();
 
-  if (error || !data) {
+  // start_share_attempt raises a distinct SQLSTATE per refusal reason; keep them
+  // distinct here. Collapsing them told a student with a stale or mistyped link
+  // only that something failed, so they had no way to know the link was the
+  // problem. 42501 (signed-in / STUDENT guard) means the session desynced with
+  // the checks above, so it keeps the RPC's own wording.
+  if (error) {
+    if (error.code === "P0002") return { ok: false, error: BAD_LINK };
+    if (error.code === "42501") {
+      return { ok: false, error: error.message || "Only students take tests." };
+    }
     return { ok: false, error: "Could not start the test." };
   }
+  // The RPC inserts then returns, so no-error-no-row shouldn't happen; treat it
+  // as an unresolvable token rather than failing silently.
+  if (!data) return { ok: false, error: BAD_LINK };
 
   if (data.submitted_at) {
     const { data: result } = await supabase
