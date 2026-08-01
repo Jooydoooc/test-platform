@@ -4,9 +4,12 @@ import { getServerUser, isAdminRole } from "@/lib/auth-server";
 import {
   listTestShareLinks,
   listHostedTestShareLinks,
+  setTestPublished,
+  setHtmlTestPublished,
 } from "@/lib/data/tests";
 import type { Level } from "@/lib/database.types";
 import { CopyLink } from "./CopyLink";
+import { PublishToggle } from "./PublishToggle";
 
 // Short level labels (mirrors LEVEL_OPTIONS in lib/books.ts) for hosted tests.
 const LEVEL_LABEL: Record<Level, string> = {
@@ -74,7 +77,15 @@ export default async function TestLinksPage() {
                     {tags && ` · ${tags}`}
                   </p>
                 </div>
-                <CopyLink path={path} />
+                <div className="flex shrink-0 items-center gap-3">
+                  <CopyLink path={path} />
+                  <PublishToggle
+                    testId={t.id}
+                    initialPublished={t.published}
+                    kind="interactive test"
+                    setPublished={setHtmlTestPublished}
+                  />
+                </div>
               </Card>
             );
           })
@@ -104,7 +115,15 @@ export default async function TestLinksPage() {
                   </p>
                   <p className="truncate text-xs text-slate-500">{path}</p>
                 </div>
-                <CopyLink path={path} />
+                <div className="flex shrink-0 items-center gap-3">
+                  <CopyLink path={path} />
+                  <PublishToggle
+                    testId={t.id}
+                    initialPublished={t.published}
+                    kind="test"
+                    setPublished={setTestPublished}
+                  />
+                </div>
               </Card>
             );
           })

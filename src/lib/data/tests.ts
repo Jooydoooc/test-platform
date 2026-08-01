@@ -36,6 +36,7 @@ export interface TestShareLink {
   id: string;
   title: string;
   token: string;
+  published: boolean;
 }
 
 export interface HostedTestShareLink {
@@ -44,23 +45,29 @@ export interface HostedTestShareLink {
   token: string;
   skillScope: TestSkillScope;
   level: Level | null;
+  published: boolean;
 }
 
 // Teacher-facing: tests with their share tokens, for building /t/<token> links.
 // Since 0025 RLS returns nothing here for students (they can't read tests they
 // have no attempt on), but callers must still gate this page to admins — the
 // tokens themselves are the credentials.
+//
+// `published` (0031) is surfaced so the admin UI can show, at a glance, which
+// tests are actually openable — an unpublished test's link resolves to nothing
+// for a student, even though the row (and token) already exist.
 export async function listTestShareLinks(): Promise<TestShareLink[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("tests")
-    .select("id, title, share_token")
+    .select("id, title, share_token, published")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((t) => ({
     id: t.id,
     title: t.title,
     token: t.share_token,
+    published: t.published,
   }));
 }
 
@@ -70,7 +77,7 @@ export async function listHostedTestShareLinks(): Promise<HostedTestShareLink[]>
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("html_tests")
-    .select("id, title, share_token, skill_scope, level")
+    .select("id, title, share_token, skill_scope, level, published")
     .order("created_at", { ascending: false });
   if (error) throw error;
   const rows = (data ?? []) as Array<{
@@ -79,6 +86,7 @@ export async function listHostedTestShareLinks(): Promise<HostedTestShareLink[]>
     share_token: string;
     skill_scope: TestSkillScope;
     level: Level | null;
+    published: boolean;
   }>;
   return rows.map((t) => ({
     id: t.id,
@@ -86,7 +94,56 @@ export async function listHostedTestShareLinks(): Promise<HostedTestShareLink[]>
     token: t.share_token,
     skillScope: t.skill_scope,
     level: t.level,
+    published: t.published,
   }));
+}
+
+// Admin-only publish toggles (migration 0031). `authenticated` has no direct
+// UPDATE on tests.published/html_tests.published — these RPCs are the only
+// path, and they re-check ADMIN role server-side (SQLSTATE 42501 otherwise).
+// Mirrors the SQLSTATE-mapping convention in attempts.ts startAttempt(): map
+// known codes to a fixed, safe message and never forward raw Postgres text.
+export interface SetPublishedResult {
+  ok: boolean;
+  published?: boolean;
+  error?: string;
+}
+
+const ADMIN_ONLY = "Only admins can publish tests.";
+const PUBLISH_FAILED = "Could not update publish status.";
+
+export async function setTestPublished(
+  testId: string,
+  published: boolean,
+): Promise<SetPublishedResult> {
+  "use server";
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("set_test_published", {
+    p_test_id: testId,
+    p_published: published,
+  });
+  if (error) {
+    if (error.code === "42501") return { ok: false, error: ADMIN_ONLY };
+    return { ok: false, error: PUBLISH_FAILED };
+  }
+  return { ok: true, published: Boolean(data) };
+}
+
+export async function setHtmlTestPublished(
+  testId: string,
+  published: boolean,
+): Promise<SetPublishedResult> {
+  "use server";
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("set_html_test_published", {
+    p_test_id: testId,
+    p_published: published,
+  });
+  if (error) {
+    if (error.code === "42501") return { ok: false, error: ADMIN_ONLY };
+    return { ok: false, error: PUBLISH_FAILED };
+  }
+  return { ok: true, published: Boolean(data) };
 }
 
 export async function listTests(): Promise<TestSummary[]> {
