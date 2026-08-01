@@ -46,9 +46,48 @@ function buildUnit(id: string, title: string, seed: Seed[]): VocabUnit {
 }
 
 // One drillable source per book unit: eew1-u1 … eew1-u5.
-const UNITS: VocabUnit[] = ESSENTIAL_WORDS_BOOK1.map((u) =>
+const ESSENTIAL_UNITS: VocabUnit[] = ESSENTIAL_WORDS_BOOK1.map((u) =>
   buildUnit(`eew1-u${u.unit}`, `Essential Words — Unit ${u.unit}`, u.words),
 );
+
+// --- featured / daily themed sets ------------------------------------------
+// Curated topic word lists for the "Learn new words" study flow on Practice.
+// Same shape as a book unit, so the Learn page and every drill run over them
+// unchanged. Examples are written to contain the base word so gap-fill drills
+// blank cleanly.
+const KIWI: Seed[] = [
+  { word: "kiwi", part_of_speech: "n.", definition_en: "a small bird from New Zealand that cannot fly", translation_uz: "kivi qushi", examples: ["The kiwi lives in New Zealand."] },
+  { word: "strange", part_of_speech: "adj.", definition_en: "unusual or different from normal", translation_uz: "g‘alati", examples: ["The kiwi is a strange bird."] },
+  { word: "bird", part_of_speech: "n.", definition_en: "an animal with feathers, wings, and a beak", translation_uz: "qush", examples: ["A kiwi is a bird."] },
+  { word: "fly", part_of_speech: "v.", definition_en: "to move through the air", translation_uz: "uchmoq", examples: ["Most birds can fly, but the kiwi cannot."] },
+  { word: "size", part_of_speech: "n.", definition_en: "how big or small something is", translation_uz: "o‘lcham", examples: ["The kiwi is about the same size as a chicken."] },
+  { word: "wing", part_of_speech: "n.", definition_en: "a body part that birds usually use for flying", translation_uz: "qanot", examples: ["The kiwi has a very small wing on each side."] },
+  { word: "tail", part_of_speech: "n.", definition_en: "the back part of an animal’s body", translation_uz: "dum", examples: ["The kiwi does not have a visible tail."] },
+  { word: "feather", part_of_speech: "n.", definition_en: "one of the soft parts covering a bird’s body", translation_uz: "pat", examples: ["Each feather on a kiwi looks like hair."] },
+  { word: "foot", part_of_speech: "n.", definition_en: "the body part used for standing and walking", translation_uz: "oyoq panjasi", examples: ["The kiwi can stand on one foot."] },
+  { word: "toe", part_of_speech: "n.", definition_en: "one of the small parts at the end of a foot", translation_uz: "oyoq barmog‘i", examples: ["The kiwi has a sharp toe for digging."] },
+  { word: "beak", part_of_speech: "n.", definition_en: "the hard mouth of a bird", translation_uz: "tumshuq", examples: ["The kiwi has a long beak."] },
+  { word: "tree", part_of_speech: "n.", definition_en: "a tall plant with a trunk and branches", translation_uz: "daraxt", examples: ["The kiwi often hides behind a tree."] },
+  { word: "sleep", part_of_speech: "v.", definition_en: "to rest with your eyes closed", translation_uz: "uxlamoq", examples: ["The kiwi sleeps during the day."] },
+  { word: "during", part_of_speech: "prep.", definition_en: "at some time within a period", translation_uz: "davomida; paytida", examples: ["The kiwi rests during the daytime."] },
+  { word: "sunlight", part_of_speech: "n.", definition_en: "light that comes from the sun", translation_uz: "quyosh nuri", examples: ["Bright sunlight can hurt the kiwi’s eyes."] },
+  { word: "hurt", part_of_speech: "v.", definition_en: "to cause pain", translation_uz: "og‘ritmoq", examples: ["Bright light can hurt its eyes."] },
+  { word: "smell", part_of_speech: "v.", definition_en: "to notice something with your nose", translation_uz: "hidini sezmoq", examples: ["The kiwi can smell food very well."] },
+  { word: "egg", part_of_speech: "n.", definition_en: "something a bird lays; a baby bird can grow inside it", translation_uz: "tuxum", examples: ["The kiwi lays a very large egg."] },
+  { word: "government", part_of_speech: "n.", definition_en: "the people who run and control a country", translation_uz: "hukumat", examples: ["The government protects the kiwi bird."] },
+  { word: "kill", part_of_speech: "v.", definition_en: "to make a person or animal die", translation_uz: "o‘ldirmoq", examples: ["It is illegal to kill a kiwi."] },
+];
+
+/** Featured/daily themed study sets, in display order. */
+const FEATURED: { unit: VocabUnit; topic: string; day: number }[] = [
+  { unit: buildUnit("daily-the-kiwi", "The Kiwi", KIWI), topic: "The Kiwi", day: 1 },
+];
+
+// Every resolvable drill/learn source: book units + featured sets.
+const UNITS: VocabUnit[] = [
+  ...ESSENTIAL_UNITS,
+  ...FEATURED.map((f) => f.unit),
+];
 
 // --- reading passages ------------------------------------------------------
 // The Vocabulary section: students read a passage and double-tap the words
@@ -130,7 +169,24 @@ export function getReadingPassage(id: string): ReadingPassage | undefined {
 }
 
 export function listVocabUnits(): { id: string; title: string; wordCount: number }[] {
-  return UNITS.map((u) => ({ id: u.id, title: u.title, wordCount: u.words.length }));
+  return ESSENTIAL_UNITS.map((u) => ({ id: u.id, title: u.title, wordCount: u.words.length }));
+}
+
+/** Featured/daily themed study sets for the "Learn new words" flow. */
+export function listFeaturedUnits(): {
+  id: string;
+  title: string;
+  topic: string;
+  day: number;
+  wordCount: number;
+}[] {
+  return FEATURED.map((f) => ({
+    id: f.unit.id,
+    title: f.unit.title,
+    topic: f.topic,
+    day: f.day,
+    wordCount: f.unit.words.length,
+  }));
 }
 
 export function getVocabUnit(unitId: string): VocabUnit | undefined {

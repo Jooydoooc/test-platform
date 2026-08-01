@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, BookOpen, GraduationCap } from "lucide-react";
+import { ArrowRight, BookOpen, GraduationCap, Sparkles } from "lucide-react";
 import { Card } from "@/components/ui";
 import {
   ALL_EXERCISE_ORDER,
@@ -76,6 +76,32 @@ export default function VocabPracticePage({
           Add more words from the text
         </Link>
       )}
+
+      {/* Learn step — study the words before drilling them. */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Start here
+        </h2>
+        <Link
+          href={`/practice/vocab/${sourceId}/learn`}
+          className="group block focus-visible:outline-none"
+        >
+          <Card className="flex h-full items-center justify-between gap-3 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-brand-300 group-hover:shadow-card-hover">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+                <Sparkles className="size-4" />
+              </span>
+              <div className="space-y-0.5">
+                <h3 className="font-semibold text-slate-900">Learn the words</h3>
+                <p className="text-sm text-slate-600">
+                  Study cards & meanings first · not graded
+                </p>
+              </div>
+            </div>
+            <ArrowRight className="size-5 shrink-0 text-brand-600 transition-transform group-hover:translate-x-0.5" />
+          </Card>
+        </Link>
+      </section>
 
       {/* Skills test — the graded assessment that earns XP, kept distinct from
           the practice drills below (which are for learning and earn no XP). */}

@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { LinkButton, ProgressBar } from "@/components/ui";
-import { useCollections } from "@/lib/vocab-store";
+import { listFeaturedUnits, useCollections } from "@/lib/vocab-store";
 import {
   bookOf,
   categoryOf,
@@ -236,6 +236,9 @@ export default function PracticePage() {
         </div>
       </section>
 
+      {/* ---------- learn new words (featured/daily study sets) ---------- */}
+      <LearnNewWords />
+
       {/* ---------- my vocabulary (saved words → drills) ---------- */}
       <MyVocabulary collections={collections} />
 
@@ -339,6 +342,53 @@ export default function PracticePage() {
         </div>
       )}
     </div>
+  );
+}
+
+/* ------------------------- learn new words ----------------------------- */
+
+function LearnNewWords() {
+  const units = listFeaturedUnits();
+  if (units.length === 0) return null;
+
+  return (
+    <section aria-label="Learn new words" className="space-y-3">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+        Learn new words
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {units.map((u) => (
+          <Link
+            key={u.id}
+            href={`/practice/vocab/${u.id}/learn`}
+            className="group flex flex-col rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 motion-reduce:hover:translate-y-0"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">
+                  Day {u.day}
+                </p>
+                <h3 className="mt-0.5 font-semibold leading-snug text-[#0F172A]">
+                  {u.topic}
+                </h3>
+              </div>
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
+                <Sparkles className="size-4" />
+              </span>
+            </div>
+            <div className="mt-4 flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500">
+                {u.wordCount} words to learn
+              </span>
+              <span className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600">
+                Learn
+                <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
