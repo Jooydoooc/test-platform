@@ -30,6 +30,7 @@ import {
   type BadgeDef,
   type BadgeSkill,
 } from "@/lib/badges";
+import { Check, Lock } from "lucide-react";
 import { Badge, Button, Card, LinkButton, ProgressBar } from "@/components/ui";
 import { logout, useSession } from "@/lib/auth";
 import { groupOf, useAttempts, useTests } from "@/lib/store";
@@ -38,6 +39,7 @@ import { TEST_GROUPS, type Attempt } from "@/lib/types";
 import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 import { useMyAttempts, type MyAttempt } from "@/lib/data/my-attempts";
 import { useSkillMastery } from "@/lib/data/use-skill-mastery";
+import { useEarnedBadges } from "@/lib/data/use-earned-badges";
 import { useStreak } from "@/lib/data/use-streak";
 
 const DAY = 86_400_000;
@@ -152,6 +154,12 @@ export default function DashboardPage() {
   // ---------------------------------------------------------------------------
   const { attempts: realAttempts, loading: attLoading } = useMyAttempts();
   const { mastery: realMastery, loading: masteryLoading } = useSkillMastery();
+  // Badge truth comes from badge_unlocks, not from client-side re-derivation.
+  const {
+    codes: earnedCodes,
+    loading: badgesLoading,
+    error: badgesError,
+  } = useEarnedBadges();
   const {
     current: realStreakCurrent,
     longest: realStreakLongest,
@@ -204,7 +212,7 @@ export default function DashboardPage() {
   const dataLoading =
     SUPABASE_ENABLED &&
     !loadTimedOut &&
-    (attLoading || masteryLoading || streakLoading);
+    (attLoading || masteryLoading || streakLoading || badgesLoading);
 
   // ---------------------------------------------------------------------------
   // Stats: sourced from Supabase when enabled, localStorage otherwise.
@@ -280,17 +288,20 @@ export default function DashboardPage() {
     return SKILL_GROUPS.map((g) => {
       if (SUPABASE_ENABLED) {
         // Map the test-group name to a DB SkillArea key and look up mastery.
+        // `attempted` is reported by the hook from whether any graded row
+        // exists, so a real 0% stays distinguishable from "never tried" — the
+        // distinction the focus-area recommendation depends on.
         const skillKey = GROUP_TO_SKILL[g];
-        const avg = skillKey ? (realMastery[skillKey as keyof typeof realMastery] ?? 0) : 0;
+        const stat = skillKey
+          ? realMastery[skillKey as keyof typeof realMastery]
+          : undefined;
         return {
           group: g,
           label: g.replace(" Tests", ""),
-          // When Supabase is enabled we don't have per-group test counts, so
-          // we use `done > 0` based on whether mastery is non-zero, and `total`
-          // as a sentinel (1) so empty-state messaging works correctly.
-          total: 1,
-          done: avg > 0 ? 1 : 0,
-          avg,
+          total: stat?.tests ?? 0,
+          done: stat?.tests ?? 0,
+          attempted: stat?.attempted ?? false,
+          avg: stat?.avg ?? 0,
         };
       }
       // Legacy path
@@ -308,6 +319,7 @@ export default function DashboardPage() {
         label: g.replace(" Tests", ""),
         total: inGroup.length,
         done: done.length,
+        attempted: done.length > 0,
         avg,
       };
     });
@@ -316,10 +328,10 @@ export default function DashboardPage() {
   // Focus area: the started skill with the lowest mastery.
   const focus = useMemo(() => {
     const started = skillProgress
-      .filter((s) => s.done > 0)
+      .filter((s) => s.attempted)
       .sort((a, b) => a.avg - b.avg);
     if (started.length > 0 && started[0].avg < 80) return started[0];
-    const untouched = skillProgress.find((s) => s.done === 0 && s.total > 0);
+    const untouched = skillProgress.find((s) => !s.attempted);
     return untouched ?? started[0] ?? null;
   }, [skillProgress]);
 
@@ -444,19 +456,30 @@ export default function DashboardPage() {
   // Badges — fed from skillProgress (always computed above) + streak.
   // ---------------------------------------------------------------------------
   const { badgeGroups, earnedCount, totalCount } = useMemo(() => {
-    const skillTests: Partial<Record<BadgeSkill, number>> = {};
-    for (const s of skillProgress) {
-      if (s.done > 0) skillTests[s.label.toUpperCase() as BadgeSkill] = s.done;
-    }
-    const counts: BadgeCounts = {
-      skillTests,
-      streakDays: stats.longest,
-      unitsMastered: 0,
-    };
-    const evaluated = BADGE_CATALOG.map((def) => ({
-      def,
-      earned: isBadgeEarned(def, counts),
-    }));
+    // With the real backend on, earned state is whatever the server awarded
+    // (badge_unlocks). The old client-side re-derivation ran on counts this
+    // page never actually had — skill counts were a 0-or-1 sentinel and
+    // unitsMastered was hardcoded 0 — so volume and unit badges could never
+    // light up here regardless of what the student had done.
+    const evaluated = SUPABASE_ENABLED
+      ? BADGE_CATALOG.map((def) => ({ def, earned: earnedCodes.has(def.code) }))
+      : (() => {
+          const skillTests: Partial<Record<BadgeSkill, number>> = {};
+          for (const s of skillProgress) {
+            if (s.done > 0) {
+              skillTests[s.label.toUpperCase() as BadgeSkill] = s.done;
+            }
+          }
+          const counts: BadgeCounts = {
+            skillTests,
+            streakDays: stats.longest,
+            unitsMastered: 0,
+          };
+          return BADGE_CATALOG.map((def) => ({
+            def,
+            earned: isBadgeEarned(def, counts),
+          }));
+        })();
 
     const groupFor = (def: BadgeDef): { key: string; label: string } => {
       if (def.metric === "skill_tests" && def.skillArea) {
@@ -490,28 +513,21 @@ export default function DashboardPage() {
       earnedCount: evaluated.filter((b) => b.earned).length,
       totalCount: evaluated.length,
     };
-  }, [skillProgress, stats.longest]);
+  }, [skillProgress, stats.longest, earnedCodes]);
 
   // ---------------------------------------------------------------------------
   // Gate: show spinner while auth is resolving OR while real data is loading.
   // ---------------------------------------------------------------------------
   if (loading || !user) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-600" />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
-  // While Supabase data is fetching, show a lightweight skeleton so widgets
-  // don't flash zeros then correct values. This matches the "loading" treatment
-  // described in the task: show existing skeleton/empty treatment, not zeros.
+  // While Supabase data is fetching, show a skeleton shaped like the real
+  // layout so widgets don't flash zeros then correct values, and so the page
+  // doesn't jump. A spinner in the middle of content is the wrong treatment
+  // here: it tells the student nothing about what is arriving.
   if (dataLoading) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-600" />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const initial = user.name.trim().charAt(0).toUpperCase() || "?";
@@ -601,11 +617,12 @@ export default function DashboardPage() {
             Your journey starts here
           </h2>
           <p className="max-w-sm text-sm text-slate-600">
-            Take your first test to unlock skill mastery, XP, streaks, and
-            achievements — all tracked right here.
+            Start with practice: it is open to you any time, and it feeds your
+            skill mastery, XP and streak. Tests arrive as a link from your
+            teacher.
           </p>
-          <LinkButton href="/tests" className="mt-1">
-            Browse tests
+          <LinkButton href="/practice" className="mt-1">
+            Start practising
           </LinkButton>
         </Card>
       ) : (
@@ -618,7 +635,7 @@ export default function DashboardPage() {
                   <Compass className="h-4 w-4 text-brand-600" />
                   Skill mastery
                 </h2>
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-slate-500">
                   avg accuracy per skill
                 </span>
               </div>
@@ -637,7 +654,9 @@ export default function DashboardPage() {
                               {s.avg}%
                             </span>
                           ) : (
-                            <span className="text-xs text-slate-400">—</span>
+                            <span className="text-xs text-slate-500">
+                              Not started
+                            </span>
                           )}
                         </span>
                       </div>
@@ -665,12 +684,12 @@ export default function DashboardPage() {
                     <p className="text-lg font-extrabold text-slate-900">
                       {focus.label}
                     </p>
-                    <p className="mt-0.5 text-sm text-slate-500">
-                      {focus.done > 0
+                    <p className="mt-0.5 text-sm text-slate-600">
+                      {focus.attempted
                         ? `Your weakest skill at ${focus.avg}%. A little practice goes a long way.`
-                        : "You haven't tried this skill yet — give it a go."}
+                        : "You haven't tried this skill yet. Give it a go."}
                     </p>
-                    <LinkButton href="/tests" className="mt-3 w-full">
+                    <LinkButton href="/practice" className="mt-3 w-full">
                       Practise {focus.label}
                     </LinkButton>
                   </div>
@@ -689,17 +708,25 @@ export default function DashboardPage() {
                     Daily goal
                   </h2>
                   <div className="flex items-center gap-1">
-                    <GoalBtn onClick={() => updateGoal(dailyGoal - 1)} label="−" />
+                    <GoalBtn
+                      onClick={() => updateGoal(dailyGoal - 1)}
+                      label="−"
+                      disabled={dailyGoal <= 1}
+                    />
                     <span className="w-6 text-center text-sm font-bold tabular-nums text-slate-800">
                       {dailyGoal}
                     </span>
-                    <GoalBtn onClick={() => updateGoal(dailyGoal + 1)} label="+" />
+                    <GoalBtn
+                      onClick={() => updateGoal(dailyGoal + 1)}
+                      label="+"
+                      disabled={dailyGoal >= 20}
+                    />
                   </div>
                 </div>
                 <div className="mt-3 flex items-baseline justify-between">
                   <span className="text-2xl font-extrabold tabular-nums text-slate-900">
                     {Math.min(goalDone, dailyGoal)}
-                    <span className="text-sm font-semibold text-slate-400">
+                    <span className="text-sm font-semibold text-slate-500">
                       {" "}
                       / {dailyGoal}
                     </span>
@@ -756,7 +783,7 @@ export default function DashboardPage() {
                       : "Holding steady."}
               </p>
               <div className="mt-4">
-                <p className="mb-1.5 text-xs font-medium text-slate-400">
+                <p className="mb-1.5 text-xs font-medium text-slate-500">
                   Last 14 days
                 </p>
                 <Sparkline data={activity} />
@@ -770,8 +797,8 @@ export default function DashboardPage() {
                   <Medal className="h-4 w-4 text-amber-500" />
                   Badges
                 </h2>
-                <span className="text-xs font-semibold text-slate-500">
-                  {earnedCount}/{totalCount}
+                <span className="text-xs font-semibold tabular-nums text-slate-500">
+                  {badgesError ? "Unavailable" : `${earnedCount}/${totalCount}`}
                 </span>
               </div>
               <div className="space-y-4">
@@ -782,10 +809,10 @@ export default function DashboardPage() {
                   return (
                     <div key={group.key}>
                       <div className="mb-1.5 flex items-center justify-between">
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
                           {group.label}
                         </p>
-                        <span className="text-[11px] font-semibold text-slate-400">
+                        <span className="text-[11px] font-semibold tabular-nums text-slate-500">
                           {groupEarned}/{group.badges.length}
                         </span>
                       </div>
@@ -795,27 +822,44 @@ export default function DashboardPage() {
                           return (
                             <div
                               key={def.code}
-                              title={def.description}
                               className={`flex items-center gap-2.5 rounded-xl border p-2.5 ${
                                 earned
                                   ? "border-amber-200 bg-amber-50"
-                                  : "border-slate-200 bg-slate-50 opacity-60"
+                                  : "border-slate-200 bg-slate-50"
                               }`}
                             >
                               <span
-                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                                className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
                                   earned
-                                    ? "bg-amber-100 text-amber-600"
-                                    : "bg-slate-100 text-slate-400"
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-slate-100 text-slate-500"
                                 }`}
                               >
                                 <Icon className="h-4 w-4" />
+                                {/* State is never colour-only: earned carries a
+                                    check, locked carries a padlock. */}
+                                <span
+                                  className={`absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full ring-2 ring-white ${
+                                    earned
+                                      ? "bg-amber-600 text-white"
+                                      : "bg-slate-300 text-slate-700"
+                                  }`}
+                                >
+                                  {earned ? (
+                                    <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                                  ) : (
+                                    <Lock className="h-2.5 w-2.5" strokeWidth={3} />
+                                  )}
+                                </span>
                               </span>
                               <div className="min-w-0">
                                 <p className="truncate text-xs font-bold text-slate-800">
                                   {def.name}
+                                  <span className="sr-only">
+                                    {earned ? " — earned" : " — locked"}
+                                  </span>
                                 </p>
-                                <p className="truncate text-[11px] text-slate-500">
+                                <p className="truncate text-[11px] text-slate-600">
                                   {def.description}
                                 </p>
                               </div>
@@ -857,12 +901,12 @@ export default function DashboardPage() {
                           <p className="truncate text-sm font-medium text-slate-800">
                             {item.testTitle}
                           </p>
-                          <p className="text-xs text-slate-400">
+                          <p className="text-xs text-slate-500">
                             {item.testGroup ? `${item.testGroup} · ` : ""}
                             {timeAgo(item.submittedAt)}
                           </p>
                         </div>
-                        <span className="shrink-0 text-xs tabular-nums text-slate-400">
+                        <span className="shrink-0 text-xs tabular-nums text-slate-500">
                           {item.score}/{item.maxScore}
                         </span>
                         <Badge
@@ -905,6 +949,29 @@ export default function DashboardPage() {
 // Sub-components
 // ============================================================
 
+// Loading treatment: shapes that match the real layout (hero, mastery panel,
+// side column, lower row) so the page doesn't jump when data lands. The product
+// register rules out a spinner parked in the middle of content.
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading your dashboard</span>
+      <div className="h-64 animate-pulse rounded-3xl bg-slate-200/70 sm:h-72" />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="h-72 animate-pulse rounded-xl bg-slate-200/70" />
+        <div className="space-y-6">
+          <div className="h-40 animate-pulse rounded-xl bg-slate-200/70" />
+          <div className="h-44 animate-pulse rounded-xl bg-slate-200/70" />
+        </div>
+      </div>
+      <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="h-52 animate-pulse rounded-xl bg-slate-200/70" />
+        <div className="h-52 animate-pulse rounded-xl bg-slate-200/70" />
+      </div>
+    </div>
+  );
+}
+
 function HeroStat({
   icon: Icon,
   label,
@@ -927,15 +994,32 @@ function HeroStat({
   );
 }
 
-function GoalBtn({ onClick, label }: { onClick: () => void; label: string }) {
+// The visible chip stays small so the goal card keeps its density, but the
+// button itself is a full 44px target on touch (PRODUCT.md accessibility
+// floor); the negative margins stop that larger hit area from bloating the row.
+function GoalBtn({
+  onClick,
+  label,
+  disabled,
+}: {
+  onClick: () => void;
+  label: string;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={label === "+" ? "Increase daily goal" : "Decrease daily goal"}
-      className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-sm font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+      className="-my-2.5 flex h-11 w-11 items-center justify-center text-sm font-bold text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-300 sm:-my-1.5 sm:h-9 sm:w-9"
     >
-      {label}
+      <span
+        aria-hidden
+        className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-300 bg-white"
+      >
+        {label}
+      </span>
     </button>
   );
 }
@@ -944,11 +1028,11 @@ function GoalBtn({ onClick, label }: { onClick: () => void; label: string }) {
 function SkillRadar({
   data,
 }: {
-  data: { label: string; avg: number }[];
+  data: { label: string; avg: number; attempted: boolean }[];
 }) {
   const size = 220;
   const c = size / 2;
-  const r = c - 34;
+  const r = c - 40;
   const n = data.length;
   const angleAt = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2;
   const point = (i: number, radius: number) => {
@@ -968,7 +1052,9 @@ function SkillRadar({
       viewBox={`0 0 ${size} ${size}`}
       className="mx-auto h-auto w-full max-w-[240px]"
       role="img"
-      aria-label="Skill mastery radar chart"
+      aria-label={`Skill mastery: ${data
+        .map((d) => `${d.label} ${d.attempted ? `${d.avg}%` : "not started"}`)
+        .join(", ")}`}
     >
       {rings.map((frac) => (
         <polygon
@@ -1001,8 +1087,18 @@ function SkillRadar({
         strokeLinejoin="round"
       />
       {data.map((d, i) => {
-        const [x, y] = point(i, r * Math.max(0, Math.min(100, d.avg)) / 100);
-        return <circle key={i} cx={x} cy={y} r={2.5} fill="#5a3fca" />;
+        const [x, y] = point(i, (r * Math.max(0, Math.min(100, d.avg))) / 100);
+        return (
+          <circle
+            key={i}
+            cx={x}
+            cy={y}
+            r={d.attempted ? 3 : 2.5}
+            fill={d.attempted ? "#5a3fca" : "#ffffff"}
+            stroke="#5a3fca"
+            strokeWidth={d.attempted ? 0 : 1.5}
+          />
+        );
       })}
       {data.map((d, i) => {
         const [x, y] = point(i, r + 18);
@@ -1013,7 +1109,7 @@ function SkillRadar({
             y={y}
             textAnchor="middle"
             dominantBaseline="middle"
-            className="fill-slate-500 text-[9px] font-semibold"
+            className="fill-slate-600 text-[11px] font-semibold"
           >
             {d.label}
           </text>
@@ -1023,24 +1119,39 @@ function SkillRadar({
   );
 }
 
-/** Minimal bar sparkline of per-day activity. */
+/** Minimal bar sparkline of per-day activity, oldest day first. */
 function Sparkline({ data }: { data: number[] }) {
   const max = Math.max(1, ...data);
+  const total = data.reduce((s, v) => s + v, 0);
+  const activeDays = data.filter((v) => v > 0).length;
   return (
-    <div className="flex h-12 items-end gap-1">
-      {data.map((v, i) => (
-        <div
-          key={i}
-          className="flex-1 rounded-sm bg-brand-100"
-          style={{ height: `${Math.max(8, (v / max) * 100)}%` }}
-          title={`${v} test${v === 1 ? "" : "s"}`}
-        >
+    <div
+      className="flex h-12 items-end gap-1"
+      role="img"
+      aria-label={
+        total === 0
+          ? "No activity in the last 14 days"
+          : `${total} test${total === 1 ? "" : "s"} across ${activeDays} day${
+              activeDays === 1 ? "" : "s"
+            } in the last 14 days`
+      }
+    >
+      {data.map((v, i) => {
+        const daysAgo = data.length - 1 - i;
+        return (
           <div
-            className="h-full rounded-sm bg-brand-500"
-            style={{ opacity: v > 0 ? 1 : 0 }}
+            key={i}
+            /* A day with no activity is a flat 2px rule, not a short tinted
+               bar: the old 8% floor made a fortnight of nothing read as faint
+               activity. */
+            className={`flex-1 rounded-sm ${v > 0 ? "bg-brand-500" : "h-0.5 bg-slate-200"}`}
+            style={v > 0 ? { height: `${Math.max(12, (v / max) * 100)}%` } : undefined}
+            title={`${
+              daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo} days ago`
+            }: ${v} test${v === 1 ? "" : "s"}`}
           />
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
