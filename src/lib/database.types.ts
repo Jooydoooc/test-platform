@@ -89,6 +89,10 @@ export type TestRow = {
   time_limit_sec: number | null;
   share_token: string;
   created_by: string;
+  /** Migration 0031 — gates the token RPCs; unpublished tests refuse to open
+   *  even for a valid share link. `authenticated` has no direct UPDATE on this
+   *  column, only the set_test_published RPC (admin-only). */
+  published: boolean;
 } & Timestamps;
 
 export type TaskRow = {
@@ -139,6 +143,8 @@ export type HtmlTestRow = {
   created_by: string;
   created_at: string;
   updated_at: string;
+  /** Migration 0031 — see TestRow.published; same gate for /ht/<token>. */
+  published: boolean;
 };
 
 /**
@@ -427,6 +433,20 @@ export interface Database {
           html_test_id: string;
           submitted_at: string | null;
         }[];
+      };
+      /**
+       * Admin-only publish toggles (migration 0031). `authenticated` has no
+       * direct UPDATE on tests.published/html_tests.published — these RPCs are
+       * the only path, and they raise 42501 for non-admins. Return the new
+       * published value on success.
+       */
+      set_test_published: {
+        Args: { p_test_id: string; p_published: boolean };
+        Returns: boolean;
+      };
+      set_html_test_published: {
+        Args: { p_test_id: string; p_published: boolean };
+        Returns: boolean;
       };
     };
     Enums: {
