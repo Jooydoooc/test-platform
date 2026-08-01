@@ -11,10 +11,11 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Button, Card, ProgressBar } from "@/components/ui";
-import { startAttempt } from "@/lib/data/attempts";
+import { getExistingAttempt, startAttempt } from "@/lib/data/attempts";
 import { submitAttempt } from "@/lib/data/submit";
 import {
   useProctor,
+  useFocusTrap,
   FullscreenGuard,
   ProctorWarning,
   fullscreenSupported,
@@ -55,6 +56,31 @@ const CHOICE_FORMATS: QuestionFormat[] = [
   "MULTIPLE_CHOICE_MULTI",
   "TRUE_FALSE",
 ];
+
+// "Answered" means a genuine answer, not merely a key present in `responses`.
+// toggleChoiceMulti and setText always write a value — {selected: []} once a
+// ticked checkbox is unticked, {text: ""} once typed text is deleted — so
+// checking `responses[q.id] !== undefined` (the old test) stayed true after
+// the student blanked their answer. That falsely opened the Next/Submit gate
+// and inflated the pre-submit tally while the question would score zero. This
+// is the single source of truth for "answered": both the gate and the
+// confirm-dialog tally call it, so they can never disagree with each other.
+function isAnswered(format: QuestionFormat, value: unknown): boolean {
+  if (value == null || typeof value !== "object") return false;
+  if (CHOICE_FORMATS.includes(format)) {
+    const sel = (value as { selected?: unknown }).selected;
+    return Array.isArray(sel) && sel.length > 0;
+  }
+  const text = (value as { text?: unknown }).text;
+  return typeof text === "string" && text.trim().length > 0;
+}
+
+// Shared mm:ss formatter for the countdown — used both on the pre-exam
+// briefing (Fix 1: the clock is already running there, so it must show a live
+// time too) and in the live exam header, so the two never drift in format.
+function formatClock(totalSeconds: number): string {
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
 
 type Phase = "loading" | "blocked" | "done" | "taking" | "submitting" | "finished";
 
@@ -154,14 +180,24 @@ export function TestTaker({
     }
   }, [phase, proctor]);
 
-  // Start (or resume) the single attempt, server-side.
+  // Read-only mount check: does an attempt already exist? This creates
+  // NOTHING (no RPC, no insert) — it only tells the briefing screen which of
+  // three states it's in:
+  //   * already submitted -> skip the briefing, show "done" immediately
+  //   * in-progress       -> resume: anchor the deadline to that attempt's
+  //                          real started_at (server time, never reset) so
+  //                          the clock is truthful, then let the student
+  //                          click Begin to re-enter
+  //   * none              -> show the briefing with NO running countdown;
+  //                          startAttempt (and the real clock) only fires
+  //                          from beginSecure, once the student clicks Begin
   useEffect(() => {
     let active = true;
     (async () => {
-      const res = await startAttempt(token);
+      const res = await getExistingAttempt(testId);
       if (!active) return;
       if (!res.ok) {
-        setError(res.error ?? "Could not start.");
+        setError(res.error ?? "Could not load the test.");
         setPhase("blocked");
         return;
       }
@@ -170,26 +206,27 @@ export function TestTaker({
         setPhase("done");
         return;
       }
-      if (questions.length === 0) {
-        setPhase("taking"); // empty-state handled in render
-        return;
-      }
-      // Server-anchored countdown: deadline = server start + limit.
-      if (res.timeLimitSec && res.startedAt) {
-        const end = new Date(res.startedAt).getTime() + res.timeLimitSec * 1000;
+      if (res.attemptId && res.startedAt && timeLimitSec) {
+        // Resuming an in-progress attempt: the clock already started server
+        // side, so anchor to that real started_at rather than resetting it.
+        const end = new Date(res.startedAt).getTime() + timeLimitSec * 1000;
         setDeadline(end);
       }
-      setPhase("taking");
+      setPhase("taking"); // briefing renders below while !secureStarted
     })();
     return () => {
       active = false;
     };
-  }, [token, questions.length]);
+  }, [testId, timeLimitSec]);
 
-  // Timer tick + auto-submit on expiry. Only counts down once the student has
-  // begun (secureStarted), matching when questions become visible.
+  // Timer tick + auto-submit on expiry. Gated on secureStarted: `deadline`
+  // may already be set (resuming an in-progress attempt) while the briefing
+  // is still on screen, but the countdown must not tick — and timeout must
+  // not auto-submit — until the student has actually clicked Begin and
+  // entered the exam. That is what closes the "auto-submit a zero while
+  // reading the proctor rules" regression.
   useEffect(() => {
-    if (phase !== "taking" || deadline == null || !secureStarted) return;
+    if (phase !== "taking" || !secureStarted || deadline == null) return;
     const tick = () => {
       const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
       setRemaining(left);
@@ -198,12 +235,58 @@ export function TestTaker({
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [phase, deadline, secureStarted, finishSubmit]);
+  }, [phase, secureStarted, deadline, finishSubmit]);
 
-  const beginSecure = useCallback(() => {
+  // Guards against a double-click minting two attempts: beginSecure is async
+  // now (it must call startAttempt and await the real started_at before the
+  // exam can render), so a second click while the first call is in flight is
+  // ignored via beginningRef rather than relying on button disabled state
+  // alone (state updates are not synchronous).
+  const beginningRef = useRef(false);
+  const [beginning, setBeginning] = useState(false);
+  const beginSecure = useCallback(async () => {
+    if (beginningRef.current) return;
+    beginningRef.current = true;
+    setBeginning(true);
+    setError(null);
+    // Resuming an in-progress attempt: the deadline was already anchored to
+    // the real started_at in the mount effect above — no need to call
+    // startAttempt again, just enter.
+    if (deadline != null) {
+      setSecureStarted(true);
+      void proctor.engage();
+      beginningRef.current = false;
+      setBeginning(false);
+      return;
+    }
+    const res = await startAttempt(token);
+    if (!res.ok) {
+      setError(res.error ?? "Could not start the test.");
+      beginningRef.current = false;
+      setBeginning(false);
+      return;
+    }
+    if (res.alreadyCompleted) {
+      // Raced with another tab/session submitting in the meantime.
+      setResultId(res.resultId);
+      setPhase("done");
+      beginningRef.current = false;
+      setBeginning(false);
+      return;
+    }
+    if (res.timeLimitSec && res.startedAt) {
+      const end = new Date(res.startedAt).getTime() + res.timeLimitSec * 1000;
+      setDeadline(end);
+    }
     setSecureStarted(true);
     void proctor.engage();
-  }, [proctor]);
+    beginningRef.current = false;
+    setBeginning(false);
+  }, [token, deadline, proctor]);
+
+  // Shared by the briefing screen's live countdown and the live-exam header
+  // badge, so both flip into the "urgent" red styling at the same threshold.
+  const lowTime = remaining != null && remaining <= 30;
 
   // -------------------------------------------------------------------------
   // Terminal / gate screens
@@ -338,6 +421,25 @@ export function TestTaker({
             )}
           </div>
           <div className="space-y-4 p-7">
+            {timeLimitSec != null && deadline != null && (
+              // Resuming an in-progress attempt: the deadline was already
+              // anchored to that attempt's real started_at in the mount
+              // effect (read-only check, no attempt created). The countdown
+              // itself does not tick until secureStarted (see the timer
+              // effect above) — this is a static notice, not a live clock,
+              // so reading it costs nothing extra.
+              <div
+                role="timer"
+                aria-live="off"
+                className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm font-semibold text-amber-800"
+              >
+                <Clock className="h-4 w-4 shrink-0" aria-hidden />
+                <span>
+                  You already started this exam — your timer has been
+                  running since you began. Click Begin to re-enter.
+                </span>
+              </div>
+            )}
             <p className="text-sm text-slate-600">
               This is a secure, single-attempt test. Before you begin, please
               read how it’s monitored:
@@ -358,18 +460,25 @@ export function TestTaker({
               </RuleItem>
               {timeLimitSec ? (
                 <RuleItem icon={Clock}>
-                  Time limit:{" "}
+                  Total time limit:{" "}
                   <b>
                     {Math.floor(timeLimitSec / 60)} minute
                     {timeLimitSec >= 120 ? "s" : ""}
                   </b>
-                  . The timer runs on the server.
+                  . It's already counting down above — reading these rules
+                  does not pause it.
                 </RuleItem>
               ) : null}
             </ul>
-            <Button autoFocus onClick={beginSecure} className="w-full justify-center">
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <Button
+              autoFocus
+              onClick={beginSecure}
+              disabled={beginning}
+              className="w-full justify-center"
+            >
               <ShieldCheck className="h-4 w-4" />
-              Begin secure test
+              {beginning ? "Starting…" : "Begin secure test"}
             </Button>
             <p className="text-center text-xs text-slate-500">
               {questions.length} question{questions.length === 1 ? "" : "s"} ·
@@ -386,9 +495,8 @@ export function TestTaker({
   // -------------------------------------------------------------------------
   const q = questions[index];
   const isLast = index === questions.length - 1;
-  const answered = responses[q.id] !== undefined;
+  const answered = isAnswered(q.format, responses[q.id]);
   const submitting = phase === "submitting";
-  const lowTime = remaining != null && remaining <= 30;
 
   const setChoiceSingle = (choiceId: string) =>
     setResponses((r) => ({ ...r, [q.id]: { selected: [choiceId] } }));
@@ -457,8 +565,7 @@ export function TestTaker({
               >
                 <Clock className="h-3.5 w-3.5" />
                 <span className="sr-only">Time remaining: </span>
-                {Math.floor(remaining / 60)}:
-                {String(remaining % 60).padStart(2, "0")}
+                {formatClock(remaining)}
               </span>
             )}
           </div>
@@ -523,7 +630,10 @@ export function TestTaker({
 
       {confirmOpen && (
         <ConfirmSubmit
-          answered={Object.keys(responses).length}
+          answered={
+            questions.filter((qq) => isAnswered(qq.format, responses[qq.id]))
+              .length
+          }
           total={questions.length}
           onCancel={() => setConfirmOpen(false)}
           onConfirm={() => {
@@ -657,6 +767,12 @@ function ConfirmSubmit({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Traps Tab within the dialog (Fix 3) — without it, a keyboard user could
+  // Tab past "Keep working"/"Submit test" into the answer buttons behind this
+  // overlay and change their answer while a submit decision is pending.
+  useFocusTrap(containerRef);
+
   useEffect(() => {
     document.getElementById("taker-confirm-submit")?.focus();
     const onKey = (e: KeyboardEvent) => {
@@ -670,6 +786,7 @@ function ConfirmSubmit({
 
   return (
     <div
+      ref={containerRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"

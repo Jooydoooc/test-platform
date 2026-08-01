@@ -38,6 +38,79 @@ export async function getTestByShareToken(
   };
 }
 
+export interface ExistingAttemptResult {
+  ok: boolean;
+  /** True when no attempt row exists yet for this student/test. */
+  none?: boolean;
+  attemptId?: string;
+  startedAt?: string;
+  /** True when this student already submitted. */
+  alreadyCompleted?: boolean;
+  resultId?: string;
+  error?: string;
+}
+
+// Read-only check for an existing attempt — creates nothing.
+//
+// Used on mount so the briefing screen can tell, before the student clicks
+// Begin, whether this is a fresh test (no countdown yet — clock starts on
+// Begin), a resume of an in-progress attempt (deadline anchored to the
+// existing started_at, never reset), or an already-completed test (skip the
+// briefing entirely). Students retain SELECT on `attempts` and RLS scopes it
+// to their own rows, so this is a plain client read — no RPC, no insert.
+export async function getExistingAttempt(
+  testId: string,
+): Promise<ExistingAttemptResult> {
+  const user = await getServerUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("attempts")
+    .select("id, started_at, submitted_at")
+    .eq("test_id", testId)
+    .eq("student_id", user.id)
+    .maybeSingle<{
+      id: string;
+      started_at: string;
+      submitted_at: string | null;
+    }>();
+
+  // Mirror startAttempt's error-code mapping: session failures arrive as
+  // PostgREST codes, not the DB's own 42501.
+  if (error) {
+    if (
+      error.code === "42501" ||
+      error.code === "PGRST301" ||
+      error.code === "PGRST303"
+    ) {
+      return { ok: false, error: STALE_SESSION };
+    }
+    return { ok: false, error: "Could not load the test." };
+  }
+
+  if (!data) return { ok: true, none: true };
+
+  if (data.submitted_at) {
+    const { data: result } = await supabase
+      .from("results")
+      .select("id")
+      .eq("attempt_id", data.id)
+      .maybeSingle();
+    return {
+      ok: true,
+      alreadyCompleted: true,
+      resultId: result?.id,
+    };
+  }
+
+  return {
+    ok: true,
+    attemptId: data.id,
+    startedAt: data.started_at,
+  };
+}
+
 export interface StartAttemptResult {
   ok: boolean;
   /** Present when a fresh or in-progress attempt is ready to take. */
