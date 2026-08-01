@@ -2,7 +2,7 @@
 // missing from the target project.
 //
 // Why this exists. `main` can be merged long before its migrations are applied
-// (that is deliberate — see docs/prod-migration-runbook-0024-0030.md). The
+// (that is deliberate — see the production migration runbook in docs/). The
 // token-gated test flow calls SECURITY DEFINER RPCs introduced in 0025/0026.
 // Deploying that code against a database without them means every student hits
 // a failure the moment they open a share link: the RPC 404s, startAttempt()
@@ -90,6 +90,28 @@ const REQUIRED_RPCS = [
       p_exp_unique_key: "preflight",
     },
   },
+  // 0031 publish gate. These two are the only MUTATING functions in this list,
+  // and probing them is still safe for exactly one reason: `anon` holds no
+  // EXECUTE grant on them (0031 revokes from public/anon and grants only to
+  // authenticated), so the call is refused by the grant before the function
+  // body runs. Nothing is updated. Belt and braces, the id below is the
+  // all-zeros uuid, which matches no test — so even a hypothetical execution
+  // would raise P0002 rather than change a row.
+  //
+  // Never probe these with a service-role or authenticated key. That would
+  // execute them and flip a real test's publish state.
+  {
+    fn: "set_test_published",
+    migration: "0031",
+    why: "admin publish/unpublish for DB tests",
+    args: { p_test_id: "00000000-0000-0000-0000-000000000000", p_published: false },
+  },
+  {
+    fn: "set_html_test_published",
+    migration: "0031",
+    why: "admin publish/unpublish for hosted HTML tests",
+    args: { p_test_id: "00000000-0000-0000-0000-000000000000", p_published: false },
+  },
 ];
 
 async function probe(fn, args) {
@@ -158,10 +180,11 @@ if (missing.length === 0) {
 const needed = [...new Set(missing.map((m) => m.migration))].sort();
 console.error(
   `\n✗ DEPLOY BLOCKED — ${missing.length} required function(s) missing from ${host}.\n\n` +
-    `  Deploying now would break test-taking for every student: the code calls\n` +
-    `  these functions the moment a share link is opened.\n\n` +
+    `  Deploying now ships code that calls functions this database does not have.\n` +
+    `  Depending on which are missing that breaks opening or starting a test, or\n` +
+    `  leaves an admin action silently failing.\n\n` +
     `  Missing migration(s): ${needed.join(", ")}\n` +
-    `  Follow docs/prod-migration-runbook-0024-0030.md — apply the migrations,\n` +
+    `  Follow the production migration runbook in docs/ — apply the migrations,\n` +
     `  then deploy. Do not bypass this to "get the deploy out".\n`,
 );
 process.exit(1);
