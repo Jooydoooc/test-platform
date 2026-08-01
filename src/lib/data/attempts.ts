@@ -95,11 +95,22 @@ export async function startAttempt(token: string): Promise<StartAttemptResult> {
   // start_share_attempt raises a distinct SQLSTATE per refusal reason; keep them
   // distinct here. Collapsing them told a student with a stale or mistyped link
   // only that something failed, so they had no way to know the link was the
-  // problem. 42501 (signed-in / STUDENT guard) means the session desynced with
-  // the checks above, so it keeps the RPC's own wording.
+  // problem.
+  //
+  // Session failures arrive as PostgREST codes, not as the function's own 42501:
+  // an expired token is rejected by PostgREST (PGRST303) before the function
+  // runs, so the DB guard is never reached. Verified locally against a 60s
+  // token — a revoked-but-unexpired token still succeeds, since access tokens
+  // are stateless. 42501 remains for the grant/role refusals that do reach it.
   if (error) {
     if (error.code === "P0002") return { ok: false, error: BAD_LINK };
-    if (error.code === "42501") return { ok: false, error: STALE_SESSION };
+    if (
+      error.code === "42501" ||
+      error.code === "PGRST301" ||
+      error.code === "PGRST303"
+    ) {
+      return { ok: false, error: STALE_SESSION };
+    }
     return { ok: false, error: "Could not start the test." };
   }
   // The RPC inserts then returns, so no-error-no-row shouldn't happen; treat it
