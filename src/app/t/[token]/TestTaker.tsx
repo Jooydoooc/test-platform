@@ -60,12 +60,15 @@ type Phase = "loading" | "blocked" | "done" | "taking" | "submitting" | "finishe
 
 export function TestTaker({
   testId,
+  token,
   title,
   description,
   timeLimitSec,
   questions,
 }: {
   testId: string;
+  /** Share token from the URL — the key that unlocks the attempt (0025). */
+  token: string;
   title: string;
   description: string;
   timeLimitSec: number | null;
@@ -155,7 +158,7 @@ export function TestTaker({
   useEffect(() => {
     let active = true;
     (async () => {
-      const res = await startAttempt(testId);
+      const res = await startAttempt(token);
       if (!active) return;
       if (!res.ok) {
         setError(res.error ?? "Could not start.");
@@ -181,7 +184,7 @@ export function TestTaker({
     return () => {
       active = false;
     };
-  }, [testId, questions.length]);
+  }, [token, questions.length]);
 
   // Timer tick + auto-submit on expiry. Only counts down once the student has
   // begun (secureStarted), matching when questions become visible.

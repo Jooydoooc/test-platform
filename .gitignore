@@ -13,3 +13,6 @@ out
 
 # Supabase DB password (local record only — never commit)
 .supabase-db-password.txt
+
+# Source material for content imports — not part of the app
+*.pdf

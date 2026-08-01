@@ -8,9 +8,10 @@ import type {
   TestSkillScope,
 } from "@/lib/database.types";
 
-// Server-side reads for tests. RLS ensures only logged-in users read content and
-// only teachers can write it. Per-assignment student gating is a documented gap
-// (enforced at query level once assignments are wired).
+// Server-side reads for tests. RLS ensures only teachers write content, and
+// (since migration 0025) that a student can only read a test row they hold an
+// attempt on. Student access to an unopened test runs through the token RPCs
+// below — the admin-sent share link is the key.
 
 export interface TestSummary {
   id: string;
@@ -46,7 +47,9 @@ export interface HostedTestShareLink {
 }
 
 // Teacher-facing: tests with their share tokens, for building /t/<token> links.
-// RLS lets any signed-in user read tests; callers must gate this to teachers.
+// Since 0025 RLS returns nothing here for students (they can't read tests they
+// have no attempt on), but callers must still gate this page to admins — the
+// tokens themselves are the credentials.
 export async function listTestShareLinks(): Promise<TestShareLink[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -103,8 +106,42 @@ export async function listTests(): Promise<TestSummary[]> {
   }));
 }
 
+// Flattened, ordered questions for a SHARED test, resolved by share token.
+//
+// This is the only path a student has to test content (migration 0025): the
+// RPC is SECURITY DEFINER and keyed on the token, so holding an admin-sent link
+// is what grants access. answer_key is never part of the RPC's result —
+// grading stays server-side in submitAttempt().
+export async function getShareTestQuestions(
+  token: string,
+): Promise<Omit<TestQuestion, "skillArea">[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("share_test_questions", {
+    p_token: token,
+  });
+  if (error) throw error;
+  const rows = (data ?? []) as Array<{
+    id: string;
+    order: number;
+    format: QuestionFormat;
+    prompt: string;
+    content: Json;
+    points: number;
+  }>;
+  return rows.map((q) => ({
+    id: q.id,
+    order: q.order,
+    format: q.format,
+    prompt: q.prompt,
+    content: q.content,
+    points: q.points,
+  }));
+}
+
 // Flattened, ordered questions for a test (test_items -> tasks -> questions).
 // answer_key is intentionally NOT selected here — it must never reach the client.
+// Admin/teacher path only: under 0025 a student cannot read `tests` rows they
+// have no attempt on, so student-facing code must use getShareTestQuestions().
 export async function getTestQuestions(testId: string): Promise<TestQuestion[]> {
   const supabase = await createClient();
   const { data: items, error } = await supabase
