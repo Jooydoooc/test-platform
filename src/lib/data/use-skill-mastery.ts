@@ -8,8 +8,11 @@
 //   - one-shot fetch on mount; `active` flag for safe async teardown
 //   - no `any` — all query rows are typed explicitly
 //
-// Returns: avg accuracy (0..100) per SkillArea, aggregated client-side from
-// result_skill_scores joined to the student's own non-excluded results.
+// Returns, per SkillArea: avg accuracy (0..100), whether the student has
+// ATTEMPTED the skill at all, and how many results contributed. The
+// `attempted` flag matters: a skill scored 0% and a skill never touched are
+// different states, and collapsing them (the old "avg > 0" test) made the
+// dashboard's weakest-skill recommendation unable to point at a genuine zero.
 // RLS on result_skill_scores (via results.student_id = auth.uid()) scopes
 // the rows to the caller automatically.
 
@@ -22,7 +25,16 @@ import type { SkillArea } from "@/lib/database.types";
 // Public types
 // ---------------------------------------------------------------------------
 
-export type SkillMastery = Record<SkillArea, number>;
+export interface SkillStat {
+  /** Weighted accuracy across every section in this skill, 0..100. */
+  avg: number;
+  /** True once at least one graded result covers this skill, even at 0%. */
+  attempted: boolean;
+  /** How many of the student's results contributed to this skill. */
+  tests: number;
+}
+
+export type SkillMastery = Record<SkillArea, SkillStat>;
 
 export interface UseSkillMasteryResult {
   mastery: SkillMastery;
@@ -48,19 +60,21 @@ type SkillScoreRow = {
 // Hook
 // ---------------------------------------------------------------------------
 
+const ZERO: SkillStat = { avg: 0, attempted: false, tests: 0 };
+
 const EMPTY_MASTERY: SkillMastery = {
-  GRAMMAR: 0,
-  VOCABULARY: 0,
-  READING: 0,
-  LISTENING: 0,
-  WRITING: 0,
-  SPEAKING: 0,
+  GRAMMAR: ZERO,
+  VOCABULARY: ZERO,
+  READING: ZERO,
+  LISTENING: ZERO,
+  WRITING: ZERO,
+  SPEAKING: ZERO,
 };
 
 /**
- * Returns the signed-in student's average accuracy (0..100) per skill area,
- * derived from result_skill_scores for all their non-excluded, completed
- * results. When Supabase is not configured, returns all-zeros immediately.
+ * Returns the signed-in student's per-skill mastery, derived from
+ * result_skill_scores for all their non-excluded, completed results. When
+ * Supabase is not configured, returns all-zeros immediately.
  */
 export function useSkillMastery(): UseSkillMasteryResult {
   const [mastery, setMastery] = useState<SkillMastery>(EMPTY_MASTERY);
@@ -129,27 +143,41 @@ export function useSkillMastery(): UseSkillMasteryResult {
       // weighted average across all test sections in that skill).
       const bySkill = new Map<
         SkillArea,
-        { correct: number; total: number }
+        { correct: number; total: number; results: Set<string> }
       >();
       for (const row of typedSkill) {
-        const prev = bySkill.get(row.skill_area) ?? { correct: 0, total: 0 };
-        bySkill.set(row.skill_area, {
-          correct: prev.correct + row.correct_count,
-          total: prev.total + row.total_count,
-        });
+        const prev =
+          bySkill.get(row.skill_area) ??
+          { correct: 0, total: 0, results: new Set<string>() };
+        prev.correct += row.correct_count;
+        prev.total += row.total_count;
+        prev.results.add(row.result_id);
+        bySkill.set(row.skill_area, prev);
       }
 
       const next: SkillMastery = { ...EMPTY_MASTERY };
       for (const [skill, agg] of bySkill.entries()) {
-        next[skill] =
-          agg.total > 0 ? Math.round((agg.correct / agg.total) * 100) : 0;
+        // A row existing at all means the skill was attempted, even when the
+        // student scored nothing. Never infer "attempted" from avg > 0.
+        next[skill] = {
+          avg: agg.total > 0 ? Math.round((agg.correct / agg.total) * 100) : 0,
+          attempted: true,
+          tests: agg.results.size,
+        };
       }
 
       setMastery(next);
       setLoading(false);
     }
 
-    load();
+    // If any await inside load() throws, clear loading so the dashboard's
+    // combined loading gate can never hang on this hook.
+    load().catch(() => {
+      if (active) {
+        setMastery(EMPTY_MASTERY);
+        setLoading(false);
+      }
+    });
 
     return () => {
       active = false;

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getTestByShareToken } from "@/lib/data/attempts";
-import { getTestQuestions } from "@/lib/data/tests";
+import { getShareTestQuestions } from "@/lib/data/tests";
 import { TestTaker } from "./TestTaker";
 
 // Shared-link entry point: /t/<share_token>. Server-resolves the token (login is
@@ -32,11 +32,12 @@ export default async function SharedTestPage({
     );
   }
 
-  const questions = await getTestQuestions(test.id);
+  const questions = await getShareTestQuestions(token);
 
   return (
     <TestTaker
       testId={test.id}
+      token={token}
       title={test.title}
       description={test.description}
       timeLimitSec={test.timeLimitSec}

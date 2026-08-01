@@ -1,9 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getServerUser } from "@/lib/auth-server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 import { awardHtmlTestExp } from "@/lib/data/exp";
 import { evaluateAndUnlockBadges } from "@/lib/data/badges";
+import { notifyGroupOfResult } from "@/lib/telegram-notify";
+import { regrade, type AnswerKey } from "@/lib/data/html-regrade";
 import type { SkillArea } from "@/lib/database.types";
 
 // Sane upper bound on the total question count a single HTML test can report
@@ -21,15 +23,51 @@ const SKILL_AREAS: SkillArea[] = [
   "SPEAKING",
 ];
 
+// Cap on how many answer entries a payload may carry (matches the ceiling on
+// reported question counts — anything larger is a tampered or broken client).
+const MAX_ANSWERS = MAX_TOTAL_CEILING;
+
+// Sanitize the client-reported proctor tally (migration 0024). Best-effort
+// telemetry: we never reject a submit over bad integrity data — we just drop it.
+// Caps guard against a tampered payload bloating the row.
+function sanitizeIntegrity(
+  raw: unknown,
+): { violations: number; flags: Record<string, number> } | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  const v = obj.violations;
+  if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return null;
+  const violations = Math.min(Math.floor(v), 100_000);
+  const flags: Record<string, number> = {};
+  if (typeof obj.flags === "object" && obj.flags !== null) {
+    let keys = 0;
+    for (const [k, val] of Object.entries(obj.flags as Record<string, unknown>)) {
+      if (keys >= 20) break; // cap distinct types
+      if (typeof val === "number" && Number.isFinite(val) && val > 0) {
+        flags[k.slice(0, 40)] = Math.min(Math.floor(val), 100_000);
+        keys++;
+      }
+    }
+  }
+  return { violations, flags };
+}
+
 // ---------------------------------------------------------------------------
-// TRUST LEVEL: HTML-test scores are SELF-REPORTED (lower-trust).
+// TRUST LEVEL: depends on whether the test has a server-side answer key.
 //
-// Hosted HTML tests are self-contained exam files whose answer keys live
-// entirely in the browser. The server has no independent answer key and
-// CANNOT re-grade the submission. This means correct/total are client-supplied
-// and could be tampered with.
+// WITH a key (html_test_answer_keys, migration 0027) — the default for tests
+// that have been keyed: the submitted ANSWERS are re-graded here and the
+// client's claimed correct/total is discarded. Posting a fabricated score no
+// longer works; the payload has to contain answers, exactly as many as the key
+// declares, with no duplicate ids. Residual risk: the questions and answers
+// still ship inside the self-contained HTML, so a student who reads the page
+// source can look them up. That is inherent to hosted HTML and is the reason
+// server-graded /t/<token> tests remain the high-trust rail.
 //
-// Defense-in-depth applied here (what we CAN enforce server-side):
+// WITHOUT a key (older hosted tests): scores stay SELF-REPORTED and lower-trust
+// exactly as before — the server has no way to check them.
+//
+// Defense-in-depth applied here in both cases:
 //   1. Authentication + ownership: attempt must belong to the authenticated
 //      STUDENT (getServerUser + student_id check).
 //   2. Strict payload validation: correct/total must be finite non-negative
@@ -40,7 +78,7 @@ const SKILL_AREAS: SkillArea[] = [
 //   4. XP is capped: awardHtmlTestExp caps at EXP_PER_TEST (100) scaled by
 //      accuracy — even a 100 % forged score yields at most 100 XP, deduped.
 //
-// What we CANNOT enforce without a server answer key:
+// What we still cannot enforce for an UNKEYED test:
 //   - Accuracy of the self-reported correct/total within the valid range.
 //
 // HTML-test results feed progress (excluded_from_progress: false) but the
@@ -95,7 +133,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const { attemptId, skills } = body as Record<string, unknown>;
+  const { attemptId, skills, integrity, answers } = body as Record<
+    string,
+    unknown
+  >;
 
   if (typeof attemptId !== "string" || attemptId.trim() === "") {
     return NextResponse.json(
@@ -154,6 +195,60 @@ export async function POST(req: Request) {
     if (correct > total) {
       return NextResponse.json(
         { ok: false, error: "correct must be <= total for each skills entry." },
+        { status: 400 },
+      );
+    }
+  }
+
+  // Validate the optional answers array (present when the test supports
+  // server-side re-grading). Shape: [{ id: string|number, value: string|null }].
+  let parsedAnswers: { id: string; value: string | null }[] | null = null;
+  if (answers !== undefined) {
+    if (!Array.isArray(answers) || answers.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: "answers must be a non-empty array when present." },
+        { status: 400 },
+      );
+    }
+    if (answers.length > MAX_ANSWERS) {
+      return NextResponse.json(
+        { ok: false, error: `answers may not contain more than ${MAX_ANSWERS} entries.` },
+        { status: 400 },
+      );
+    }
+    parsedAnswers = [];
+    for (const raw of answers) {
+      if (typeof raw !== "object" || raw === null) {
+        return NextResponse.json(
+          { ok: false, error: "Each answers entry must be an object." },
+          { status: 400 },
+        );
+      }
+      const { id, value } = raw as Record<string, unknown>;
+      if (typeof id !== "string" && typeof id !== "number") {
+        return NextResponse.json(
+          { ok: false, error: "Each answers entry must have a string or number id." },
+          { status: 400 },
+        );
+      }
+      if (value !== null && typeof value !== "string") {
+        return NextResponse.json(
+          { ok: false, error: "Each answers entry value must be a string or null." },
+          { status: 400 },
+        );
+      }
+      parsedAnswers.push({
+        id: String(id),
+        // Bound the text so a huge payload can't be used to bloat grading work.
+        value: value === null ? null : value.slice(0, 500),
+      });
+    }
+
+    // Reject repeats: one question answered thirty times is not thirty answers.
+    const seen = new Set(parsedAnswers.map((a) => a.id));
+    if (seen.size !== parsedAnswers.length) {
+      return NextResponse.json(
+        { ok: false, error: "answers must not contain duplicate ids." },
         { status: 400 },
       );
     }
@@ -234,6 +329,58 @@ export async function POST(req: Request) {
   }
 
   // ---------------------------------------------------------------------------
+  // Server-side re-grade (migration 0027). If this test has a stored key, the
+  // score is computed HERE from the submitted answers and whatever the client
+  // claimed is thrown away. `require_answers` makes the answers mandatory, so a
+  // tampered client cannot dodge re-grading by simply omitting them.
+  // ---------------------------------------------------------------------------
+  const { data: keyRow } = await admin
+    .from("html_test_answer_keys")
+    .select("answer_key, require_answers")
+    .eq("html_test_id", attempt.html_test_id)
+    .maybeSingle();
+
+  let serverGraded = false;
+  if (keyRow) {
+    const key = keyRow.answer_key as unknown as AnswerKey;
+    if (!parsedAnswers) {
+      if (keyRow.require_answers) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              "This test is graded on the server and the submission carried no answers. Reload the test page and submit again.",
+          },
+          { status: 400 },
+        );
+      }
+      // Key present but not yet enforced (the updated test file isn't live) —
+      // fall through to the self-reported score.
+    } else {
+      // The key declares how many questions an attempt serves; a payload that
+      // doesn't carry exactly that many is malformed or trimmed.
+      if (
+        typeof key.count === "number" &&
+        Number.isInteger(key.count) &&
+        key.count > 0 &&
+        parsedAnswers.length !== key.count
+      ) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `This test expects ${key.count} answers but the submission carried ${parsedAnswers.length}.`,
+          },
+          { status: 400 },
+        );
+      }
+      const graded = regrade(key, parsedAnswers);
+      perSkill.clear();
+      perSkill.set(key.skill, graded);
+      serverGraded = true;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Finalize the attempt and write results + skill scores.
   // ---------------------------------------------------------------------------
 
@@ -302,6 +449,21 @@ export async function POST(req: Request) {
     }
   }
 
+  // Proctor telemetry (best-effort, additive column from migration 0024). Done
+  // as a SEPARATE update AFTER the result exists — never part of the insert — so
+  // a missing column or bad payload can't fail the submission. Only written when
+  // the client reported a violation; the returned error is intentionally ignored.
+  const integrityCols = sanitizeIntegrity(integrity);
+  if (integrityCols) {
+    await admin
+      .from("results")
+      .update({
+        integrity_violations: integrityCols.violations,
+        integrity_flags: integrityCols.flags,
+      })
+      .eq("id", result.id);
+  }
+
   // ---------------------------------------------------------------------------
   // EXP: overall accuracy = total correct / total questions across all skills.
   // ---------------------------------------------------------------------------
@@ -322,5 +484,34 @@ export async function POST(req: Request) {
     newBadges = [];
   }
 
-  return NextResponse.json({ ok: true, resultId: result.id, expAwarded, newBadges });
+  // Post the result to the class Telegram channel (no-op unless configured).
+  // Best-effort: notifyGroupOfResult swallows its own errors. Runs AFTER the
+  // response is sent so the title lookup + Telegram round-trip never delay the
+  // student's submit; `after` keeps the function alive so it still delivers.
+  // Capture before the closure: `after` may run later, which loses the earlier
+  // non-null narrowing of attempt.html_test_id.
+  const htmlTestId = attempt.html_test_id;
+  after(async () => {
+    const { data: htmlTest } = await admin
+      .from("html_tests")
+      .select("title")
+      .eq("id", htmlTestId)
+      .maybeSingle();
+    await notifyGroupOfResult({
+      studentId: user.id,
+      testTitle: htmlTest?.title ?? "a test",
+      correct: totalCorrect,
+      total: totalQuestions,
+    });
+  });
+
+  return NextResponse.json({
+    ok: true,
+    resultId: result.id,
+    expAwarded,
+    newBadges,
+    // True when the score stored was computed here rather than reported by the
+    // test file. Useful when auditing a result that a student disputes.
+    serverGraded,
+  });
 }

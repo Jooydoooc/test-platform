@@ -2,7 +2,7 @@
 // server-only imports here so both the API routes and the /admin/students page
 // can pull from one contract.
 
-import type { Role, SkillArea } from "@/lib/database.types";
+import type { Level, Role, SkillArea } from "@/lib/database.types";
 
 export const MANAGEABLE_ROLES: Role[] = ["STUDENT", "ADMIN"];
 
@@ -23,6 +23,7 @@ export interface StudentSummary {
 export interface GroupOption {
   id: string;
   name: string;
+  level: Level;
 }
 
 export interface StudentListResponse {

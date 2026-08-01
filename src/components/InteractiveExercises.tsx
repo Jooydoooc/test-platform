@@ -501,7 +501,7 @@ function SentenceBuilder({
         }`}
       >
         {placed.length === 0 ? (
-          <p className="py-2 text-center text-sm text-slate-400">
+          <p className="py-2 text-center text-sm text-slate-500">
             Tap words below to build the sentence
           </p>
         ) : (

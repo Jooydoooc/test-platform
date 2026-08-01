@@ -56,6 +56,7 @@ export default function UploadBookPage() {
   // Question-book state
   const [questions, setQuestions] = useState<ParsedQuestion[]>([]);
   const [questionErrors, setQuestionErrors] = useState<string[]>([]);
+  const [questionsText, setQuestionsText] = useState("");
 
   // Reading-book state
   const [passageText, setPassageText] = useState("");
@@ -77,6 +78,7 @@ export default function UploadBookPage() {
   function resetContent() {
     setQuestions([]);
     setQuestionErrors([]);
+    setQuestionsText("");
     setPassageText("");
     setGlossary([]);
     setGlossaryErrors([]);
@@ -87,10 +89,26 @@ export default function UploadBookPage() {
   async function onQuestionsFile(file: File | null) {
     if (!file) return;
     const text = await readTextFile(file);
+    setQuestionsText(text);
     const res = parseQuestionsCsv(text);
     setQuestions(res.items);
     setQuestionErrors(res.errors);
     setPrimaryFile(file);
+    setSubmit({ phase: "idle" });
+  }
+
+  // Paste CSV directly (e.g. AI-generated drilling questions) — no file needed.
+  function onQuestionsText(text: string) {
+    setQuestionsText(text);
+    setPrimaryFile(null);
+    if (text.trim()) {
+      const res = parseQuestionsCsv(text);
+      setQuestions(res.items);
+      setQuestionErrors(res.errors);
+    } else {
+      setQuestions([]);
+      setQuestionErrors([]);
+    }
     setSubmit({ phase: "idle" });
   }
 
@@ -118,7 +136,9 @@ export default function UploadBookPage() {
       contentType,
       level: level || null,
       sourceFilename: primaryFile?.name ?? null,
-      questions: isQuestion ? questions : [],
+      // Questions ship for pure question books AND for Articles that include a
+      // comprehension set (optional there).
+      questions,
       passage: isQuestion
         ? null
         : { title: title.trim(), body: passageText.trim() },
@@ -147,7 +167,7 @@ export default function UploadBookPage() {
     return (
       <Card>
         <p className="text-sm text-slate-600">
-          Uploading books is available to admins only.
+          Uploading units is available to admins only.
         </p>
       </Card>
     );
@@ -158,14 +178,15 @@ export default function UploadBookPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Upload a book
+            Upload a unit
           </h1>
           <p className="text-sm text-slate-600">
-            Add a book and tag it with a category. Grammar & Vocabulary take a
-            questions CSV; Reading & Articles take a text plus a glossary CSV.
+            Add a unit and tag it with a category. Grammar, Vocabulary & Reading
+            take a drilling CSV; Articles take a passage plus an optional
+            comprehension CSV and glossary.
           </p>
         </div>
-        <LinkButton href="/author" variant="secondary">
+        <LinkButton href="/admin/books" variant="secondary">
           Back
         </LinkButton>
       </div>
@@ -179,7 +200,7 @@ export default function UploadBookPage() {
 
       {submit.phase === "done" && (
         <Banner tone="ok">
-          Book saved.{" "}
+          Unit saved.{" "}
           <Link href="/books" className="font-semibold underline">
             View in Books
           </Link>{" "}
@@ -251,49 +272,13 @@ export default function UploadBookPage() {
 
       {/* Content */}
       {isQuestion ? (
-        <Card className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-semibold text-slate-900">Questions</h2>
-            <button
-              type="button"
-              onClick={() => downloadTemplate("questions-template.csv", QUESTIONS_CSV_TEMPLATE)}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
-            >
-              <Download className="size-4" /> Template
-            </button>
-          </div>
-          <FileDrop
-            accept=".csv,text/csv"
-            label="Upload a questions CSV"
-            onFile={onQuestionsFile}
-          />
-          {questionErrors.length > 0 && <IssueList issues={questionErrors} />}
-          {questions.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Preview · {questions.length} question
-                {questions.length === 1 ? "" : "s"}
-              </p>
-              <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100">
-                {questions.slice(0, 8).map((q, i) => (
-                  <li key={i} className="flex items-start gap-2 px-3 py-2 text-sm">
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
-                      {q.type}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-slate-700">
-                      {q.prompt}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {questions.length > 8 && (
-                <p className="text-xs text-slate-400">
-                  + {questions.length - 8} more
-                </p>
-              )}
-            </div>
-          )}
-        </Card>
+        <QuestionsSection
+          onFile={onQuestionsFile}
+          questionsText={questionsText}
+          onText={onQuestionsText}
+          errors={questionErrors}
+          questions={questions}
+        />
       ) : (
         <>
           <Card className="space-y-3">
@@ -314,6 +299,15 @@ export default function UploadBookPage() {
               placeholder="Paste the reading passage here…"
             />
           </Card>
+
+          <QuestionsSection
+            optional
+            onFile={onQuestionsFile}
+            questionsText={questionsText}
+            onText={onQuestionsText}
+            errors={questionErrors}
+            questions={questions}
+          />
 
           <Card className="space-y-4">
             <div className="flex items-center justify-between gap-3">
@@ -366,12 +360,90 @@ export default function UploadBookPage() {
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5">
-              <Upload className="size-4" /> Save book
+              <Upload className="size-4" /> Save unit
             </span>
           )}
         </Button>
       </div>
     </div>
+  );
+}
+
+// Drilling questions: file OR paste, with a live preview. Used for question
+// units (required) and for Articles (optional comprehension set).
+function QuestionsSection({
+  onFile,
+  questionsText,
+  onText,
+  errors,
+  questions,
+  optional = false,
+}: {
+  onFile: (file: File | null) => void;
+  questionsText: string;
+  onText: (text: string) => void;
+  errors: string[];
+  questions: ParsedQuestion[];
+  optional?: boolean;
+}) {
+  return (
+    <Card className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-semibold text-slate-900">
+            {optional ? "Comprehension questions" : "Questions"}
+          </h2>
+          {optional && (
+            <p className="text-sm text-slate-600">
+              Optional drilling questions on the passage.
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => downloadTemplate("questions-template.csv", QUESTIONS_CSV_TEMPLATE)}
+          className="inline-flex shrink-0 items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          <Download className="size-4" /> Template
+        </button>
+      </div>
+      <FileDrop
+        accept=".csv,text/csv"
+        label="Upload a questions CSV"
+        onFile={onFile}
+      />
+      <p className="text-center text-xs text-slate-400">or paste CSV below</p>
+      <textarea
+        className={`${inputClass} min-h-[140px] font-mono text-xs`}
+        value={questionsText}
+        onChange={(e) => onText(e.target.value)}
+        placeholder={"type,prompt,choices,correct,points\nsingle,\"What causes X?\",A|B|C,2,1"}
+      />
+      {errors.length > 0 && <IssueList issues={errors} />}
+      {questions.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Preview · {questions.length} question
+            {questions.length === 1 ? "" : "s"}
+          </p>
+          <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100">
+            {questions.slice(0, 8).map((q, i) => (
+              <li key={i} className="flex items-start gap-2 px-3 py-2 text-sm">
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
+                  {q.type}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-slate-700">
+                  {q.prompt}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {questions.length > 8 && (
+            <p className="text-xs text-slate-400">+ {questions.length - 8} more</p>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 

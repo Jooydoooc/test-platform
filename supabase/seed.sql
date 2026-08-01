@@ -15,21 +15,30 @@ declare
   topic_id   uuid;
 begin
   -- ---- auth users (local dev only) ------------------------------------------
+  -- GoTrue's Go scanner reads several auth.users text columns as non-nullable
+  -- strings; if they're left NULL (the default when omitted from an insert),
+  -- POST /token?grant_type=password 500s with "Database error querying schema"
+  -- for every seeded user. They must be set to '' (empty string), not NULL.
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
-    raw_app_meta_data, raw_user_meta_data
+    raw_app_meta_data, raw_user_meta_data,
+    confirmation_token, recovery_token, email_change,
+    email_change_token_new, email_change_token_current,
+    phone_change, phone_change_token, reauthentication_token
   ) values
     ('00000000-0000-0000-0000-000000000000', teacher_id, 'authenticated', 'authenticated',
      'teacher@lexora.dev', crypt('lexora123', gen_salt('bf')),
      now(), now(), now(),
      '{"provider":"email","providers":["email"]}',
-     '{"first_name":"Tara","last_name":"Teacher"}'),
+     '{"first_name":"Tara","last_name":"Teacher"}',
+     '', '', '', '', '', '', '', ''),
     ('00000000-0000-0000-0000-000000000000', student_id, 'authenticated', 'authenticated',
      'student@lexora.dev', crypt('lexora123', gen_salt('bf')),
      now(), now(), now(),
      '{"provider":"email","providers":["email"]}',
-     '{"first_name":"Sam","last_name":"Student"}')
+     '{"first_name":"Sam","last_name":"Student"}',
+     '', '', '', '', '', '', '', '')
   on conflict (id) do nothing;
 
   -- The on_auth_user_created trigger creates profiles; set roles/names here.

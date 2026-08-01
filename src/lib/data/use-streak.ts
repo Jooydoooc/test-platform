@@ -131,7 +131,15 @@ export function useStreak(): StreakResult {
       setLoading(false);
     }
 
-    load();
+    // If any await inside load() throws, clear loading so the dashboard's
+    // combined loading gate can never hang on this hook.
+    load().catch(() => {
+      if (active) {
+        setCurrent(0);
+        setLongest(0);
+        setLoading(false);
+      }
+    });
 
     return () => {
       active = false;

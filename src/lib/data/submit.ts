@@ -1,11 +1,13 @@
 "use server";
 
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getServerUser } from "@/lib/auth-server";
 import { gradeQuestion } from "@/lib/data/grading";
 import { computeTestExp, testExpKey } from "@/lib/data/exp";
 import { evaluateAndUnlockBadges } from "@/lib/data/badges";
+import { notifyGroupOfResult } from "@/lib/telegram-notify";
 import type { Json, SkillArea } from "@/lib/database.types";
 
 export interface SubmitResult {
@@ -16,6 +18,10 @@ export interface SubmitResult {
   expAwarded?: number;
   /** Names of badges unlocked by this submission (empty when none). */
   newBadges?: string[];
+  /** Points earned / possible for a freshly graded submission. Omitted on
+   *  replay (already-submitted) paths and undefined until grading completes. */
+  scoreEarned?: number;
+  scoreTotal?: number;
   error?: string;
 }
 
@@ -31,9 +37,17 @@ export interface SubmitResult {
 //
 // [Fixes High #7] Per-skill accuracy is now POINTS-weighted, not question-count-
 // weighted. See the perSkill accumulator below.
+// Client-reported proctor tally (see Proctor.tsx / migration 0024). Best-effort
+// integrity signal for teachers; never affects grading or XP.
+export interface AttemptIntegrity {
+  violations: number;
+  flags: Record<string, number>;
+}
+
 export async function submitAttempt(
   testId: string,
   responses: Record<string, unknown>, // questionId -> raw response JSON
+  integrity?: AttemptIntegrity | null,
 ): Promise<SubmitResult> {
   const user = await getServerUser();
   if (!user) return { ok: false, error: "Not signed in." };
@@ -45,7 +59,7 @@ export async function submitAttempt(
 
   const { data: test, error: testErr } = await supabase
     .from("tests")
-    .select("id, purpose")
+    .select("id, purpose, title")
     .eq("id", testId)
     .single();
   if (testErr || !test) return { ok: false, error: "Test not found." };
@@ -53,12 +67,31 @@ export async function submitAttempt(
   // The single attempt must already exist (created by startAttempt). This is the
   // anti-cheat gate: no fresh attempt is minted here.
   const admin = createAdminClient();
-  const { data: attemptRow } = await admin
+  const { data: attemptRow, error: attemptErr } = await admin
     .from("attempts")
     .select("id, submitted_at")
     .eq("student_id", user.id)
     .eq("test_id", testId)
     .maybeSingle();
+  // Distinguish an infra failure from a genuinely-missing attempt. This used to
+  // discard `error` and fall through to "Start the test before submitting." —
+  // when the service-role key once lacked a table grant, the query 403'd,
+  // `data` came back null, and a student who HAD started the test was told it
+  // was their fault. Only a null result with NO error means "never started."
+  if (attemptErr) {
+    console.error("[submitAttempt] admin lookup of attempts failed", {
+      message: attemptErr.message,
+      code: attemptErr.code,
+      details: attemptErr.details,
+      studentId: user.id,
+      testId,
+    });
+    return {
+      ok: false,
+      error:
+        "Something went wrong on our side. Your answers were not submitted — please try again.",
+    };
+  }
   if (!attemptRow) {
     return { ok: false, error: "Start the test before submitting." };
   }
@@ -67,11 +100,29 @@ export async function submitAttempt(
   // The RPC's step-1 also handles the concurrent double-submit race atomically, so
   // this pre-check is just a cheap short-circuit for the normal "already done" case.
   if (attemptRow.submitted_at) {
-    const { data: prior } = await admin
+    const { data: prior, error: priorErr } = await admin
       .from("results")
       .select("id, status")
       .eq("attempt_id", attemptRow.id)
       .maybeSingle();
+    // Same discarded-error hazard as the attempt lookup above: a swallowed error
+    // here would report ok:true with a missing resultId instead of surfacing the
+    // real infra failure, so check it before trusting a null `prior`.
+    if (priorErr) {
+      console.error("[submitAttempt] admin lookup of prior result failed", {
+        message: priorErr.message,
+        code: priorErr.code,
+        details: priorErr.details,
+        studentId: user.id,
+        testId,
+        attemptId: attemptRow.id,
+      });
+      return {
+        ok: false,
+        error:
+          "Something went wrong on our side. Your answers were not submitted — please try again.",
+      };
+    }
     return {
       ok: true,
       resultId: prior?.id,
@@ -80,17 +131,49 @@ export async function submitAttempt(
     };
   }
 
-  const { data: items } = await admin
+  const { data: items, error: itemsErr } = await admin
     .from("test_items")
     .select("task_id")
     .eq("test_id", testId);
+  // Same hazard again: an infra error here previously read as "Test has no
+  // content," misreporting a DB/permission failure as a test-authoring problem.
+  if (itemsErr) {
+    console.error("[submitAttempt] admin lookup of test_items failed", {
+      message: itemsErr.message,
+      code: itemsErr.code,
+      details: itemsErr.details,
+      studentId: user.id,
+      testId,
+    });
+    return {
+      ok: false,
+      error:
+        "Something went wrong on our side. Your answers were not submitted — please try again.",
+    };
+  }
   const taskIds = (items ?? []).map((i) => i.task_id);
   if (taskIds.length === 0) return { ok: false, error: "Test has no content." };
 
-  const { data: questions } = await admin
+  const { data: questions, error: questionsErr } = await admin
     .from("questions")
     .select("id, format, skill_area, points, answer_key")
     .in("task_id", taskIds);
+  // Same hazard again: an infra error here previously read as "Test has no
+  // questions," misreporting a DB/permission failure as a test-authoring problem.
+  if (questionsErr) {
+    console.error("[submitAttempt] admin lookup of questions failed", {
+      message: questionsErr.message,
+      code: questionsErr.code,
+      details: questionsErr.details,
+      studentId: user.id,
+      testId,
+    });
+    return {
+      ok: false,
+      error:
+        "Something went wrong on our side. Your answers were not submitted — please try again.",
+    };
+  }
   if (!questions || questions.length === 0) {
     return { ok: false, error: "Test has no questions." };
   }
@@ -219,6 +302,21 @@ export async function submitAttempt(
     };
   }
 
+  // Record proctor integrity on the result (best-effort, additive column from
+  // migration 0024). Never blocks the submit: if the column doesn't exist yet
+  // or the write fails, we swallow it — integrity is a teacher hint, not part of
+  // the graded transaction. Only written when the client reported a violation.
+  if (integrity && integrity.violations > 0) {
+    await admin
+      .from("results")
+      .update({
+        integrity_violations: integrity.violations,
+        integrity_flags: integrity.flags,
+      })
+      .eq("id", resultId);
+    // Intentionally ignore the returned error — see note above.
+  }
+
   // Badges reuse the shared catalog/rule; best-effort so a failure never blocks
   // the result. Only evaluated when we actually wrote new data (not a replay).
   let newBadges: string[] = [];
@@ -228,11 +326,28 @@ export async function submitAttempt(
     newBadges = [];
   }
 
+  // Post the result to the class Telegram channel (no-op unless configured).
+  // correct/total carry POINTS here, matching the points-weighted accuracy above.
+  // Runs AFTER the response is sent (via next/server `after`) so Telegram's
+  // network latency never delays the student's submit; `after` keeps the
+  // serverless function alive so the message still sends reliably.
+  after(() => {
+    void notifyGroupOfResult({
+      studentId: user.id,
+      testTitle: test.title,
+      correct: totalPointsEarned,
+      total: totalPointsPossible,
+      pendingReview: anyPending,
+    });
+  });
+
   return {
     ok: true,
     resultId,
     pendingReview: anyPending,
     expAwarded,
     newBadges,
+    scoreEarned: totalPointsEarned,
+    scoreTotal: totalPointsPossible,
   };
 }

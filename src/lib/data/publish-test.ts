@@ -126,6 +126,10 @@ export async function publishAuthoredTest(
   let testId: string;
   let shareToken: string;
   let createdHere = false;
+  // On the update path we defer deleting the old tasks until the NEW children
+  // are built, so a mid-rebuild failure can never leave the test with no
+  // questions. Empty on the create path.
+  let deferredOldTaskIds: string[] = [];
 
   const existing = test.supabaseTestId
     ? (
@@ -188,12 +192,11 @@ export async function publishAuthoredTest(
       .eq("id", testId);
     if (updErr) return { ok: false, error: updErr.message };
 
-    // Delete item links first, then tasks (cascades their questions via FK on
-    // questions.task_id).
-    await admin.from("test_items").delete().eq("test_id", testId);
-    if (oldTaskIds.length > 0) {
-      await admin.from("tasks").delete().in("id", oldTaskIds);
-    }
+    // Defer deleting the old children until the new task + questions are built
+    // below. Deleting here would orphan the test (leave it with no questions) if
+    // a later insert failed — and fail() cannot roll that back on the update
+    // path since it must not touch pre-existing rows.
+    deferredOldTaskIds = oldTaskIds;
   } else {
     // Create path.
     const { data: created, error: insErr } = await admin
@@ -220,8 +223,14 @@ export async function publishAuthoredTest(
   // Rebuild children: one container task + its questions + the test_item link.
   // On any failure, clean up a test row we created this call so a retry is clean.
   // ---------------------------------------------------------------------------
+  let newTaskId: string | null = null;
   const fail = async (message: string): Promise<PublishResult> => {
+    // Roll back only what THIS call created; never touch pre-existing content.
+    // Create path: dropping the test row is enough. Update path: the old
+    // children are still intact (their deletion was deferred), so we just remove
+    // the orphan task (+ its questions, via cascade) we added this call.
     if (createdHere) await admin.from("tests").delete().eq("id", testId);
+    else if (newTaskId) await admin.from("tasks").delete().eq("id", newTaskId);
     return { ok: false, error: message };
   };
 
@@ -236,6 +245,7 @@ export async function publishAuthoredTest(
     .select("id")
     .single();
   if (taskErr || !task) return fail(taskErr?.message ?? "Could not create the task.");
+  newTaskId = task.id;
 
   const questionRows = test.questions.map((q, i) => ({
     task_id: task.id,
@@ -244,10 +254,31 @@ export async function publishAuthoredTest(
   const { error: qErr } = await admin.from("questions").insert(questionRows);
   if (qErr) return fail(qErr.message);
 
+  // Swap the test -> task link over to the freshly built task, THEN drop the old
+  // tasks. Because this runs only after the new task + questions exist, a failure
+  // above can never leave the test empty. Delete errors are checked so a partial
+  // swap surfaces instead of silently orphaning data.
+  const { error: clearErr } = await admin
+    .from("test_items")
+    .delete()
+    .eq("test_id", testId);
+  if (clearErr) return fail(clearErr.message);
+
   const { error: itemErr } = await admin
     .from("test_items")
     .insert({ test_id: testId, task_id: task.id, order: 0 });
   if (itemErr) return fail(itemErr.message);
+
+  if (deferredOldTaskIds.length > 0) {
+    // Old questions cascade via questions.task_id. The published test is already
+    // correct at this point; if cleanup fails, report it rather than leaving
+    // stale tasks silently behind.
+    const { error: delErr } = await admin
+      .from("tasks")
+      .delete()
+      .in("id", deferredOldTaskIds);
+    if (delErr) return { ok: false, error: delErr.message };
+  }
 
   return { ok: true, testId, shareToken };
 }

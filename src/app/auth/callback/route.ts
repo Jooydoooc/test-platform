@@ -6,7 +6,12 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  const nextParam = searchParams.get("next") ?? "/";
+  // Only allow same-origin relative paths. Reject absolute URLs and protocol-
+  // relative values ("//evil.com") so a crafted ?next= can't turn the login
+  // callback into an open redirect off-site.
+  const next =
+    nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/";
 
   if (code) {
     const supabase = await createClient();

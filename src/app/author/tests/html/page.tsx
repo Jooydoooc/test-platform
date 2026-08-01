@@ -95,7 +95,7 @@ export default function UploadHtmlTestPage() {
             It&apos;s hosted as-is and served to students at a private link.
           </p>
         </div>
-        <LinkButton href="/author" variant="secondary">
+        <LinkButton href="/admin/tests" variant="secondary">
           Back
         </LinkButton>
       </div>

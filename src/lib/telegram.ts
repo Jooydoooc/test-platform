@@ -14,6 +14,14 @@ export function adminChatId(): string | null {
   return process.env.TELEGRAM_ADMIN_CHAT_ID?.trim() || null;
 }
 
+// The class channel/group the bot posts student results to. Server-side (unlike
+// the localStorage channelChatId used for manual broadcasts) because result
+// posting fires automatically on submit, with no browser in the loop. Setting
+// this env is the on-switch for the auto-post feature.
+export function channelChatId(): string | null {
+  return process.env.TELEGRAM_CHANNEL_CHAT_ID?.trim() || null;
+}
+
 export function isConfigured(): boolean {
   return botToken() !== null;
 }

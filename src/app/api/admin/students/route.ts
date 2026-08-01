@@ -23,7 +23,7 @@ export async function GET() {
         // Soft-delete filter: exclude accounts soft-deleted by migration 0023.
         .is("deleted_at", null)
         .order("created_at", { ascending: true }),
-      admin.from("groups").select("id, name").order("name"),
+      admin.from("groups").select("id, name, level").order("name"),
     ]);
 
   if (pErr || gErr) {

@@ -1,0 +1,33 @@
+-- ---------------------------------------------------------------------------
+-- Close the attempt-insert bypass (second half of 0026).
+--
+-- ⚠ ORDERING — APPLY THIS ONLY AFTER THE APP IS DEPLOYED WITH THE
+--   src/app/ht/[token]/route.ts change that calls start_share_html_attempt().
+--
+--   A deployment whose /ht route still does
+--       supabase.from("attempts").insert({ student_id, html_test_id })
+--   will fail that insert the moment this runs, and students will be unable to
+--   start hosted tests (they get the file with no score bridge). 0026 is safe
+--   on its own; this one is not.
+--
+-- What it does: takes away the browser's ability to write straight into
+-- `attempts` over PostgREST, leaving the token-keyed SECURITY DEFINER functions
+-- (start_share_attempt, start_share_html_attempt) as the only way in. That is
+-- what makes migration 0025's "the link is the key" rule enforced by the
+-- database instead of by application convention.
+--
+-- The attempts_insert RLS policy stays in place — it is still the row-level
+-- check applied inside those functions' inserts. Same technique as
+-- 0018_lock_privileged_columns: Supabase's default table grant has to be
+-- revoked at the table level, because policies gate rows, not access.
+--
+-- service_role keeps its grant, so server-side flows (submit.ts grading,
+-- activity-exp.ts vocab attempts, admin tooling) are untouched.
+--
+-- Non-destructive: a grant is narrowed. No row is read, changed or dropped.
+--
+-- Rollback, if a deployment has to be reverted:
+--   grant insert on attempts to authenticated;
+-- ---------------------------------------------------------------------------
+
+revoke insert on attempts from authenticated, anon;

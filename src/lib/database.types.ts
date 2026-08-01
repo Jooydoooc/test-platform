@@ -141,6 +141,19 @@ export type HtmlTestRow = {
   updated_at: string;
 };
 
+/**
+ * Server-side answer key for a hosted HTML test (migration 0027). Readable only
+ * by the service-role client — RLS is on with no policies. When a row exists the
+ * submit route re-grades the student's answers instead of trusting the score the
+ * test file reports.
+ */
+export type HtmlTestAnswerKeyRow = {
+  html_test_id: string;
+  answer_key: Json;
+  require_answers: boolean;
+  created_at: string;
+};
+
 export type QuestionRow = {
   id: string;
   task_id: string;
@@ -191,6 +204,10 @@ export type ResultRow = {
   status: ResultStatus;
   excluded_from_progress: boolean;
   created_at: string;
+  // Anti-cheat telemetry (migration 0024). Client-reported, best-effort; null/0
+  // when nothing was reported. Never affects grading.
+  integrity_violations: number;
+  integrity_flags: Json | null;
 };
 
 export type ResultSkillScoreRow = {
@@ -290,6 +307,7 @@ export interface Database {
       badges: Table<BadgeRow>;
       badge_unlocks: Table<BadgeUnlockRow>;
       html_tests: Table<HtmlTestRow>;
+      html_test_answer_keys: Table<HtmlTestAnswerKeyRow>;
       units: Table<UnitRow>;
       words: Table<WordRow>;
       user_progress: Table<UserProgressRow>;
@@ -344,6 +362,70 @@ export interface Database {
           status: ResultStatus;
           exp_awarded: number;
           was_already_submitted: boolean;
+        }[];
+      };
+      /**
+       * Link-gated tests (migration 0025). Students cannot list `tests` /
+       * `html_tests` rows they have no attempt on, so every student-facing
+       * entry point resolves the admin-sent SHARE TOKEN through these
+       * SECURITY DEFINER functions. Holding the token IS the permission.
+       */
+      resolve_share_test: {
+        Args: { p_token: string };
+        Returns: {
+          id: string;
+          title: string;
+          description: string;
+          time_limit_sec: number | null;
+        }[];
+      };
+      resolve_share_html_test: {
+        Args: { p_token: string };
+        Returns: {
+          id: string;
+          title: string;
+          storage_path: string;
+        }[];
+      };
+      /** Questions for a shared test. Never returns answer_key. */
+      share_test_questions: {
+        Args: { p_token: string };
+        Returns: {
+          id: string;
+          order: number;
+          format: QuestionFormat;
+          prompt: string;
+          content: Json;
+          points: number;
+        }[];
+      };
+      /**
+       * Create-or-resume the student's single attempt, keyed by share token.
+       * Minting the attempt is what opens the tests read policy, so this must
+       * never accept a bare test id (that would let ids be guessed).
+       */
+      start_share_attempt: {
+        Args: { p_token: string };
+        Returns: {
+          attempt_id: string;
+          test_id: string;
+          started_at: string;
+          submitted_at: string | null;
+          time_limit_sec: number | null;
+        }[];
+      };
+      /**
+       * Hosted-HTML twin of start_share_attempt (migration 0026). Direct INSERT
+       * on `attempts` is revoked from `authenticated`, so this is the only way a
+       * browser session can mint an attempt on a hosted test. Returns no rows
+       * for a teacher/admin — they get the file in unscored preview mode.
+       */
+      start_share_html_attempt: {
+        Args: { p_token: string };
+        Returns: {
+          attempt_id: string;
+          html_test_id: string;
+          submitted_at: string | null;
         }[];
       };
     };
