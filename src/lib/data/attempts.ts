@@ -68,6 +68,12 @@ export interface StartAttemptResult {
 // student can act on, so name it rather than reporting a generic failure.
 const BAD_LINK = "This test link isn't valid. Ask your teacher for a new one.";
 
+// The RPC's own signed-in/STUDENT guard. Both checks already ran above, so
+// reaching it means the session changed mid-request. Deliberately hardcoded
+// rather than echoing the DB's message, which would leak internals to a caller
+// who never passed the grant.
+const STALE_SESSION = "Your session has changed. Sign in again to take this test.";
+
 export async function startAttempt(token: string): Promise<StartAttemptResult> {
   const user = await getServerUser();
   if (!user) return { ok: false, error: "Not signed in." };
@@ -93,9 +99,7 @@ export async function startAttempt(token: string): Promise<StartAttemptResult> {
   // the checks above, so it keeps the RPC's own wording.
   if (error) {
     if (error.code === "P0002") return { ok: false, error: BAD_LINK };
-    if (error.code === "42501") {
-      return { ok: false, error: error.message || "Only students take tests." };
-    }
+    if (error.code === "42501") return { ok: false, error: STALE_SESSION };
     return { ok: false, error: "Could not start the test." };
   }
   // The RPC inserts then returns, so no-error-no-row shouldn't happen; treat it
