@@ -2,7 +2,7 @@
 
 **Status: not started. Nothing in this runbook has been applied to production.**
 
-Scope: applying migrations `0024`–`0030` from `fix/deep-review-hardening` (PR #12) to the
+Scope: applying the outstanding migrations from PR #12 (merged to `main`) to the
 production Supabase project, and deploying the app that depends on them.
 
 This document contains no credentials, tokens, or connection strings. Every value the
@@ -16,13 +16,13 @@ run by that person.
 
 ## 1. The core constraint
 
-Three of these migrations **remove capabilities the currently-deployed app still depends
-on**. They are additive to the schema but subtractive to the running application, so
-they cannot be applied ahead of the deploy.
+Two of these migrations — `0025` and `0028` — **remove capabilities the currently-deployed
+app still depends on**. They are additive to the schema but subtractive to the running
+application, so they cannot be applied ahead of the deploy.
 
 | Migration | Effect | Safe against the deployed app? |
 |---|---|---|
-| `0024` integrity flags | adds integrity columns/table | **Yes** — additive |
+| `0024` integrity flags | adds integrity columns/table | **Already applied in production** — out of scope, listed for completeness |
 | `0025` link-gated tests | restricts `tests` SELECT to rows the caller holds an attempt on; adds the token RPCs | **No** — see below |
 | `0026` attempt insert via RPC | adds `start_share_html_attempt` | **Yes** — adds a function nothing calls yet |
 | `0027` html answer keys | `revoke all on html_test_answer_keys from authenticated, anon` | **Yes** — verified: `git grep html_test_answer_keys origin/main -- src` returns 0 hits, so the deployed app never touches that table |
@@ -30,7 +30,10 @@ they cannot be applied ahead of the deploy.
 | `0029` bank30 answer key | answer-key content | **Yes** |
 | `0030` explicit grants | enumerated per-table grants; grants `anon` nothing | **Yes** — additive, but has a hard stop condition (§5) |
 
-Why `0025` and `0028` are unsafe on their own, from the deployed code on `main`:
+Why `0025` and `0028` are unsafe on their own. Note the deployed build is **not** a clean
+checkout of `main`: Vercel records every recent production deployment as `gitDirty: "1"`,
+built from a working tree, so what is running cannot be reconstructed from a commit. The
+nearest recorded commit still shows both direct paths:
 
 - `getTestByShareToken` reads `.from("tests").select(...).eq("share_token", token)`
   directly. Under `0025` that returns nothing, so **every share link renders
@@ -38,8 +41,10 @@ Why `0025` and `0028` are unsafe on their own, from the deployed code on `main`:
 - `startAttempt` performs `.from("attempts").insert({ student_id, test_id })`. Under
   `0028` that is revoked, so **no student can start any test.**
 
-The replacement RPC paths (`resolve_share_test`, `start_share_attempt`) exist only on the
-unmerged branch. `0025` and `0028` must therefore land in the same window as the deploy.
+The replacement RPC paths (`resolve_share_test`, `start_share_attempt`) are on `main`
+(PR #12, merged) but not yet deployed. `0025` and `0028` must therefore land in the same
+window as the deploy — and see the §2 warning: those functions already exist in production
+even though the migrations are unrecorded, so confirm what is actually live first.
 
 ---
 
@@ -52,12 +57,53 @@ unmerged branch. `0025` and `0028` must therefore land in the same window as the
    ```
    The project ref is the subdomain in `NEXT_PUBLIC_SUPABASE_URL`. Do not record it here.
 
-2. Establish the current state — do not assume this runbook's starting point:
+2. Re-establish the current state — do not trust the snapshot below without re-running it:
    ```
    npx supabase migration list --linked
    ```
-   Record which of `0024`–`0030` are already applied. Everything below assumes **none**
-   are. If any already appear as applied, stop and re-plan; do not re-apply.
+
+   **Recorded state as of 2026-08-01:**
+
+   | Migration | Recorded on remote |
+   |---|---|
+   | `0001`–`0019`, `0021`–`0023` | applied |
+   | `0024` | **applied** — it is *not* part of this rollout any more |
+   | `0025`–`0030` | **not applied** |
+
+   (There is no `0020`; the sequence skips it.)
+
+   > ### ⚠ The recorded history and the live schema disagree — resolve this first
+   >
+   > A read-only probe of the production Data API on the same date found that
+   > `resolve_share_test`, `share_test_questions`, `start_share_attempt` and
+   > `start_share_html_attempt` **already exist** in production: calling them as `anon`
+   > returns `42501 permission denied`, not `404`/`PGRST202`. A function that does not
+   > exist cannot return "permission denied".
+   >
+   > So objects from `0025`/`0026` are present in the database while
+   > `supabase_migrations.schema_migrations` records those migrations as never applied.
+   > Something was applied out-of-band without being recorded.
+   >
+   > **What is still unknown:** whether the rest of `0025` — the restrictive `tests`
+   > SELECT policy, the `revoke`s — is also live, or whether only the functions were
+   > created. That distinction decides whether Phase 2 is routine or dangerous, because
+   > if the policy is already live then the currently-deployed app's direct
+   > `.from("tests").select().eq("share_token", ...)` path is already failing.
+   >
+   > **Before running any push**, determine which parts of `0025`–`0029` are actually
+   > present, e.g. by inspecting the live policies and grants directly:
+   > ```sql
+   > select polname, polcmd from pg_policy
+   >  where polrelid = 'public.tests'::regclass;
+   > select has_table_privilege('authenticated','public.attempts','INSERT') as attempts_insert;
+   > select has_column_privilege('authenticated','public.questions','answer_key','SELECT') as answer_key;
+   > ```
+   > Reconcile the history to reality with `supabase migration repair` (§3.4) **only for
+   > migrations you have confirmed are fully applied** — never for a partially applied one.
+   >
+   > Do **not** verify this by opening or starting a test with a real student account.
+   > Attempts are one-per-student-per-test forever, so that would permanently consume a
+   > real student's only attempt and write data that cannot be removed.
 
 3. Confirm a restore path exists: Supabase dashboard → Database → Backups. Confirm PITR
    is enabled, or take a manual backup, before Phase 1.
@@ -70,15 +116,16 @@ unmerged branch. `0025` and `0028` must therefore land in the same window as the
 
 ---
 
-## 3. Phase 1 — additive, no outage (`0024`, `0026`, `0027`, `0030`)
+## 3. Phase 1 — additive, no outage (`0026`, `0027`, `0030`)
 
-These four coexist with the currently-deployed app and can be applied outside a window.
+These three coexist with the currently-deployed app and can be applied outside a window.
 
 `supabase db push` applies **all** pending migrations and would pull `0025`/`0028` in with
 them, so Phase 1 is applied one migration at a time and then reconciled with the supported
 repair workflow.
 
-Repeat the following loop **for each** of `0024`, `0026`, `0027`, `0030`, in that order.
+Repeat the following loop **for each** of `0026`, `0027`, `0030`, in that order.
+`0024` is excluded: it is already applied and recorded.
 Do not batch them.
 
 ### 3.1 Record state before
@@ -108,12 +155,6 @@ leaving a half-applied migration.
 Before repairing, confirm the intended effect independently — the repair command only
 records state, it does not check anything.
 
-- `0024` — the integrity columns/table exist:
-  ```sql
-  select column_name from information_schema.columns
-   where table_schema='public' and table_name='results'
-     and column_name in ('integrity_violations','integrity_flags');
-  ```
 - `0026` — the function exists:
   ```sql
   select proname from pg_proc where proname = 'start_share_html_attempt';
@@ -156,7 +197,7 @@ npx supabase migration list --linked
 
 Each of these is additive, so rollback is rarely needed and is per-migration:
 
-- `0024`, `0026` — leaving them applied is harmless; the added column/function is unused
+- `0026` — leaving it applied is harmless; the added function is unused
   by the deployed app. Prefer leaving them over reversing.
 - `0027` — reversible with `grant select on public.html_test_answer_keys to authenticated;`
   but only do this if something is demonstrably broken by it; the deployed app does not
