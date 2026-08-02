@@ -352,7 +352,7 @@ export interface Database {
        * Fixes High #6 (non-transactional finalize) and High #7 (points-weighted accuracy).
        * Called exclusively from submit.ts via the service-role admin client.
        */
-      // Hosted-HTML sibling of finalize_test_attempt (migration 0034). Writes
+      // Hosted-HTML sibling of finalize_test_attempt (migration 0036). Writes
       // the attempt stamp, result and skill scores in one transaction; XP is
       // granted separately by awardHtmlTestExp so it keeps its own reason.
       finalize_html_test_attempt: {

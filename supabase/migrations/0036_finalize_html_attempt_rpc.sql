@@ -1,4 +1,4 @@
--- Migration 0034: atomic finalize_html_test_attempt RPC
+-- Migration 0036: atomic finalize_html_test_attempt RPC
 --
 -- Fixes a security review finding on the hosted-HTML-test submit path
 -- (src/app/api/tests/html/submit/route.ts):
