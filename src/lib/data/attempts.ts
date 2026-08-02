@@ -92,11 +92,17 @@ export async function getExistingAttempt(
   if (!data) return { ok: true, none: true };
 
   if (data.submitted_at) {
-    const { data: result } = await supabase
+    // Don't discard this error. A failed lookup used to return ok:true with no
+    // resultId, sending the student to a results page that cannot render —
+    // a blank screen instead of something they can act on.
+    const { data: result, error: resErr } = await supabase
       .from("results")
       .select("id")
       .eq("attempt_id", data.id)
       .maybeSingle();
+    if (resErr) {
+      return { ok: false, error: "Could not load your result. Please try again." };
+    }
     return {
       ok: true,
       alreadyCompleted: true,
@@ -191,11 +197,16 @@ export async function startAttempt(token: string): Promise<StartAttemptResult> {
   if (!data) return { ok: false, error: BAD_LINK };
 
   if (data.submitted_at) {
-    const { data: result } = await supabase
+    // Same discarded-error hazard as getExistingAttempt above: a null result
+    // from a failed query is not the same as "no result exists".
+    const { data: result, error: resErr } = await supabase
       .from("results")
       .select("id")
       .eq("attempt_id", data.attempt_id)
       .maybeSingle();
+    if (resErr) {
+      return { ok: false, error: "Could not load your result. Please try again." };
+    }
     return {
       ok: true,
       testId: data.test_id,
