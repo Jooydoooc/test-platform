@@ -11,6 +11,9 @@ out
 
 .claude/
 
+# Review-tool critique artifacts — local output, not part of the app
+.impeccable/
+
 # Supabase DB password (local record only — never commit)
 .supabase-db-password.txt
 
