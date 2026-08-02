@@ -27,6 +27,36 @@ const SKILL_AREAS: SkillArea[] = [
 // reported question counts — anything larger is a tampered or broken client).
 const MAX_ANSWERS = MAX_TOTAL_CEILING;
 
+// ---------------------------------------------------------------------------
+// Minimum-elapsed-time gate (anti-automation, not anti-speed).
+//
+// The submit route previously verified attempt ownership, submitted_at,
+// answer shape and the stored key, but nothing established that the student
+// actually spent any time in the test — a script could GET /ht/<token>,
+// scrape the answers out of the page source, and immediately POST a perfect
+// submission. `started_at` is stamped server-side when the attempt is
+// created (0001_schema.sql: `not null default now()`) and is never supplied
+// by the client, so `now() - started_at` is trustworthy evidence, unlike the
+// integrity telemetry (attacker-controlled, best-effort, already
+// non-blocking by design).
+//
+// Threshold: derived from question count rather than a bare constant, at a
+// pace far under anything a real student — even a fast, confident one
+// guessing on a short quiz — could trip:
+//   MIN_SECONDS_PER_QUESTION (1.5s) is barely enough time to receive a
+//   network round trip, let alone read a question and click an answer; a
+//   human doing that for real takes several times longer per item.
+//   MIN_ELAPSED_FLOOR_SECONDS (5s) puts a floor under tiny (1-3 question)
+//   tests where the per-question product would otherwise be negligible.
+// A resumed attempt (started_at from an earlier session) is safe by
+// construction: elapsed time only grows, so it can never trip this check.
+const MIN_SECONDS_PER_QUESTION = 1.5;
+const MIN_ELAPSED_FLOOR_SECONDS = 5;
+
+function minElapsedSeconds(questionCount: number): number {
+  return Math.max(MIN_ELAPSED_FLOOR_SECONDS, questionCount * MIN_SECONDS_PER_QUESTION);
+}
+
 // Sanitize the client-reported proctor tally (migration 0024). Best-effort
 // telemetry: we never reject a submit over bad integrity data — we just drop it.
 // Caps guard against a tampered payload bloating the row.
@@ -399,6 +429,43 @@ export async function POST(req: Request) {
       perSkill.clear();
       perSkill.set(key.skill, graded);
       serverGraded = true;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Minimum-elapsed-time gate (see MIN_SECONDS_PER_QUESTION above). Runs AFTER
+  // grading so the question count is whatever perSkill now holds — the
+  // server-verified key.count for a re-graded test, or the client-claimed
+  // total for an unkeyed one — and BEFORE the atomic finalize RPC, so a
+  // rejected submission never stamps submitted_at and the student can simply
+  // keep taking the test and submit for real.
+  //
+  // started_at is stamped server-side at attempt creation and never accepted
+  // from the client (see GET /ht/[token] -> start_share_html_attempt), so
+  // this cannot be spoofed by a fast attacker the way a client-reported
+  // duration or the integrity tally could be.
+  // ---------------------------------------------------------------------------
+  {
+    let questionCountForTiming = 0;
+    for (const t of perSkill.values()) questionCountForTiming += t.total;
+    const startedAtMs = new Date(attempt.started_at).getTime();
+    const elapsedSeconds = Math.max(0, (Date.now() - startedAtMs) / 1000);
+    const required = minElapsedSeconds(questionCountForTiming);
+    if (elapsedSeconds < required) {
+      console.error("[html submit] rejected: implausibly fast submission", {
+        attemptId: attempt.id,
+        elapsedSeconds: Math.round(elapsedSeconds * 100) / 100,
+        requiredSeconds: required,
+        questionCount: questionCountForTiming,
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "We couldn't confirm this submission — it arrived sooner than the test takes to complete. Please reload the test and submit again when you're done.",
+        },
+        { status: 422 },
+      );
     }
   }
 

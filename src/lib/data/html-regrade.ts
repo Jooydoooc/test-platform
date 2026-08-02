@@ -114,26 +114,39 @@ function matches(item: AnswerKeyItem, given: string): boolean {
 /**
  * Grade the submitted answers against the stored key.
  *
- * The denominator is `key.count` when the key declares one — never the length
- * of the payload. Otherwise a tampered client could send a single correct
- * answer and record 1/1 = 100 %. Duplicate ids are rejected by the caller for
- * the same reason: thirty copies of one correct answer is not thirty correct
- * answers. An id absent from the key simply scores nothing.
+ * The denominator is ALWAYS `key.count` — never the length of the payload.
+ * Falling back to the answers array's length would let a tampered client
+ * submit a single correct answer and record 1/1 = 100 %, exactly the forgery
+ * migration 0027 exists to prevent. So a missing or invalid `count` is a hard
+ * failure here: this function throws rather than silently trusting
+ * client-supplied length. The caller (api/tests/html/submit/route.ts)
+ * validates `key.count` up front and returns a clean 500 to the student
+ * before ever reaching this function, so in the normal path this throw is
+ * unreachable defense-in-depth, not the primary control — but `regrade` must
+ * never be safe to call with a bad key from anywhere else in the codebase
+ * either. Duplicate ids are rejected by the caller for the same reason:
+ * thirty copies of one correct answer is not thirty correct answers. An id
+ * absent from the key simply scores nothing.
  */
 export function regrade(
   key: AnswerKey,
   answers: { id: string; value: string | null }[],
 ): { correct: number; total: number } {
+  if (
+    typeof key.count !== "number" ||
+    !Number.isInteger(key.count) ||
+    key.count <= 0
+  ) {
+    throw new Error(
+      "regrade: answer key has no valid `count`; refusing to grade rather than trust answers.length",
+    );
+  }
   let correct = 0;
   for (const { id, value } of answers) {
     const item = key.items[id];
     if (!item || value === null) continue;
     if (matches(item, value)) correct++;
   }
-  const declared =
-    typeof key.count === "number" && Number.isInteger(key.count) && key.count > 0
-      ? key.count
-      : answers.length;
-  const total = Math.min(declared, MAX_TOTAL_CEILING);
+  const total = Math.min(key.count, MAX_TOTAL_CEILING);
   return { correct: Math.min(correct, total), total };
 }
