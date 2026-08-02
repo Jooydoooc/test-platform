@@ -262,7 +262,7 @@ function HostedTestCard({ test }: { test: HostedTest }) {
       </h2>
       <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-slate-600">
         {completed
-          ? "You've already completed this test. You can reopen it to review, but it won't be scored again."
+          ? "You've completed this test. Your score is saved to your progress."
           : "A self-contained, auto-graded test. Your score saves to your progress."}
       </p>
       <div className="mt-4 grid grid-cols-3 gap-2 text-[13px] font-semibold text-slate-600">
@@ -270,23 +270,26 @@ function HostedTestCard({ test }: { test: HostedTest }) {
         <Meta icon={CheckCircle2} label="Auto-graded" />
         <Meta icon={Zap} label={completed ? "Scored" : "Earns XP"} />
       </div>
+      {/* A completed test is NOT reopenable. Reopening was a review affordance,
+          but it handed the student the question content back on demand — which
+          contradicts the access model: a test is reachable only while it is
+          published AND the student holds the link. Completion is terminal. */}
       <div className="mt-5 flex flex-wrap gap-2">
-        <LinkButton
-          href={`/ht/${test.shareToken}`}
-          className={
-            completed
-              ? "group min-w-[8rem] flex-1 bg-slate-700 hover:bg-slate-800"
-              : "group min-w-[8rem] flex-1 bg-gradient-to-br from-brand-500 to-brand-600 shadow-[0_10px_24px_-8px_rgba(90,63,202,0.5)] hover:from-brand-600 hover:to-brand-700"
-          }
-        >
-          {completed ? (
-            <RotateCcw className="h-4 w-4" />
-          ) : (
+        {completed ? (
+          <p className="flex min-w-[8rem] flex-1 items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-600">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            Completed
+          </p>
+        ) : (
+          <LinkButton
+            href={`/ht/${test.shareToken}`}
+            className="group min-w-[8rem] flex-1 bg-gradient-to-br from-brand-500 to-brand-600 shadow-[0_10px_24px_-8px_rgba(90,63,202,0.5)] hover:from-brand-600 hover:to-brand-700"
+          >
             <PlayCircle className="h-4 w-4" />
-          )}
-          {completed ? "Reopen (not scored)" : "Start Test"}
-          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-        </LinkButton>
+            Start Test
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </LinkButton>
+        )}
       </div>
     </article>
   );
