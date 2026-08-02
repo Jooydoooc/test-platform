@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- 0032_revoke_attempt_writes.sql
+-- 0034_revoke_attempt_writes.sql
 -- Close the attempt-reopen / forged-grade bypass left open by attempts_update
 -- and the attempt_answers write policies.
 --
@@ -112,58 +112,58 @@ do $$
 begin
   -- Primary fix: authenticated/anon must no longer be able to UPDATE attempts.
   if has_table_privilege('authenticated', 'public.attempts', 'UPDATE') then
-    raise exception '0032 invariant violated: authenticated can UPDATE attempts';
+    raise exception '0034 invariant violated: authenticated can UPDATE attempts';
   end if;
   if has_table_privilege('anon', 'public.attempts', 'UPDATE') then
-    raise exception '0032 invariant violated: anon can UPDATE attempts';
+    raise exception '0034 invariant violated: anon can UPDATE attempts';
   end if;
 
   -- Defense in depth: DELETE on attempts also closed, even though 0002_rls.sql
   -- has no attempts_delete policy to exploit.
   if has_table_privilege('authenticated', 'public.attempts', 'DELETE') then
-    raise exception '0032 invariant violated: authenticated can DELETE attempts';
+    raise exception '0034 invariant violated: authenticated can DELETE attempts';
   end if;
   if has_table_privilege('anon', 'public.attempts', 'DELETE') then
-    raise exception '0032 invariant violated: anon can DELETE attempts';
+    raise exception '0034 invariant violated: anon can DELETE attempts';
   end if;
 
   -- attempt_answers: INSERT/UPDATE/DELETE all closed for authenticated/anon.
   if has_table_privilege('authenticated', 'public.attempt_answers', 'INSERT') then
-    raise exception '0032 invariant violated: authenticated can INSERT into attempt_answers';
+    raise exception '0034 invariant violated: authenticated can INSERT into attempt_answers';
   end if;
   if has_table_privilege('anon', 'public.attempt_answers', 'INSERT') then
-    raise exception '0032 invariant violated: anon can INSERT into attempt_answers';
+    raise exception '0034 invariant violated: anon can INSERT into attempt_answers';
   end if;
   if has_table_privilege('authenticated', 'public.attempt_answers', 'UPDATE') then
-    raise exception '0032 invariant violated: authenticated can UPDATE attempt_answers';
+    raise exception '0034 invariant violated: authenticated can UPDATE attempt_answers';
   end if;
   if has_table_privilege('anon', 'public.attempt_answers', 'UPDATE') then
-    raise exception '0032 invariant violated: anon can UPDATE attempt_answers';
+    raise exception '0034 invariant violated: anon can UPDATE attempt_answers';
   end if;
   if has_table_privilege('authenticated', 'public.attempt_answers', 'DELETE') then
-    raise exception '0032 invariant violated: authenticated can DELETE attempt_answers';
+    raise exception '0034 invariant violated: authenticated can DELETE attempt_answers';
   end if;
   if has_table_privilege('anon', 'public.attempt_answers', 'DELETE') then
-    raise exception '0032 invariant violated: anon can DELETE attempt_answers';
+    raise exception '0034 invariant violated: anon can DELETE attempt_answers';
   end if;
 
   -- Regression guards: SELECT must remain intact on both tables (students
   -- still read their own attempts/answers; RLS scopes the rows).
   if not has_table_privilege('authenticated', 'public.attempts', 'SELECT') then
-    raise exception '0032 regression: authenticated lost SELECT on attempts';
+    raise exception '0034 regression: authenticated lost SELECT on attempts';
   end if;
   if not has_table_privilege('authenticated', 'public.attempt_answers', 'SELECT') then
-    raise exception '0032 regression: authenticated lost SELECT on attempt_answers';
+    raise exception '0034 regression: authenticated lost SELECT on attempt_answers';
   end if;
 
   -- Regression guard: service_role must retain full access — grading
   -- (finalize_test_attempt's caller context) and every admin route depend on it.
   if not has_table_privilege('service_role', 'public.attempts', 'UPDATE') then
-    raise exception '0032 regression: service_role lost UPDATE on attempts';
+    raise exception '0034 regression: service_role lost UPDATE on attempts';
   end if;
   if not has_table_privilege('service_role', 'public.attempt_answers', 'INSERT') then
-    raise exception '0032 regression: service_role lost INSERT on attempt_answers';
+    raise exception '0034 regression: service_role lost INSERT on attempt_answers';
   end if;
 
-  raise notice '0032_revoke_attempt_writes.sql: all invariants verified.';
+  raise notice '0034_revoke_attempt_writes.sql: all invariants verified.';
 end $$;

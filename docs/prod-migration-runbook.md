@@ -66,7 +66,7 @@ commit**.
 
 ## 2. What is actually outstanding
 
-Six migrations remain. Only one is subtractive against the running app, and one has an
+Seven migrations remain. Two are subtractive against the running app, and one has an
 ordering constraint of its own.
 
 | Migration | Effect | Risk against the running app |
@@ -77,6 +77,7 @@ ordering constraint of its own.
 | `0031` | publish gate: tests start unpublished and must be published by an admin | none for existing tests, but **the ordering matters** — §5 |
 | `0032` | adds `share_attempt_state`, a read-only, `authenticated`-only sibling of `start_share_attempt` used during the `/t/<token>` render to check submission state before questions are fetched | none for existing tests or attempts — additive and read-only. The preflight (§6) now requires it; deploying app code that calls it against a database without it breaks every share-link render with "Could not open this test." |
 | `0033` | `create or replace function share_test_questions(p_token text)` — adds a submitted-attempt check: a student holding a submitted attempt gets zero rows back, teachers untouched | none for existing tests or attempts — additive, redefines a function body only. **But do not skip it**: the app-level gate added in `/t/[token]` (checks `share_attempt_state` from `0032` before rendering questions) only covers normal page navigation. `share_test_questions` is itself a public RPC, callable directly over PostgREST by any authenticated session holding the share token — without `0033`, a student who already completed a test can call it straight from the browser with their own JWT and the token, and get the full question bank back. `0033` closes that path at the RPC itself. |
+| `0034` | `revoke update, delete on attempts` and `revoke insert, update, delete on attempt_answers`, from `authenticated` and `anon` | **subtractive, and it is what makes `0033` hold.** Verified live: `has_table_privilege('authenticated','public.attempts','UPDATE')` is `true` today, and `attempts_update` (`0002_rls.sql:181`) is row-scoped but not column-scoped. So a student can `PATCH /rest/v1/attempts?id=eq.<their own>` with `{"submitted_at": null}` and reopen a finished attempt — which defeats `0033` entirely, since that gate keys on `submitted_at is not null`. The same grant lets them re-point `test_id` at another test to satisfy the "an attempt row proves the link" check in `0025`. No app code writes these columns through the session client (every writer is the service-role admin client or a SECURITY DEFINER RPC), so the revoke is not expected to break any path. This is also the only change anywhere in the repo that revokes `attempts` UPDATE — see §3, where `0030` asserts on exactly that. |
 
 An earlier version of this runbook planned a Phase 1 / Phase 2 split with an outage window,
 on the assumption that none of `0024`–`0030` were applied. That assumption was wrong:
