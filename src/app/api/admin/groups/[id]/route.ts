@@ -13,6 +13,31 @@ const LEVELS: Level[] = [
   "IELTS_GRADUATION",
 ];
 
+// Postgres error details must never reach the client. Log the raw error
+// server-side with enough context to diagnose, and return a short, safe
+// message that still distinguishes "conflict" from "something went wrong".
+type DbError = { message?: string; code?: string; details?: string } | null | undefined;
+
+function logDbError(
+  operation: string,
+  error: DbError,
+  extra?: Record<string, unknown>,
+) {
+  console.error(`[api/admin/groups/[id]] ${operation} failed`, {
+    message: error?.message,
+    code: error?.code,
+    details: error?.details,
+    ...extra,
+  });
+}
+
+function safeDbMessage(error: DbError, fallback: string): string {
+  if (!error) return fallback;
+  if (error.code === "23505") return "A group with that name already exists.";
+  if (error.code === "23503") return "That references something that no longer exists.";
+  return fallback;
+}
+
 // PATCH /api/admin/groups/[id] — rename a group and/or change its level. Only the
 // fields present in the body are touched. ADMIN-gated via requireAdmin (real ADMIN
 // role only); the service-role client bypasses RLS, so that gate is the guard.
@@ -57,8 +82,14 @@ export async function PATCH(req: Request, { params }: Ctx) {
     .single();
 
   if (error || !data) {
+    if (error) logDbError("update group", error, { groupId: id });
     return NextResponse.json(
-      { ok: false, error: error?.message ?? "Could not update the group." },
+      {
+        ok: false,
+        error: error
+          ? safeDbMessage(error, "Could not update the group.")
+          : "Group not found.",
+      },
       { status: error ? 500 : 404 },
     );
   }

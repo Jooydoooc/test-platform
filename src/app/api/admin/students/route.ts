@@ -3,6 +3,24 @@ import { requireAdmin } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { StudentSummary } from "@/lib/admin-students";
 
+// Postgres error details must never reach the client. Log the raw error
+// server-side with enough context to diagnose, and return a short, safe
+// message.
+type DbError = { message?: string; code?: string; details?: string } | null | undefined;
+
+function logDbError(
+  operation: string,
+  error: DbError,
+  extra?: Record<string, unknown>,
+) {
+  console.error(`[api/admin/students] ${operation} failed`, {
+    message: error?.message,
+    code: error?.code,
+    details: error?.details,
+    ...extra,
+  });
+}
+
 // GET /api/admin/students — every profile (all roles) with email, group name and
 // a graded-results count, plus the group list for filtering / reassignment.
 // Service-role client: bypasses RLS so an admin sees the whole roster, not just
@@ -27,8 +45,9 @@ export async function GET() {
     ]);
 
   if (pErr || gErr) {
+    logDbError("query profiles/groups", pErr ?? gErr);
     return NextResponse.json(
-      { ok: false, error: pErr?.message ?? gErr?.message ?? "Query failed." },
+      { ok: false, error: "Could not load the student roster." },
       { status: 500 },
     );
   }

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 import { ESSENTIAL_WORDS_BOOK1 } from "@/lib/data/essential-words";
 import { evaluateAndUnlockBadges } from "@/lib/data/badges";
+import type { Json } from "@/lib/database.types";
 import {
   QUIZ_CONFIG,
   INTERACTIVE_CONFIG,
@@ -88,31 +89,22 @@ export async function submitVocabTest(
   // Create-or-resume the attempt for (student_id, vocab_source_id).
   //
   // Strategy mirrors startAttempt / the html-submit route: select first so we
-  // can distinguish "already submitted" (duplicate path) vs "in progress" (resume)
-  // vs "none yet" (insert). The unique index on (student_id, vocab_source_id)
-  // guards against races — on conflict we re-select.
+  // can resume an in-progress attempt (no result yet) rather than insert a
+  // duplicate row. Whether it's already submitted is resolved below by the
+  // atomic RPC, not here — so this never has to guess at partial-failure state.
+  // The unique index on (student_id, vocab_source_id) guards against races —
+  // on conflict we re-select.
   // -------------------------------------------------------------------------
   const { data: existing } = await admin
     .from("attempts")
-    .select("id, submitted_at")
+    .select("id")
     .eq("student_id", user.id)
     .eq("vocab_source_id", unitId)
     .maybeSingle();
 
-  if (existing?.submitted_at) {
-    // Already graded — look up the result and return idempotent duplicate.
-    const { data: prior } = await admin
-      .from("results")
-      .select("id")
-      .eq("attempt_id", existing.id)
-      .maybeSingle();
-    return { status: "duplicate", resultId: prior?.id };
-  }
-
   let attemptId: string;
 
   if (existing) {
-    // Un-submitted in-progress attempt — reuse it.
     attemptId = existing.id;
   } else {
     // No attempt yet — insert one, handling the unique-index race by re-selecting.
@@ -126,19 +118,11 @@ export async function submitVocabTest(
       // Unique-index race: another request beat us. Re-select and reuse it.
       const { data: raced } = await admin
         .from("attempts")
-        .select("id, submitted_at")
+        .select("id")
         .eq("student_id", user.id)
         .eq("vocab_source_id", unitId)
         .maybeSingle();
       if (!raced) return { status: "error" };
-      if (raced.submitted_at) {
-        const { data: prior } = await admin
-          .from("results")
-          .select("id")
-          .eq("attempt_id", raced.id)
-          .maybeSingle();
-        return { status: "duplicate", resultId: prior?.id };
-      }
       attemptId = raced.id;
     } else {
       attemptId = inserted.id;
@@ -146,52 +130,68 @@ export async function submitVocabTest(
   }
 
   // -------------------------------------------------------------------------
-  // Finalize the attempt (mark submitted_at first — if a later write fails, the
-  // idempotency check above catches a retry and prevents double-award). If the
-  // stamp itself fails, bail: leaving submitted_at NULL would let a retry re-run
-  // every write and produce a duplicate result / skill-score / XP row.
-  // -------------------------------------------------------------------------
-  const { error: stampErr } = await admin
-    .from("attempts")
-    .update({ submitted_at: new Date().toISOString() })
-    .eq("id", attemptId);
-  if (stampErr) return { status: "error" };
-
-  // Insert the result row. Vocab tests are never PLACEMENT, never PENDING_REVIEW
-  // (graded locally; no AI/teacher check needed).
-  const { data: result, error: rErr } = await admin
-    .from("results")
-    .insert({
-      attempt_id: attemptId,
-      student_id: user.id,
-      status: "COMPLETED" as const,
-      excluded_from_progress: false,
-    })
-    .select("id")
-    .single();
-  if (rErr || !result) return { status: "error" };
-
-  // One result_skill_scores row for VOCABULARY (the only skill a vocab test
-  // covers). Clamp correct_count to [0, total] as defense-in-depth (the input
-  // guard already enforces score<=total) so a bad row can never poison the
-  // sum(correct_count)/sum(total_count) mastery aggregate. If this insert fails,
-  // bail: granting XP while the skill-progress record is missing would show the
-  // student XP with no matching mastery/badge credit.
+  // Finalize atomically via the same `finalize_test_attempt` RPC used by the
+  // DB-test submit path (migration 0019). It claims the attempt (submitted_at
+  // IS NULL -> now(), inside the same PG transaction as the writes below), so
+  // either everything below commits together or nothing does:
+  //   - results (COMPLETED, never excluded_from_progress — vocab is never PLACEMENT)
+  //   - result_skill_scores (one VOCABULARY row)
+  // p_answers is intentionally `[]`: vocab tests have no DB `questions` rows to
+  // grade against (client-graded word list), and an empty jsonb array makes the
+  // RPC's `insert ... from jsonb_array_elements(...)` a no-op — no FK to satisfy.
+  // p_exp is intentionally 0 / p_exp_unique_key null here: the RPC's XP step
+  // hardcodes ledger reason 'TEST_EXP' (shared with DB tests), which would
+  // mislabel vocab XP. XP is granted just below instead, under the correct
+  // 'VOCAB_TEST_EXP' reason, using the same idempotent dedupe-key upsert as
+  // before — safe to run on every call (first grant or retry) because the
+  // ledger's (student_id, unique_key) unique index makes it a no-op on repeat.
+  //
+  // If this call itself fails (network/RPC error), submitted_at was never
+  // touched (the claim is inside the same transaction as the failure), so a
+  // retry re-enters this exact path and can still complete the grade — no
+  // permanently-stamped-but-ungraded state is possible from this point on.
   const clampedScore = Math.max(0, Math.min(score, total));
   const accuracy = Math.max(0, Math.min(1, clampedScore / total));
-  const { error: skillErr } = await admin.from("result_skill_scores").insert({
-    result_id: result.id,
-    skill_area: "VOCABULARY" as const,
-    correct_count: clampedScore,
-    total_count: total,
-    accuracy,
-  });
-  if (skillErr) return { status: "error" };
+
+  const { data: rpcRows, error: rpcErr } = await admin.rpc(
+    "finalize_test_attempt",
+    {
+      p_attempt_id: attemptId,
+      p_student_id: user.id,
+      p_status: "COMPLETED",
+      p_excluded: false,
+      p_answers: [] as unknown as Json,
+      p_skill_scores: [
+        {
+          skill_area: "VOCABULARY",
+          correct_count: clampedScore,
+          total_count: total,
+          accuracy,
+        },
+      ] as unknown as Json,
+      p_exp: 0,
+      p_exp_unique_key: null,
+    },
+  );
+  if (rpcErr || !rpcRows || rpcRows.length === 0) {
+    return { status: "error" };
+  }
+
+  const resultId = rpcRows[0].result_id;
+  // A null result_id can only mean: the RPC found the attempt already claimed
+  // (submitted_at set) by a run that predates this fix and never committed a
+  // results row — i.e. the exact stuck state this fix closes off going
+  // forward. There is no in-app way to reclaim it (the CAS requires
+  // submitted_at IS NULL); it needs a one-off data fix, out of scope here.
+  if (!resultId) {
+    return { status: "error" };
+  }
 
   // -------------------------------------------------------------------------
   // EXP: score-proportional, granted once per unit via the deduped ledger.
-  // ignoreDuplicates skips the write when this unit's test was already earned.
-  // An empty `.select()` result means "deduped"; an error means "write failed".
+  // Runs on every call (first grant AND retries) — ignoreDuplicates makes a
+  // repeat call a safe no-op, so a retry that finds the RPC already committed
+  // (e.g. a prior call's XP grant below failed) can still complete the grant.
   // -------------------------------------------------------------------------
   const exp = Math.round(EXP_PER_VOCAB_TEST * accuracy);
   let xpGranted = 0;
@@ -222,7 +222,14 @@ export async function submitVocabTest(
     newBadges = [];
   }
 
-  return { status: "granted", xp: xpGranted, resultId: result.id, newBadges };
+  // If the RPC found this attempt already fully committed by a prior call AND
+  // this call didn't recover any new XP, nothing new happened — report the
+  // pre-existing duplicate. Otherwise (first-time grade, or a retry that just
+  // recovered a previously-lost XP grant) report granted.
+  if (rpcRows[0].was_already_submitted && xpGranted === 0) {
+    return { status: "duplicate", resultId };
+  }
+  return { status: "granted", xp: xpGranted, resultId, newBadges };
 }
 
 // ---------------------------------------------------------------------------

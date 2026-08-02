@@ -13,6 +13,31 @@ import type { ProfileRow, Role, SkillArea } from "@/lib/database.types";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+// Postgres error details must never reach the client. Log the raw error
+// server-side with enough context to diagnose, and return a short, safe
+// message that still distinguishes "conflict" from "something went wrong".
+type DbError = { message?: string; code?: string; details?: string } | null | undefined;
+
+function logDbError(
+  operation: string,
+  error: DbError,
+  extra?: Record<string, unknown>,
+) {
+  console.error(`[api/admin/students/[id]] ${operation} failed`, {
+    message: error?.message,
+    code: error?.code,
+    details: error?.details,
+    ...extra,
+  });
+}
+
+function safeDbMessage(error: DbError, fallback: string): string {
+  if (!error) return fallback;
+  if (error.code === "23505") return "That would conflict with an existing record.";
+  if (error.code === "23503") return "That references something that no longer exists.";
+  return fallback;
+}
+
 // GET /api/admin/students/[id] — full performance view for one student:
 // per-skill accuracy, totals, points, and recent graded results.
 export async function GET(_req: Request, { params }: Ctx) {
@@ -283,7 +308,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   const { error } = await admin.from("profiles").update(update).eq("id", id);
   if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    logDbError("PATCH student", error, { studentId: id });
+    return NextResponse.json(
+      { ok: false, error: safeDbMessage(error, "Could not update the student.") },
+      { status: 500 },
+    );
   }
   return NextResponse.json({ ok: true });
 }
@@ -316,8 +345,9 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     .eq("id", id);
 
   if (profileErr) {
+    logDbError("DELETE student (soft-delete)", profileErr, { studentId: id });
     return NextResponse.json(
-      { ok: false, error: profileErr.message },
+      { ok: false, error: safeDbMessage(profileErr, "Could not delete the student.") },
       { status: 500 },
     );
   }
@@ -332,7 +362,9 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   if (banErr) {
     return NextResponse.json({
       ok: true,
-      warning: `Account data soft-deleted but auth ban failed: ${banErr.message}`,
+      warning:
+        "Account data was soft-deleted, but the sign-in ban did not apply. " +
+        "The student may still be able to log in — check the auth dashboard.",
     });
   }
 
