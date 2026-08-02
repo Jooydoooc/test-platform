@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/menu";
 import { logout, useSession } from "@/lib/auth";
 import { useStudentXp } from "@/lib/xp";
+import { useLiveTest } from "@/lib/live-test";
 
 export function SiteHeader() {
   const { user } = useSession();
@@ -37,12 +38,22 @@ export function SiteHeader() {
 
   const navItems = [
     { href: "/", label: "Home" },
-    { href: "/tests", label: "Tests" },
     { href: "/practice", label: "Practice" },
+    { href: "/tests", label: "Tests" },
     { href: "/books", label: "Books" },
-    { href: "/leaderboard", label: "Leaderboard" },
     { href: "/dashboard", label: "Dashboard" },
+    { href: "/leaderboard", label: "Leaderboard" },
+    { href: "/profile", label: "Profile" },
   ];
+
+  // A live test is deliberately distraction-free. The test itself provides
+  // its own progress, timer and exit path, so global navigation is hidden.
+  // The exam surface itself (TestTaker, the legacy /tests/[id] runner) is the
+  // only thing that knows which of its phases actually counts as "live" —
+  // see src/lib/live-test.ts.
+  const isLiveTest = useLiveTest();
+
+  if (isLiveTest) return null;
 
   // Admins get the elevated surface (Admin lives in the account menu, not the nav).
   const isAdmin = user?.role === "admin";

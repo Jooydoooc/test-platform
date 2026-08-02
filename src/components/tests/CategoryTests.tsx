@@ -3,7 +3,7 @@
 // Reusable per-category test listing. The Test Center is split into one page per
 // skill (/tests/grammar, /tests/vocabulary, /tests/reading); each renders this
 // component locked to a single TestGroup. It shows hosted (interactive) tests
-// first, then local-store tests, with search / status / duration / sort filters.
+// first, then local-store tests, with only search and status filters.
 //
 // Ported from the former single-page /tests view (the group rail is gone — the
 // page IS the category).
@@ -13,19 +13,16 @@ import {
   ArrowRight,
   CheckCircle2,
   ChevronDown,
-  ChevronRight,
   Clock,
-  Eye,
   FileText,
+  Lock,
   ListChecks,
   PlayCircle,
-  RotateCcw,
   Search,
-  Sparkles,
+  ShieldCheck,
   Star,
-  Zap,
 } from "lucide-react";
-import { Badge, Button, Card, LinkButton, ProgressBar } from "@/components/ui";
+import { Badge, Card, LinkButton, ProgressBar } from "@/components/ui";
 import { useSession } from "@/lib/auth";
 import { bookOf, groupOf, maxScore, useAttempts, useTests } from "@/lib/store";
 import { type Test, type TestGroup } from "@/lib/types";
@@ -73,16 +70,7 @@ function estMinutes(test: Test): number {
   return test.durationMinutes || Math.max(3, Math.round(maxScore(test) * 0.9));
 }
 
-type DurationBucket = "Short" | "Medium" | "Long";
-function durationBucket(min: number): DurationBucket {
-  if (min <= 5) return "Short";
-  if (min <= 15) return "Medium";
-  return "Long";
-}
-
 const STATUS_OPTS = ["All", "Not Started", "Completed"] as const;
-const DURATION_OPTS = ["All", "Short", "Medium", "Long"] as const;
-const SORT_OPTS = ["Newest", "Shortest", "Most Questions"] as const;
 
 export function CategoryTests({ group }: { group: TestGroup }) {
   const { user } = useSession();
@@ -121,9 +109,6 @@ export function CategoryTests({ group }: { group: TestGroup }) {
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<(typeof STATUS_OPTS)[number]>("All");
-  const [duration, setDuration] =
-    useState<(typeof DURATION_OPTS)[number]>("All");
-  const [sort, setSort] = useState<(typeof SORT_OPTS)[number]>("Newest");
 
   const shown = useMemo(() => {
     let list = tests.filter((t) => groupOf(t) === group);
@@ -139,17 +124,9 @@ export function CategoryTests({ group }: { group: TestGroup }) {
       const wantDone = status === "Completed";
       list = list.filter((t) => isCompleted(t) === wantDone);
     }
-    if (duration !== "All") {
-      list = list.filter((t) => durationBucket(estMinutes(t)) === duration);
-    }
-    const sorted = [...list];
-    if (sort === "Newest") sorted.sort((a, b) => b.createdAt - a.createdAt);
-    else if (sort === "Shortest")
-      sorted.sort((a, b) => estMinutes(a) - estMinutes(b));
-    else sorted.sort((a, b) => b.questions.length - a.questions.length);
-    return sorted;
+    return [...list].sort((a, b) => b.createdAt - a.createdAt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tests, group, query, status, duration, sort, stats]);
+  }, [tests, group, query, status, stats]);
 
   const shownHosted = useMemo(() => {
     let list = hosted.filter((h) => hostedInGroup(h, group));
@@ -168,7 +145,7 @@ export function CategoryTests({ group }: { group: TestGroup }) {
     <div className="space-y-6">
       {/* Filter bar */}
       <Card className="!p-3 sm:!p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/25">
             <Search className="h-4 w-4 shrink-0 text-slate-400" />
             <input
@@ -179,24 +156,12 @@ export function CategoryTests({ group }: { group: TestGroup }) {
               className="w-full bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-400 sm:text-sm"
             />
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="sm:w-44">
             <FilterSelect
               label="Status"
               value={status}
               onChange={(v) => setStatus(v as (typeof STATUS_OPTS)[number])}
               options={STATUS_OPTS}
-            />
-            <FilterSelect
-              label="Duration"
-              value={duration}
-              onChange={(v) => setDuration(v as (typeof DURATION_OPTS)[number])}
-              options={DURATION_OPTS}
-            />
-            <FilterSelect
-              label="Sort"
-              value={sort}
-              onChange={(v) => setSort(v as (typeof SORT_OPTS)[number])}
-              options={SORT_OPTS}
             />
           </div>
         </div>
@@ -246,9 +211,9 @@ function HostedTestCard({ test }: { test: HostedTest }) {
         {test.level && (
           <Badge tone="neutral">{HOSTED_LEVEL_LABEL[test.level]}</Badge>
         )}
-        <Badge tone="success">
-          <Sparkles className="h-3 w-3" />
-          Interactive
+        <Badge tone="brand">
+          <ShieldCheck className="h-3 w-3" />
+          Secure
         </Badge>
         {completed && (
           <Badge tone="success">
@@ -262,31 +227,33 @@ function HostedTestCard({ test }: { test: HostedTest }) {
       </h2>
       <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-slate-600">
         {completed
-          ? "You've already completed this test. You can reopen it to review, but it won't be scored again."
-          : "A self-contained, auto-graded test. Your score saves to your progress."}
+          ? "Completed. Your result is saved to your progress."
+          : "One attempt. Leaving the test twice submits it automatically."}
       </p>
-      <div className="mt-4 grid grid-cols-3 gap-2 text-[13px] font-semibold text-slate-600">
-        <Meta icon={Sparkles} label="Interactive" />
+      <div className="mt-4 grid grid-cols-2 gap-2 text-[13px] font-semibold text-slate-600">
+        <Meta icon={Lock} label="Single attempt" />
         <Meta icon={CheckCircle2} label="Auto-graded" />
-        <Meta icon={Zap} label={completed ? "Scored" : "Earns XP"} />
       </div>
+      {/* A completed test is NOT reopenable. Reopening was a review affordance,
+          but it handed the student the question content back on demand — which
+          contradicts the access model: a test is reachable only while it is
+          published AND the student holds the link. Completion is terminal. */}
       <div className="mt-5 flex flex-wrap gap-2">
-        <LinkButton
-          href={`/ht/${test.shareToken}`}
-          className={
-            completed
-              ? "group min-w-[8rem] flex-1 bg-slate-700 hover:bg-slate-800"
-              : "group min-w-[8rem] flex-1 bg-gradient-to-br from-brand-500 to-brand-600 shadow-[0_10px_24px_-8px_rgba(90,63,202,0.5)] hover:from-brand-600 hover:to-brand-700"
-          }
-        >
-          {completed ? (
-            <RotateCcw className="h-4 w-4" />
-          ) : (
+        {completed ? (
+          <p className="flex min-w-[8rem] flex-1 items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-600">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            Completed
+          </p>
+        ) : (
+          <LinkButton
+            href={`/ht/${test.shareToken}`}
+            className="group min-w-[8rem] flex-1"
+          >
             <PlayCircle className="h-4 w-4" />
-          )}
-          {completed ? "Reopen (not scored)" : "Start Test"}
-          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-        </LinkButton>
+            Start Test
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </LinkButton>
+        )}
       </div>
     </article>
   );
@@ -301,15 +268,9 @@ function TestCard({
   completed: boolean;
   best: number;
 }) {
-  const [preview, setPreview] = useState(false);
   const diff = difficultyOf(test);
   const mins = estMinutes(test);
   const points = maxScore(test);
-  const typeCounts = useMemo(() => {
-    const c: Record<string, number> = {};
-    for (const q of test.questions) c[q.type] = (c[q.type] ?? 0) + 1;
-    return c;
-  }, [test]);
 
   return (
     <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
@@ -337,7 +298,7 @@ function TestCard({
         <Meta icon={ListChecks} label={`${test.questions.length} Qs`} />
         <Meta icon={Star} label={`${points} pts`} />
         <Meta icon={Clock} label={`~${mins}m`} />
-        <Meta icon={Zap} label="Practice" />
+        <Meta icon={Lock} label="One attempt" />
       </div>
       {completed && (
         <div className="mt-4">
@@ -351,66 +312,19 @@ function TestCard({
           />
         </div>
       )}
-      {preview && (
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-          <p className="mb-1.5 font-bold text-slate-700">Question breakdown</p>
-          <ul className="flex flex-wrap gap-2">
-            {Object.entries(typeCounts).map(([type, n]) => (
-              <li
-                key={type}
-                className="rounded-md border border-slate-200 bg-white px-2 py-0.5 font-medium capitalize"
-              >
-                {n} × {type}
-              </li>
-            ))}
-          </ul>
-          {test.questions[0] && (
-            <p className="mt-2 line-clamp-2 italic text-slate-500">
-              e.g. “{test.questions[0].prompt}”
-            </p>
-          )}
-        </div>
-      )}
       <div className="mt-5 flex flex-wrap gap-2">
-        <LinkButton
-          href={`/tests/${test.id}`}
-          className="group min-w-[8rem] flex-1 bg-gradient-to-br from-brand-500 to-brand-600 shadow-[0_10px_24px_-8px_rgba(90,63,202,0.5)] hover:from-brand-600 hover:to-brand-700"
-        >
-          {completed ? (
-            <>
-              <RotateCcw className="h-4 w-4" />
-              Retake
-            </>
-          ) : (
-            <>
-              <PlayCircle className="h-4 w-4" />
-              Start Test
-            </>
-          )}
-          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-        </LinkButton>
-        {completed && (
-          <LinkButton
-            href={`/tests/${test.id}?review=1`}
-            variant="secondary"
-            className="flex-1"
-          >
-            <ListChecks className="h-4 w-4" />
-            Review Mistakes
+        {completed ? (
+          <p className="flex min-w-[8rem] flex-1 items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-600">
+            <CheckCircle2 className="h-4 w-4 text-success" />
+            Completed
+          </p>
+        ) : (
+          <LinkButton href={`/tests/${test.id}`} className="group min-w-[8rem] flex-1">
+            <PlayCircle className="h-4 w-4" />
+            Start Test
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </LinkButton>
         )}
-        <Button
-          variant="ghost"
-          onClick={() => setPreview((v) => !v)}
-          aria-expanded={preview}
-          className="shrink-0"
-        >
-          <Eye className="h-4 w-4" />
-          {preview ? "Hide" : "Preview"}
-          <ChevronRight
-            className={`h-4 w-4 transition-transform ${preview ? "rotate-90" : ""}`}
-          />
-        </Button>
       </div>
     </article>
   );

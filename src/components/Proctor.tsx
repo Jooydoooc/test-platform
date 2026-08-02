@@ -6,8 +6,8 @@
 //   * Fullscreen — engaging requests fullscreen; exiting it blocks the exam
 //     behind an overlay until the student re-enters (Esc is easy to hit by
 //     accident, so this is a warning + re-enter, not an auto-submit).
-//   * Tab / window switch — visibilitychange->hidden auto-submits (the strict
-//     rule the admin chose). window blur is recorded as a softer signal.
+//   * Tab / window switch — the first visibilitychange->hidden warns and the
+//     second auto-submits. window blur is recorded as a softer signal.
 //   * Copy / cut / paste — blocked everywhere (paste too, so prepared answers
 //     can't be dropped into answer fields).
 //   * Right-click (context menu) — blocked.
@@ -175,7 +175,13 @@ export function useProctor({ onAutoSubmit, enabled }: UseProctorOptions): Procto
         (document as unknown as { webkitExitFullscreen?: () => Promise<void> })
           .webkitExitFullscreen;
       try {
-        void exit?.call(document);
+        const r = exit?.call(document);
+        // exitFullscreen() can return a promise that rejects (e.g. a stale
+        // document, or fullscreen already gone by the time this runs) rather
+        // than throwing synchronously. Swallow it the same way as the
+        // synchronous case — this is best-effort cleanup, never something
+        // that should surface as an unhandled rejection.
+        if (r instanceof Promise) r.catch(() => {});
       } catch {
         /* ignore */
       }

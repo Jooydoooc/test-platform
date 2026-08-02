@@ -440,6 +440,20 @@ export interface Database {
         }[];
       };
       /**
+       * Read-only completion check (migration 0032): reports whether this
+       * student already has a submitted attempt on the shared test, WITHOUT
+       * inserting an attempt row or anchoring started_at. Safe to call during
+       * Server Component render, unlike start_share_attempt. Returns no rows
+       * for a non-student, a bad token, or an unpublished test.
+       */
+      share_attempt_state: {
+        Args: { p_token: string };
+        Returns: {
+          submitted_at: string | null;
+          result_id: string | null;
+        }[];
+      };
+      /**
        * Hosted-HTML twin of start_share_attempt (migration 0026). Direct INSERT
        * on `attempts` is revoked from `authenticated`, so this is the only way a
        * browser session can mint an attempt on a hosted test. Returns no rows

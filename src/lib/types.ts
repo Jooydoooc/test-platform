@@ -167,4 +167,14 @@ export interface Attempt {
   timeTakenSec?: number;
   /** True when the test was auto-submitted because the timer ran out. */
   timedOut?: boolean;
+  /**
+   * Proctor integrity snapshot, same shape as the DB rail's
+   * `integrity_violations` / `integrity_flags` columns (see
+   * src/lib/data/submit.ts). Optional: attempts saved before proctoring
+   * carried this data, and existing localStorage rows, have neither field —
+   * both must keep deserializing and rendering fine.
+   */
+  integrityViolations?: number;
+  /** Per-violation-type tally, e.g. { tab_switch: 1, copy: 3 }. */
+  integrityFlags?: Record<string, number>;
 }
