@@ -10,7 +10,7 @@ Students should be able to:
 - complete vocabulary tasks
 - take tests
 - see their scores
-- review mistakes
+- see weak skills and topics after a test, without reopening graded questions
 - track their progress
 - see badges and ranks
 - compare results with classmates

@@ -37,12 +37,28 @@ export function SiteHeader() {
 
   const navItems = [
     { href: "/", label: "Home" },
-    { href: "/tests", label: "Tests" },
     { href: "/practice", label: "Practice" },
+    { href: "/tests", label: "Tests" },
     { href: "/books", label: "Books" },
-    { href: "/leaderboard", label: "Leaderboard" },
     { href: "/dashboard", label: "Dashboard" },
+    { href: "/leaderboard", label: "Leaderboard" },
+    { href: "/profile", label: "Profile" },
   ];
+
+  // A live test is deliberately distraction-free. The test itself provides
+  // its own progress, timer and exit path, so global navigation is hidden.
+  const isLiveTest =
+    pathname.startsWith("/t/") ||
+    (/^\/tests\/[^/]+$/.test(pathname) &&
+      ![
+        "/tests/grammar",
+        "/tests/vocabulary",
+        "/tests/reading",
+        "/tests/listening",
+        "/tests/links",
+      ].includes(pathname));
+
+  if (isLiveTest) return null;
 
   // Admins get the elevated surface (Admin lives in the account menu, not the nav).
   const isAdmin = user?.role === "admin";

@@ -50,6 +50,20 @@ export interface StartAttemptResult {
   alreadyCompleted?: boolean;
   resultId?: string;
   error?: string;
+  /**
+   * True when `error` came from an unrecognized failure (not a link/session/
+   * role refusal) — e.g. a dropped connection. Callers may retry a transient
+   * failure; a non-transient one is a real refusal and must not be retried.
+   */
+  transient?: boolean;
+}
+
+export interface ShareAttemptState {
+  ok: boolean;
+  /** True when this student already submitted this test. */
+  alreadyCompleted?: boolean;
+  resultId?: string;
+  error?: string;
 }
 
 // Create-or-resume the student's single attempt, keyed by the SHARE TOKEN.
@@ -111,7 +125,7 @@ export async function startAttempt(token: string): Promise<StartAttemptResult> {
     ) {
       return { ok: false, error: STALE_SESSION };
     }
-    return { ok: false, error: "Could not start the test." };
+    return { ok: false, error: "Could not start the test.", transient: true };
   }
   // The RPC inserts then returns, so no-error-no-row shouldn't happen; treat it
   // as an unresolvable token rather than failing silently.
@@ -137,5 +151,51 @@ export async function startAttempt(token: string): Promise<StartAttemptResult> {
     testId: data.test_id,
     startedAt: data.started_at,
     timeLimitSec: data.time_limit_sec,
+  };
+}
+
+// Read-only completion check for the share-link entry point (0032). Unlike
+// startAttempt, this NEVER inserts an attempt row or anchors started_at — it
+// only answers "has this student already submitted?", via the STABLE
+// share_attempt_state RPC. That makes it safe to call during Server Component
+// render: Next.js can render a dynamic route speculatively (prefetch), and a
+// render that mutates would risk starting a student's exam clock before they
+// ever press "Begin". Attempt CREATION stays client-side (startAttempt,
+// called from TestTaker) — this function only decides whether the render
+// should show "Already completed" instead of serializing the question bank.
+export async function getShareAttemptState(
+  token: string,
+): Promise<ShareAttemptState> {
+  const user = await getServerUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (user.role !== "STUDENT") {
+    // Teachers/admins previewing a link never have an attempt of their own.
+    return { ok: true, alreadyCompleted: false };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("share_attempt_state", { p_token: token })
+    .maybeSingle<{ submitted_at: string | null; result_id: string | null }>();
+
+  if (error) {
+    if (
+      error.code === "42501" ||
+      error.code === "PGRST301" ||
+      error.code === "PGRST303"
+    ) {
+      return { ok: false, error: STALE_SESSION };
+    }
+    return { ok: false, error: "Could not open this test." };
+  }
+
+  if (!data || !data.submitted_at) {
+    return { ok: true, alreadyCompleted: false };
+  }
+
+  return {
+    ok: true,
+    alreadyCompleted: true,
+    resultId: data.result_id ?? undefined,
   };
 }
