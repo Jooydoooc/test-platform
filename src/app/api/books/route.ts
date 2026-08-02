@@ -11,6 +11,35 @@ import {
 
 const BUCKET = "book-uploads";
 
+// Postgres error details (constraint names, column names, query context) are
+// useful for diagnosis but must never reach the client — even on an
+// admin-gated route, an avoidable internals leak is still a leak if the
+// account is ever compromised. Log the raw error server-side with enough
+// context to diagnose, and return a short, safe message that still
+// distinguishes "not found" / "conflict" / "something went wrong".
+type DbError = { message?: string; code?: string; details?: string } | null | undefined;
+
+function logDbError(
+  operation: string,
+  error: DbError,
+  extra?: Record<string, unknown>,
+) {
+  console.error(`[api/books] ${operation} failed`, {
+    message: error?.message,
+    code: error?.code,
+    details: error?.details,
+    ...extra,
+  });
+}
+
+function safeDbMessage(error: DbError, fallback: string): string {
+  if (!error) return fallback;
+  if (error.code === "23505") return "That already exists.";
+  if (error.code === "23503") return "That references something that no longer exists.";
+  if (error.code === "PGRST116") return "Not found.";
+  return fallback;
+}
+
 // Create an uploaded book from an already-parsed payload. The client parses the
 // CSV/text (see src/lib/upload/parse.ts) and previews it; this handler persists
 // the book + child rows and, best-effort, the original file to Storage.
@@ -76,8 +105,9 @@ export async function POST(req: Request) {
     .single();
 
   if (bookErr || !book) {
+    logDbError("insert book", bookErr, { userId: user.id, title: payload.title });
     return NextResponse.json(
-      { ok: false, error: bookErr?.message ?? "Could not create the book." },
+      { ok: false, error: safeDbMessage(bookErr, "Could not create the book.") },
       { status: 500 },
     );
   }
@@ -95,7 +125,7 @@ export async function POST(req: Request) {
       points: q.points,
     }));
     const { error } = await supabase.from("book_questions").insert(rows);
-    if (error) return await rollback(supabase, book.id, error.message);
+    if (error) return await rollback(supabase, book.id, "insert book_questions", error);
   }
   if (!isQuestionBook(payload.contentType)) {
     if (payload.passage) {
@@ -105,19 +135,19 @@ export async function POST(req: Request) {
         body: payload.passage.body,
         order: 0,
       });
-      if (error) return await rollback(supabase, book.id, error.message);
+      if (error) return await rollback(supabase, book.id, "insert book_passages", error);
     }
     if (payload.glossary.length > 0) {
       const rows = payload.glossary.map((g) => ({ book_id: book.id, ...g }));
       const { error } = await supabase.from("book_glossary").insert(rows);
-      if (error) return await rollback(supabase, book.id, error.message);
+      if (error) return await rollback(supabase, book.id, "insert book_glossary", error);
     }
   }
 
   // 3) Best-effort: stash the original file. Never fails the request.
   const file = form.get("file");
   if (file instanceof File && file.size > 0) {
-    const path = `${user.id}/${book.id}/${file.name}`;
+    const path = `${user.id}/${book.id}/${sanitiseFilename(file.name)}`;
     const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
       upsert: true,
       contentType: file.type || "application/octet-stream",
@@ -165,7 +195,11 @@ export async function DELETE(req: Request) {
 
   const { error } = await supabase.from("books").delete().eq("id", id);
   if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    logDbError("delete book", error, { userId: user.id, bookId: id });
+    return NextResponse.json(
+      { ok: false, error: safeDbMessage(error, "Could not delete the book.") },
+      { status: 500 },
+    );
   }
 
   if (existing?.source_path) {
@@ -195,11 +229,29 @@ function validate(p: CreateBookPayload): string | null {
 async function rollback(
   supabase: Awaited<ReturnType<typeof createClient>>,
   bookId: string,
-  message: string,
+  operation: string,
+  error: DbError,
 ) {
+  logDbError(operation, error, { bookId });
   await supabase.from("books").delete().eq("id", bookId);
   return NextResponse.json(
-    { ok: false, error: message || "Could not save book content." },
+    { ok: false, error: safeDbMessage(error, "Could not save book content.") },
     { status: 500 },
   );
+}
+
+// Sanitise a client-supplied filename before it becomes part of a Storage
+// object key. Strips path separators / traversal sequences, restricts to a
+// safe character set, caps the length, and falls back to a generated name if
+// nothing usable remains. The extension is preserved separately since content
+// type may depend on it.
+function sanitiseFilename(name: string): string {
+  const base = name.split(/[/\\]/).pop() ?? "";
+  const dot = base.lastIndexOf(".");
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const ext = dot > 0 ? base.slice(dot + 1) : "";
+  const safeStem = stem.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100);
+  const safeExt = ext.replace(/[^a-zA-Z0-9]+/g, "").slice(0, 10);
+  const finalStem = safeStem || "file";
+  return safeExt ? `${finalStem}.${safeExt}` : finalStem;
 }
