@@ -1,5 +1,5 @@
 -- =============================================================================
--- 0033_schema_hardening.sql
+-- 0035_schema_hardening.sql
 -- Four independent hardening fixes surfaced by a schema/RLS audit. Each
 -- section is additive/idempotent and none of them delete, truncate, or
 -- rewrite a single row of application data — profiles, attempts, results,
@@ -315,32 +315,32 @@ declare
 begin
   -- #1a — PUBLIC must no longer hold EXECUTE on any of the four helpers.
   if has_function_privilege('public', 'public.is_teacher()', 'EXECUTE') then
-    raise exception '0033 invariant violated: public can still EXECUTE is_teacher()';
+    raise exception '0035 invariant violated: public can still EXECUTE is_teacher()';
   end if;
   if has_function_privilege('public', 'public.owns_group(uuid)', 'EXECUTE') then
-    raise exception '0033 invariant violated: public can still EXECUTE owns_group(uuid)';
+    raise exception '0035 invariant violated: public can still EXECUTE owns_group(uuid)';
   end if;
   if has_function_privilege('public', 'public.teaches_student(uuid)', 'EXECUTE') then
-    raise exception '0033 invariant violated: public can still EXECUTE teaches_student(uuid)';
+    raise exception '0035 invariant violated: public can still EXECUTE teaches_student(uuid)';
   end if;
   if has_function_privilege('public', 'public.in_group(uuid)', 'EXECUTE') then
-    raise exception '0033 invariant violated: public can still EXECUTE in_group(uuid)';
+    raise exception '0035 invariant violated: public can still EXECUTE in_group(uuid)';
   end if;
 
   -- #1b — authenticated (every signed-in request; RLS policies depend on
   -- this) must still be able to call all four, or every policy referencing
   -- them breaks for every signed-in user.
   if not has_function_privilege('authenticated', 'public.is_teacher()', 'EXECUTE') then
-    raise exception '0033 regression: authenticated lost EXECUTE on is_teacher()';
+    raise exception '0035 regression: authenticated lost EXECUTE on is_teacher()';
   end if;
   if not has_function_privilege('authenticated', 'public.owns_group(uuid)', 'EXECUTE') then
-    raise exception '0033 regression: authenticated lost EXECUTE on owns_group(uuid)';
+    raise exception '0035 regression: authenticated lost EXECUTE on owns_group(uuid)';
   end if;
   if not has_function_privilege('authenticated', 'public.teaches_student(uuid)', 'EXECUTE') then
-    raise exception '0033 regression: authenticated lost EXECUTE on teaches_student(uuid)';
+    raise exception '0035 regression: authenticated lost EXECUTE on teaches_student(uuid)';
   end if;
   if not has_function_privilege('authenticated', 'public.in_group(uuid)', 'EXECUTE') then
-    raise exception '0033 regression: authenticated lost EXECUTE on in_group(uuid)';
+    raise exception '0035 regression: authenticated lost EXECUTE on in_group(uuid)';
   end if;
 
   -- #1c — anon deliberately keeps EXECUTE on these four (see reasoning
@@ -354,7 +354,7 @@ begin
       and table_schema = 'public'
       and privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
   ) then
-    raise exception '0033 invariant violated: anon holds DML on a public table — EXECUTE grant on RLS helpers is no longer provably inert';
+    raise exception '0035 invariant violated: anon holds DML on a public table — EXECUTE grant on RLS helpers is no longer provably inert';
   end if;
 
   -- #2 — attempt_answers.question_id FK must now be ON DELETE RESTRICT
@@ -373,13 +373,13 @@ begin
     and a.attname = 'question_id';
 
   if v_conname is null then
-    raise exception '0033 invariant violated: attempt_answers.question_id has no foreign key constraint';
+    raise exception '0035 invariant violated: attempt_answers.question_id has no foreign key constraint';
   end if;
   if v_confdeltype = 'c' then
-    raise exception '0033 invariant violated: attempt_answers.question_id FK is ON DELETE CASCADE (would silently destroy graded student answers)';
+    raise exception '0035 invariant violated: attempt_answers.question_id FK is ON DELETE CASCADE (would silently destroy graded student answers)';
   end if;
   if v_confdeltype <> 'r' then
-    raise exception '0033 invariant violated: attempt_answers.question_id FK is not ON DELETE RESTRICT (found confdeltype=%)', v_confdeltype;
+    raise exception '0035 invariant violated: attempt_answers.question_id FK is not ON DELETE RESTRICT (found confdeltype=%)', v_confdeltype;
   end if;
 
   -- #3 — books_write must enforce created_by ownership in BOTH the USING
@@ -392,7 +392,7 @@ begin
       and qual like '%created_by%'
       and with_check like '%created_by%'
   ) then
-    raise exception '0033 invariant violated: books_write does not enforce created_by ownership in both USING and WITH CHECK';
+    raise exception '0035 invariant violated: books_write does not enforce created_by ownership in both USING and WITH CHECK';
   end if;
 
   -- #4a — group_xp_leaderboard() must still exist with the exact same
@@ -406,14 +406,14 @@ begin
       and pg_get_function_result(p.oid) =
         'TABLE(student_id uuid, display_name text, xp_total bigint, xp_week bigint, xp_month bigint, streak integer, activity_count integer, is_me boolean)'
   ) then
-    raise exception '0033 invariant violated: group_xp_leaderboard() return signature changed';
+    raise exception '0035 invariant violated: group_xp_leaderboard() return signature changed';
   end if;
 
   -- #4b — authenticated must still be able to call it (every leaderboard /
   -- dashboard load depends on this).
   if not has_function_privilege('authenticated', 'public.group_xp_leaderboard()', 'EXECUTE') then
-    raise exception '0033 regression: authenticated lost EXECUTE on group_xp_leaderboard()';
+    raise exception '0035 regression: authenticated lost EXECUTE on group_xp_leaderboard()';
   end if;
 
-  raise notice '0033_schema_hardening.sql: all invariants verified.';
+  raise notice '0035_schema_hardening.sql: all invariants verified.';
 end $$;

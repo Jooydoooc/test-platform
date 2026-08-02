@@ -485,7 +485,7 @@ export async function POST(req: Request) {
   // finalize_attempt pattern. For now the current ordering (stamp first)
   // is the safer choice: a crashed result write is recoverable by an admin
   // but a double-awarded XP is not.
-  // Atomic finalize (migration 0034). Stamping submitted_at and writing the
+  // Atomic finalize (migration 0036). Stamping submitted_at and writing the
   // result used to be two separate statements. If the result insert failed
   // after the stamp landed, a retry saw submitted_at already set, took the
   // idempotency branch above, found no result, and returned ok:true with a

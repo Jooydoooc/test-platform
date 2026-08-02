@@ -21,6 +21,7 @@ import {
   type Integrity,
 } from "@/components/Proctor";
 import type { Json, QuestionFormat } from "@/lib/database.types";
+import { setLiveTest } from "@/lib/live-test";
 
 export interface TakerQuestion {
   id: string;
@@ -76,6 +77,11 @@ export function TestTaker({
 }) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState<string | null>(null);
+  // Teacher/admin viewing this link, not taking it — no attempt row exists.
+  // Set only from startAttempt()'s return value (server-derived role via
+  // getServerUser(), see attempts.ts), never from a prop or client-side
+  // session read, so a student has no way to set this themselves.
+  const [preview, setPreview] = useState(false);
   const [resultId, setResultId] = useState<string | undefined>();
   const [expAwarded, setExpAwarded] = useState(0);
   const [newBadges, setNewBadges] = useState<string[]>([]);
@@ -139,10 +145,13 @@ export function TestTaker({
     setPhase("finished");
   }, [testId, responses]);
 
-  // Proctor (strict lockdown). Enabled while the exam is live; auto-submits when
-  // the student switches tabs/windows. getIntegrity feeds the submit payload.
+  // Proctor (strict lockdown). The first tab/app switch warns and the second
+  // submits. getIntegrity feeds the teacher-facing integrity payload.
+  // Never armed in preview — there is no attempt to submit and no student to
+  // protect the integrity of, matching the hosted rail's previewMode which
+  // never engages its lockdown either.
   const proctor = useProctor({
-    enabled: phase === "taking" || phase === "submitting",
+    enabled: !preview && (phase === "taking" || phase === "submitting"),
     onAutoSubmit: () => finishSubmit("left"),
   });
   getIntegrityRef.current = proctor.getIntegrity;
@@ -154,11 +163,44 @@ export function TestTaker({
     }
   }, [phase, proctor]);
 
+  // Global chrome (header/back button) hides only while a real student is
+  // actively sitting the exam — not on the loading/blocked/done/finished
+  // screens, and never in teacher/admin preview, which keeps normal
+  // navigation. The cleanup unconditionally resets to false so unmounting,
+  // navigating away, or hitting browser-back mid-exam can never leave the
+  // chrome stuck hidden.
+  //
+  // secureStarted matters as much as the phase here: the briefing screen
+  // renders under phase "taking" but before the student has begun, and it is
+  // the one screen where they still legitimately need a way out. The exam
+  // proper starts where the timer does (see the countdown effect below).
+  useEffect(() => {
+    const live =
+      !preview && secureStarted && (phase === "taking" || phase === "submitting");
+    setLiveTest(live);
+    return () => setLiveTest(false);
+  }, [preview, secureStarted, phase]);
+
   // Start (or resume) the single attempt, server-side.
+  //
+  // The server component already confirmed (via the read-only 0032 gate)
+  // that this test is startable before rendering this component at all — so
+  // a failure here that looks transient (dropped connection, blip) should be
+  // retried rather than immediately stranding the student. Only a genuine
+  // refusal (bad link, stale session, wrong role) blocks outright; retrying
+  // those would just fail again and delays a message the student can act on.
   useEffect(() => {
     let active = true;
+    const MAX_ATTEMPTS = 3;
     (async () => {
-      const res = await startAttempt(token);
+      let res = await startAttempt(token);
+      let tries = 1;
+      while (active && !res.ok && res.transient && tries < MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, 400 * tries));
+        if (!active) return;
+        res = await startAttempt(token);
+        tries += 1;
+      }
       if (!active) return;
       if (!res.ok) {
         setError(res.error ?? "Could not start.");
@@ -168,6 +210,18 @@ export function TestTaker({
       if (res.alreadyCompleted) {
         setResultId(res.resultId);
         setPhase("done");
+        return;
+      }
+      if (res.preview) {
+        // Teacher/admin preview: no attempt, no deadline (the timer effect
+        // below no-ops when deadline is null), and skip straight past the
+        // secure-start briefing — that screen exists to get informed consent
+        // for fullscreen + lockdown before a student's one shot at the exam
+        // clock starts, none of which applies to someone who can reopen this
+        // link at will and triggers no clock either way.
+        setPreview(true);
+        setSecureStarted(true);
+        setPhase("taking");
         return;
       }
       if (questions.length === 0) {
@@ -307,32 +361,35 @@ export function TestTaker({
 
   if (questions.length === 0) {
     return (
-      <Card className="mx-auto max-w-md text-center">
-        <h1 className="text-lg font-bold text-slate-900">{title}</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          This test has no questions yet.
-        </p>
-      </Card>
+      <div className="mx-auto max-w-md space-y-3">
+        {preview && <PreviewBanner />}
+        <Card className="text-center">
+          <h1 className="text-lg font-bold text-slate-900">{title}</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            This test has no questions yet.
+          </p>
+        </Card>
+      </div>
     );
   }
 
   // Secure-start screen: premium pre-exam briefing + the gesture that enters
-  // fullscreen and engages the proctor.
+  // fullscreen and engages the proctor. Preview always sets secureStarted
+  // true up front, so a teacher/admin never sees this screen.
   if (!secureStarted) {
     return (
       <div className="mx-auto max-w-lg">
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-card-hover">
-          <div className="relative bg-gradient-to-br from-slate-900 via-brand-900 to-brand-800 p-7 text-white">
-            <div className="pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full bg-brand-500/30 blur-3xl" />
-            <span className="relative inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-brand-100 ring-1 ring-inset ring-white/20">
+          <div className="bg-brand-600 p-7 text-white">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-100 ring-1 ring-inset ring-white/15">
               <ShieldCheck className="h-3.5 w-3.5" />
               Proctored exam
             </span>
-            <h1 className="relative mt-4 text-2xl font-extrabold tracking-tight">
+            <h1 className="mt-4 text-2xl font-bold tracking-tight">
               {title}
             </h1>
             {description && (
-              <p className="relative mt-1.5 text-sm text-brand-100/90">
+              <p className="mt-1.5 text-sm text-slate-200">
                 {description}
               </p>
             )}
@@ -415,19 +472,18 @@ export function TestTaker({
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      {proctor.needsFullscreen && (
+      {preview && <PreviewBanner />}
+      {!preview && proctor.needsFullscreen && (
         <FullscreenGuard onReenter={proctor.reenterFullscreen} />
       )}
-      {proctor.tabWarning && !proctor.needsFullscreen && (
+      {!preview && proctor.tabWarning && !proctor.needsFullscreen && (
         <ProctorWarning onDismiss={proctor.dismissTabWarning} />
       )}
 
-      {/* Premium exam header */}
-      <header className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-900 via-brand-900 to-brand-800 p-5 text-white shadow-card">
-        <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-brand-500/25 blur-3xl" />
-        <div className="relative flex items-start justify-between gap-4">
+      <header className="rounded-2xl border border-slate-200 bg-brand-600 p-5 text-white shadow-card">
+        <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand-100 ring-1 ring-inset ring-white/20">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-slate-100 ring-1 ring-inset ring-white/15">
               <ShieldCheck className="h-3 w-3" />
               Secure mode
             </span>
@@ -500,7 +556,17 @@ export function TestTaker({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex flex-col items-end gap-1.5">
-        {isLast ? (
+        {preview ? (
+          isLast ? (
+            <p className="text-xs font-medium text-slate-500">
+              Preview mode — submission is disabled.
+            </p>
+          ) : (
+            <Button onClick={() => setIndex((i) => i + 1)}>
+              Next question
+            </Button>
+          )
+        ) : isLast ? (
           <Button
             onClick={() => setConfirmOpen(true)}
             disabled={!answered || submitting}
@@ -512,7 +578,7 @@ export function TestTaker({
             Next question
           </Button>
         )}
-        {answered && (
+        {!preview && answered && (
           <p className="text-xs text-slate-500">
             {isLast
               ? "You can’t change answers after submitting."
@@ -521,7 +587,7 @@ export function TestTaker({
         )}
       </div>
 
-      {confirmOpen && (
+      {!preview && confirmOpen && (
         <ConfirmSubmit
           answered={Object.keys(responses).length}
           total={questions.length}
@@ -625,6 +691,20 @@ function ChoiceList({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// Persistent banner shown for the whole preview session: a teacher/admin must
+// never mistake this for a live attempt.
+function PreviewBanner() {
+  return (
+    <div
+      role="status"
+      className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-800"
+    >
+      <ShieldCheck className="h-4 w-4 shrink-0" />
+      Preview mode — nothing is recorded and no attempt is created.
     </div>
   );
 }

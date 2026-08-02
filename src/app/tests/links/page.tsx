@@ -113,7 +113,14 @@ export default async function TestLinksPage() {
                   <p className="truncate font-semibold text-slate-900">
                     {t.title}
                   </p>
-                  <p className="truncate text-xs text-slate-500">{path}</p>
+                  <a
+                    href={path}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="truncate text-xs text-slate-500 hover:text-brand-600 hover:underline"
+                  >
+                    {path}
+                  </a>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <CopyLink path={path} />

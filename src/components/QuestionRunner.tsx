@@ -8,12 +8,16 @@ import {
   Check,
   CheckCircle2,
   Clock,
+  Lock,
+  Maximize,
   RotateCcw,
   Send,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import type { Question, Test } from "@/lib/types";
 import { gradeQuestion } from "@/lib/store";
+import { setLiveTest } from "@/lib/live-test";
 import {
   OPTION_LETTERS,
   answeredCount,
@@ -23,11 +27,21 @@ import {
   optionsFor,
   selectionEcho,
 } from "@/lib/mcq";
+import {
+  FullscreenGuard,
+  ProctorWarning,
+  fullscreenSupported,
+  useProctor,
+  type Integrity,
+  type ProctorApi,
+} from "@/components/Proctor";
 
 /** Metadata returned to the parent when a test is submitted. */
 export interface SubmitMeta {
   timeTakenSec?: number;
   timedOut: boolean;
+  /** Proctor violation snapshot, taken before the proctor disengages. */
+  integrity: Integrity;
 }
 
 type Answers = Record<string, string[]>;
@@ -66,8 +80,11 @@ export function QuestionRunner({
   const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>({});
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [practiceDone, setPracticeDone] = useState(false);
+  const [secureStarted, setSecureStarted] = useState(mode === "practice");
 
-  const startedAtRef = useRef<number>(Date.now());
+  const startedAtRef = useRef<number | null>(
+    mode === "practice" ? Date.now() : null,
+  );
   const submittedRef = useRef(false);
   const [remainingSec, setRemainingSec] = useState<number | null>(null);
 
@@ -91,24 +108,84 @@ export function QuestionRunner({
 
   // Keep the newest submit closure reachable from the timer without re-arming it.
   const submitRef = useRef<(timedOut?: boolean) => void>(() => {});
+  // Mirrors `proctor` so submitTest (defined before useProctor runs) can reach
+  // disengage() without a definition-order cycle.
+  const proctorRef = useRef<ProctorApi | null>(null);
 
   function submitTest(timedOut = false) {
     if (!isTest || submittedRef.current) return;
     submittedRef.current = true;
+    // Snapshot the integrity tally BEFORE disengage() runs. disengage() doesn't
+    // currently clear the tally, but capture order still matters: engagedRef
+    // flips false inside disengage(), and getIntegrity() must read the final
+    // count from a still-live proctor, not one that's already been torn down.
+    const integrity: Integrity = proctorRef.current?.getIntegrity() ?? {
+      violations: 0,
+      flags: {},
+    };
+    // Release the lockdown (including exiting fullscreen) synchronously, before
+    // the onSubmit callback runs. The parent swaps this component out for the
+    // results view right after onSubmit — by the time that unmount happens the
+    // proctor is already disengaged, so there's no race between "exit
+    // fullscreen" and "the component that would exit it disappears".
+    proctorRef.current?.disengage();
     const meta: SubmitMeta = {
       timedOut,
       timeTakenSec:
-        timeLimitMin && timeLimitMin > 0
+        timeLimitMin && timeLimitMin > 0 && startedAtRef.current !== null
           ? Math.round((Date.now() - startedAtRef.current) / 1000)
           : undefined,
+      integrity,
     };
     onSubmit?.(answers, meta);
   }
   submitRef.current = submitTest;
 
+  const proctor = useProctor({
+    enabled: isTest && secureStarted && !submittedRef.current,
+    onAutoSubmit: () => submitRef.current(false),
+  });
+  proctorRef.current = proctor;
+
+  // Global chrome hides on exactly the same condition that arms the proctor:
+  // a graded test the student has actually begun. This lives here rather than
+  // in the parent page because secureStarted is internal to the runner — the
+  // parent flips to "running" when the student clicks "Start test", but the
+  // secure-start briefing below still stands between them and the exam, and
+  // that screen is one they must be able to back out of. Practice mode never
+  // hides chrome (secureStarted starts true there, so isTest gates it out).
+  useEffect(() => {
+    setLiveTest(isTest && secureStarted);
+    return () => setLiveTest(false);
+  }, [isTest, secureStarted]);
+
+  // Safety net: if the runner unmounts without ever reaching submitTest (e.g.
+  // the student navigates away mid-test via the "Leave test" link in the
+  // fullscreen guard, or a browser back/forward), still release the lockdown.
+  // disengage() is idempotent — a no-op if already disengaged — so this never
+  // double-fires anything observable.
+  useEffect(() => {
+    return () => {
+      proctorRef.current?.disengage();
+    };
+  }, []);
+
+  function beginSecureTest() {
+    startedAtRef.current = Date.now();
+    setSecureStarted(true);
+    void proctor.engage();
+  }
+
   // Countdown for timed tests.
   useEffect(() => {
-    if (!isTest || !timeLimitMin || timeLimitMin <= 0) return;
+    if (
+      !isTest ||
+      !secureStarted ||
+      startedAtRef.current === null ||
+      !timeLimitMin ||
+      timeLimitMin <= 0
+    )
+      return;
     const deadline = startedAtRef.current + timeLimitMin * 60_000;
     const tick = () => {
       const rem = Math.max(0, Math.round((deadline - Date.now()) / 1000));
@@ -118,13 +195,14 @@ export function QuestionRunner({
     tick();
     const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);
-  }, [isTest, timeLimitMin]);
+  }, [isTest, secureStarted, timeLimitMin]);
 
   function setAnswer(value: string[]) {
     setAnswers((prev) => ({ ...prev, [q.id]: value }));
   }
 
   function goTo(next: number) {
+    if (isTest && next < index) return;
     setIndex(Math.max(0, Math.min(total - 1, next)));
     if (typeof window !== "undefined")
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -163,12 +241,56 @@ export function QuestionRunner({
     return <PracticeSummary test={test} answers={answers} onRestart={restart} />;
   }
 
+  if (isTest && !secureStarted) {
+    return (
+      <div className="mx-auto max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-card-hover">
+        <div className="bg-brand-600 p-7 text-white">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-100 ring-1 ring-inset ring-white/15">
+            <ShieldCheck className="size-3.5" />
+            Secure test
+          </span>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight">{test.title}</h1>
+          {subtitle && <p className="mt-1.5 text-sm text-slate-200">{subtitle}</p>}
+        </div>
+        <div className="space-y-4 p-7">
+          <p className="text-sm text-slate-600">
+            This is a graded, single-attempt test. Read the rules before you begin.
+          </p>
+          <ul className="space-y-2.5 text-sm text-slate-700">
+            {fullscreenSupported() && (
+              <SecureRule icon={Maximize}>The test opens in fullscreen.</SecureRule>
+            )}
+            <SecureRule icon={ShieldCheck}>
+              The first tab or app switch shows a warning. The second submits your test.
+            </SecureRule>
+            <SecureRule icon={Lock}>
+              Answers lock when you continue. Copy, paste and right-click are disabled.
+            </SecureRule>
+            {timeLimitMin && timeLimitMin > 0 ? (
+              <SecureRule icon={Clock}>Time limit: {timeLimitMin} minutes.</SecureRule>
+            ) : null}
+          </ul>
+          <PrimaryButton onClick={beginSecureTest} className="w-full">
+            <ShieldCheck className="size-4" />
+            Begin secure test
+          </PrimaryButton>
+        </div>
+      </div>
+    );
+  }
+
   const atLast = index + 1 >= total;
   const timeLow = remainingSec !== null && remainingSec <= 60;
   const progress = ((index + 1) / total) * 100;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 text-[#0F172A]">
+      {isTest && proctor.needsFullscreen && (
+        <FullscreenGuard onReenter={proctor.reenterFullscreen} />
+      )}
+      {isTest && proctor.tabWarning && !proctor.needsFullscreen && (
+        <ProctorWarning onDismiss={proctor.dismissTabWarning} />
+      )}
       {/* ---- Top bar ---- */}
       <div className="sticky top-2 z-10 rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md sm:px-5">
         <div className="flex items-start justify-between gap-4">
@@ -277,14 +399,23 @@ export function QuestionRunner({
       </div>
 
       {/* ---- Question navigator ---- */}
-      <Navigator test={test} answers={answers} current={index} onJump={goTo} />
+      {mode === "practice" && (
+        <Navigator test={test} answers={answers} current={index} onJump={goTo} />
+      )}
 
       {/* ---- Bottom navigation ---- */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SecondaryButton onClick={() => goTo(index - 1)} disabled={index === 0}>
-          <ArrowLeft className="size-4" />
-          Previous
-        </SecondaryButton>
+        {mode === "practice" ? (
+          <SecondaryButton onClick={() => goTo(index - 1)} disabled={index === 0}>
+            <ArrowLeft className="size-4" />
+            Previous
+          </SecondaryButton>
+        ) : (
+          <p className="flex items-center gap-1.5 text-xs text-slate-500">
+            <Lock className="size-3.5" />
+            Answers lock after you continue.
+          </p>
+        )}
 
         <div className="flex items-center gap-3">
           {mode === "practice" ? (
@@ -799,6 +930,23 @@ function PracticeSummary({
 // ----------------------------------------------------------------------------
 // Buttons (Lexora tokens: navy primary, bordered secondary — gold stays an accent)
 // ----------------------------------------------------------------------------
+
+function SecureRule({
+  icon: Icon,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="flex items-start gap-2.5">
+      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+        <Icon className="size-3.5" />
+      </span>
+      <span>{children}</span>
+    </li>
+  );
+}
 
 const buttonBase =
   "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-2 disabled:opacity-45 disabled:pointer-events-none disabled:active:scale-100 sm:min-h-0 sm:py-2.5";

@@ -4,23 +4,18 @@ import { useMemo, type ComponentType } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  Award,
   BookOpen,
   BookText,
   CheckCircle2,
-  Flame,
   Headphones,
   Layers,
-  Sparkles,
+  ShieldCheck,
   Star,
   TrendingUp,
   Type,
-  Zap,
 } from "lucide-react";
 import { Card } from "@/components/ui";
 import { useSession } from "@/lib/auth";
-import { useStudentXp } from "@/lib/xp";
-import { useStreak } from "@/lib/data/use-streak";
 import { useMyAttempts } from "@/lib/data/my-attempts";
 import { SUPABASE_ENABLED } from "@/lib/supabase/env";
 import { groupOf, useAttempts, useTests } from "@/lib/store";
@@ -79,14 +74,6 @@ function hostedInGroup(h: HostedTest, g: TestGroup): boolean {
   return mapped === null ? true : mapped === g;
 }
 
-function levelFromXp(xp: number): string {
-  if (xp < 200) return "Beginner";
-  if (xp < 600) return "Elementary";
-  if (xp < 1200) return "Pre-IELTS";
-  if (xp < 2200) return "IELTS Intro";
-  return "IELTS Graduate";
-}
-
 function timeAgo(ts: number): string {
   const d = Math.floor((Date.now() - ts) / DAY);
   if (d <= 0) return "today";
@@ -105,9 +92,6 @@ export default function TestCenterPage() {
   const allAttempts = useAttempts();
   const { hosted } = useHostedTests();
 
-  // Real (Supabase) identity/progress — matches the header pill and dashboard.
-  const { xp: realXp, level: realLevel } = useStudentXp();
-  const { current: realStreak } = useStreak();
   const { attempts: realAttempts } = useMyAttempts();
 
   // Local fallback stats (prototype / Supabase-off).
@@ -133,14 +117,10 @@ export default function TestCenterPage() {
                 100,
             )
           : 0;
-      const xp = 0;
       return {
         total: totalTests,
         completed,
         avg,
-        xp,
-        level: levelFromXp(xp),
-        streak: 0,
       };
     }
     // Hosted tests submit against html_test_id, so they never appear in
@@ -161,16 +141,10 @@ export default function TestCenterPage() {
       total: totalTests,
       completed,
       avg,
-      xp: realXp,
-      level: realLevel.name,
-      streak: realStreak,
     };
   }, [
     localAttempts,
     realAttempts,
-    realXp,
-    realLevel,
-    realStreak,
     totalTests,
     hosted,
   ]);
@@ -186,41 +160,22 @@ export default function TestCenterPage() {
 
   return (
     <div className="space-y-6">
-      {/* Premium header */}
-      <header className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-brand-900 to-brand-800 p-7 text-white shadow-card-hover sm:p-9">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-500/30 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-28 left-16 h-64 w-64 rounded-full bg-brand-400/20 blur-3xl" />
-        <div className="relative">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-brand-100 ring-1 ring-inset ring-white/20">
-            <Sparkles className="h-3.5 w-3.5" />
-            Lexora
-          </span>
-          <h1 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Test Center
-          </h1>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-brand-100/90 sm:text-[15px]">
-            Tests are sent to you as a private link. Everything your teacher has
-            unlocked for you lives here.
-          </p>
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <StatTile icon={Layers} label="Unlocked" value={headerStats.total} />
-            <StatTile
-              icon={CheckCircle2}
-              label="Completed"
-              value={headerStats.completed}
-            />
-            <StatTile
-              icon={TrendingUp}
-              label="Average Score"
-              value={`${headerStats.avg}%`}
-            />
-            <StatTile icon={Award} label="Current Level" value={headerStats.level} />
-            <StatTile icon={Zap} label="XP Earned" value={headerStats.xp} />
-            <StatTile
-              icon={Flame}
-              label="Streak"
-              value={`${headerStats.streak}d`}
-            />
+      <header className="overflow-hidden rounded-2xl border border-slate-200 bg-brand-600 text-white shadow-card">
+        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
+          <div>
+            <div className="flex size-10 items-center justify-center rounded-xl bg-white/10 ring-1 ring-inset ring-white/15">
+              <ShieldCheck className="size-5 text-accent-300" />
+            </div>
+            <h1 className="mt-4 text-3xl font-bold tracking-tight">Test Center</h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-200">
+              Graded, single-attempt tests from your teacher. Start only when
+              you are ready to stay on the test screen until submission.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 divide-x divide-white/15 rounded-xl bg-white/[0.07] ring-1 ring-inset ring-white/15">
+            <StatTile icon={Layers} label="Available" value={headerStats.total} />
+            <StatTile icon={CheckCircle2} label="Completed" value={headerStats.completed} />
+            <StatTile icon={TrendingUp} label="Average" value={`${headerStats.avg}%`} />
           </div>
         </div>
       </header>
@@ -228,7 +183,7 @@ export default function TestCenterPage() {
       <TestNav />
 
       {/* Category tiles */}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2">
         {CATEGORIES.map((c) => {
           const Icon = c.icon;
           const count = countFor(c.group);
@@ -236,24 +191,21 @@ export default function TestCenterPage() {
             <Link
               key={c.group}
               href={c.href}
-              className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-card-hover"
+              className="group flex w-full min-w-0 items-center gap-4 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-card transition-colors hover:border-brand-300"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
-                <Icon className="h-6 w-6" />
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/10">
+                <Icon className="size-5" />
               </span>
-              <h2 className="mt-4 text-lg font-extrabold tracking-tight text-slate-900">
-                {c.group.replace(" Tests", "")}
-              </h2>
-              <p className="mt-1 flex-1 text-sm text-slate-600">{c.blurb}</p>
-              <div className="mt-4 flex items-center justify-between">
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600 tabular-nums">
-                  {count} test{count === 1 ? "" : "s"}
-                </span>
-                <span className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600">
-                  Open
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                </span>
+              <div className="min-w-0 flex-1">
+                <h2 className="font-semibold text-slate-900">
+                  {c.group.replace(" Tests", "")}
+                </h2>
+                <p className="mt-0.5 truncate text-sm text-slate-600">{c.blurb}</p>
               </div>
+              <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-500">
+                {count} test{count === 1 ? "" : "s"}
+              </span>
+              <ArrowRight className="size-4 shrink-0 text-brand-600 transition-transform group-hover:translate-x-0.5" />
             </Link>
           );
         })}
@@ -300,13 +252,13 @@ function StatTile({
   value: string | number;
 }) {
   return (
-    <div className="rounded-2xl bg-white/10 p-3.5 ring-1 ring-inset ring-white/15 backdrop-blur-sm">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand-100/80">
-        <Icon className="h-3.5 w-3.5" />
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="mt-1.5 truncate text-xl font-extrabold leading-tight tabular-nums sm:text-2xl">
+    <div className="min-w-0 px-3 py-4 text-center">
+      <Icon className="mx-auto size-4 text-slate-300" />
+      <div className="mt-1 truncate text-xl font-bold leading-tight tabular-nums">
         {value}
+      </div>
+      <div className="mt-0.5 truncate text-[11px] font-medium text-slate-300">
+        {label}
       </div>
     </div>
   );
