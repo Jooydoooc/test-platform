@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type { Question, Test } from "@/lib/types";
 import { gradeQuestion } from "@/lib/store";
+import { setLiveTest } from "@/lib/live-test";
 import {
   OPTION_LETTERS,
   answeredCount,
@@ -145,6 +146,18 @@ export function QuestionRunner({
     onAutoSubmit: () => submitRef.current(false),
   });
   proctorRef.current = proctor;
+
+  // Global chrome hides on exactly the same condition that arms the proctor:
+  // a graded test the student has actually begun. This lives here rather than
+  // in the parent page because secureStarted is internal to the runner — the
+  // parent flips to "running" when the student clicks "Start test", but the
+  // secure-start briefing below still stands between them and the exam, and
+  // that screen is one they must be able to back out of. Practice mode never
+  // hides chrome (secureStarted starts true there, so isTest gates it out).
+  useEffect(() => {
+    setLiveTest(isTest && secureStarted);
+    return () => setLiveTest(false);
+  }, [isTest, secureStarted]);
 
   // Safety net: if the runner unmounts without ever reaching submitTest (e.g.
   // the student navigates away mid-test via the "Leave test" link in the

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/menu";
 import { logout, useSession } from "@/lib/auth";
 import { useStudentXp } from "@/lib/xp";
+import { useLiveTest } from "@/lib/live-test";
 
 export function SiteHeader() {
   const { user } = useSession();
@@ -47,16 +48,10 @@ export function SiteHeader() {
 
   // A live test is deliberately distraction-free. The test itself provides
   // its own progress, timer and exit path, so global navigation is hidden.
-  const isLiveTest =
-    pathname.startsWith("/t/") ||
-    (/^\/tests\/[^/]+$/.test(pathname) &&
-      ![
-        "/tests/grammar",
-        "/tests/vocabulary",
-        "/tests/reading",
-        "/tests/listening",
-        "/tests/links",
-      ].includes(pathname));
+  // The exam surface itself (TestTaker, the legacy /tests/[id] runner) is the
+  // only thing that knows which of its phases actually counts as "live" —
+  // see src/lib/live-test.ts.
+  const isLiveTest = useLiveTest();
 
   if (isLiveTest) return null;
 

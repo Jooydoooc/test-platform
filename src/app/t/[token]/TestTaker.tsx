@@ -21,6 +21,7 @@ import {
   type Integrity,
 } from "@/components/Proctor";
 import type { Json, QuestionFormat } from "@/lib/database.types";
+import { setLiveTest } from "@/lib/live-test";
 
 export interface TakerQuestion {
   id: string;
@@ -76,6 +77,11 @@ export function TestTaker({
 }) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState<string | null>(null);
+  // Teacher/admin viewing this link, not taking it — no attempt row exists.
+  // Set only from startAttempt()'s return value (server-derived role via
+  // getServerUser(), see attempts.ts), never from a prop or client-side
+  // session read, so a student has no way to set this themselves.
+  const [preview, setPreview] = useState(false);
   const [resultId, setResultId] = useState<string | undefined>();
   const [expAwarded, setExpAwarded] = useState(0);
   const [newBadges, setNewBadges] = useState<string[]>([]);
@@ -141,8 +147,11 @@ export function TestTaker({
 
   // Proctor (strict lockdown). The first tab/app switch warns and the second
   // submits. getIntegrity feeds the teacher-facing integrity payload.
+  // Never armed in preview — there is no attempt to submit and no student to
+  // protect the integrity of, matching the hosted rail's previewMode which
+  // never engages its lockdown either.
   const proctor = useProctor({
-    enabled: phase === "taking" || phase === "submitting",
+    enabled: !preview && (phase === "taking" || phase === "submitting"),
     onAutoSubmit: () => finishSubmit("left"),
   });
   getIntegrityRef.current = proctor.getIntegrity;
@@ -153,6 +162,24 @@ export function TestTaker({
       proctor.disengage();
     }
   }, [phase, proctor]);
+
+  // Global chrome (header/back button) hides only while a real student is
+  // actively sitting the exam — not on the loading/blocked/done/finished
+  // screens, and never in teacher/admin preview, which keeps normal
+  // navigation. The cleanup unconditionally resets to false so unmounting,
+  // navigating away, or hitting browser-back mid-exam can never leave the
+  // chrome stuck hidden.
+  //
+  // secureStarted matters as much as the phase here: the briefing screen
+  // renders under phase "taking" but before the student has begun, and it is
+  // the one screen where they still legitimately need a way out. The exam
+  // proper starts where the timer does (see the countdown effect below).
+  useEffect(() => {
+    const live =
+      !preview && secureStarted && (phase === "taking" || phase === "submitting");
+    setLiveTest(live);
+    return () => setLiveTest(false);
+  }, [preview, secureStarted, phase]);
 
   // Start (or resume) the single attempt, server-side.
   //
@@ -183,6 +210,18 @@ export function TestTaker({
       if (res.alreadyCompleted) {
         setResultId(res.resultId);
         setPhase("done");
+        return;
+      }
+      if (res.preview) {
+        // Teacher/admin preview: no attempt, no deadline (the timer effect
+        // below no-ops when deadline is null), and skip straight past the
+        // secure-start briefing — that screen exists to get informed consent
+        // for fullscreen + lockdown before a student's one shot at the exam
+        // clock starts, none of which applies to someone who can reopen this
+        // link at will and triggers no clock either way.
+        setPreview(true);
+        setSecureStarted(true);
+        setPhase("taking");
         return;
       }
       if (questions.length === 0) {
@@ -322,17 +361,21 @@ export function TestTaker({
 
   if (questions.length === 0) {
     return (
-      <Card className="mx-auto max-w-md text-center">
-        <h1 className="text-lg font-bold text-slate-900">{title}</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          This test has no questions yet.
-        </p>
-      </Card>
+      <div className="mx-auto max-w-md space-y-3">
+        {preview && <PreviewBanner />}
+        <Card className="text-center">
+          <h1 className="text-lg font-bold text-slate-900">{title}</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            This test has no questions yet.
+          </p>
+        </Card>
+      </div>
     );
   }
 
   // Secure-start screen: premium pre-exam briefing + the gesture that enters
-  // fullscreen and engages the proctor.
+  // fullscreen and engages the proctor. Preview always sets secureStarted
+  // true up front, so a teacher/admin never sees this screen.
   if (!secureStarted) {
     return (
       <div className="mx-auto max-w-lg">
@@ -429,10 +472,11 @@ export function TestTaker({
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      {proctor.needsFullscreen && (
+      {preview && <PreviewBanner />}
+      {!preview && proctor.needsFullscreen && (
         <FullscreenGuard onReenter={proctor.reenterFullscreen} />
       )}
-      {proctor.tabWarning && !proctor.needsFullscreen && (
+      {!preview && proctor.tabWarning && !proctor.needsFullscreen && (
         <ProctorWarning onDismiss={proctor.dismissTabWarning} />
       )}
 
@@ -512,7 +556,17 @@ export function TestTaker({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex flex-col items-end gap-1.5">
-        {isLast ? (
+        {preview ? (
+          isLast ? (
+            <p className="text-xs font-medium text-slate-500">
+              Preview mode — submission is disabled.
+            </p>
+          ) : (
+            <Button onClick={() => setIndex((i) => i + 1)}>
+              Next question
+            </Button>
+          )
+        ) : isLast ? (
           <Button
             onClick={() => setConfirmOpen(true)}
             disabled={!answered || submitting}
@@ -524,7 +578,7 @@ export function TestTaker({
             Next question
           </Button>
         )}
-        {answered && (
+        {!preview && answered && (
           <p className="text-xs text-slate-500">
             {isLast
               ? "You can’t change answers after submitting."
@@ -533,7 +587,7 @@ export function TestTaker({
         )}
       </div>
 
-      {confirmOpen && (
+      {!preview && confirmOpen && (
         <ConfirmSubmit
           answered={Object.keys(responses).length}
           total={questions.length}
@@ -637,6 +691,20 @@ function ChoiceList({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// Persistent banner shown for the whole preview session: a teacher/admin must
+// never mistake this for a live attempt.
+function PreviewBanner() {
+  return (
+    <div
+      role="status"
+      className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-800"
+    >
+      <ShieldCheck className="h-4 w-4 shrink-0" />
+      Preview mode — nothing is recorded and no attempt is created.
     </div>
   );
 }

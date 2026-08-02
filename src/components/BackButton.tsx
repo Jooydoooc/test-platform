@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { useLiveTest } from "@/lib/live-test";
 
 // A global "back" control shown on every page except the home page and login,
 // where there is nowhere meaningful to go back to. Uses browser history when
@@ -9,16 +10,9 @@ export function BackButton() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const isLiveTest =
-    pathname.startsWith("/t/") ||
-    (/^\/tests\/[^/]+$/.test(pathname) &&
-      ![
-        "/tests/grammar",
-        "/tests/vocabulary",
-        "/tests/reading",
-        "/tests/listening",
-        "/tests/links",
-      ].includes(pathname));
+  // A live test is deliberately distraction-free — see src/lib/live-test.ts
+  // for which exam phases actually count as "live".
+  const isLiveTest = useLiveTest();
 
   if (pathname === "/" || pathname === "/login" || isLiveTest) return null;
 

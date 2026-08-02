@@ -51,6 +51,14 @@ export interface StartAttemptResult {
   resultId?: string;
   error?: string;
   /**
+   * True when a teacher/admin is viewing this link, not taking it. No attempt
+   * row exists and none is created — mirrors the hosted rail's `previewMode`
+   * (src/app/ht/[token]/route.ts), which lets a non-student straight through
+   * unguarded since there is nothing on the server side (no attemptId, no
+   * submit target) for a forced submit to reach.
+   */
+  preview?: boolean;
+  /**
    * True when `error` came from an unrecognized failure (not a link/session/
    * role refusal) — e.g. a dropped connection. Callers may retry a transient
    * failure; a non-transient one is a real refusal and must not be retried.
@@ -91,8 +99,16 @@ const STALE_SESSION = "Your session has changed. Sign in again to take this test
 export async function startAttempt(token: string): Promise<StartAttemptResult> {
   const user = await getServerUser();
   if (!user) return { ok: false, error: "Not signed in." };
+  // Teachers/admins never get an attempt row — start_share_attempt is a
+  // STUDENT-only RPC (0026), and minting one for a non-student would be
+  // meaningless (no one to grade, no XP to award). Rather than refuse, hand
+  // back a preview flag so TestTaker can render the test read-only: this is
+  // the same shape as the hosted rail's previewMode (src/app/ht/[token]/
+  // route.ts), which lets a non-student through with no bridge/attempt and
+  // therefore no armed lockdown. Role is read server-side via getServerUser()
+  // above and never influenced by anything the client sends.
   if (user.role !== "STUDENT") {
-    return { ok: false, error: "Only students take tests." };
+    return { ok: true, preview: true };
   }
 
   const supabase = await createClient();
