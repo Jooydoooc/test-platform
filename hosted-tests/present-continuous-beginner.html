@@ -189,53 +189,8 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padd
 .breakdown-item .num{font-size:1.5rem;font-weight:700;color:var(--ink-head);font-variant-numeric:tabular-nums}
 .breakdown-item .lbl{font-size:.7rem;color:var(--ink-muted);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
 
-/* ── Review list ── */
-.review-title{font-size:1rem;font-weight:700;color:var(--ink-head);margin:28px 0 12px}
-.review-list{display:flex;flex-direction:column;gap:14px;width:100%}
-.review-item{
-  background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px;
-  border-left:4px solid var(--border);
-}
-.review-item.correct{border-left-color:var(--success)}
-.review-item.wrong{border-left-color:var(--error)}
-.review-item-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.review-num{font-size:.75rem;font-weight:700;color:var(--ink-muted);text-transform:uppercase;font-variant-numeric:tabular-nums}
-.review-icon{width:18px;height:18px;min-width:18px}
-.review-prompt{font-size:.9rem;font-weight:600;color:var(--ink-head);line-height:1.4;flex:1}
-.review-detail{font-size:.83rem;color:var(--ink-muted);line-height:1.5}
-.review-detail span{font-weight:600}
-.review-detail .stu-ans{color:var(--ink-body)}
-.review-detail .cor-ans{color:var(--success)}
-.review-detail .stu-wrong{color:var(--error)}
-
-/* ── Question navigator (jump between questions) ── */
-.q-nav{width:100%;max-width:640px;margin-top:14px;padding:14px 16px;background:var(--white);
-  border:1px solid var(--border);border-radius:12px}
-.q-nav-title{font-size:.72rem;font-weight:700;color:var(--ink-muted);text-transform:uppercase;
-  letter-spacing:.05em;margin-bottom:10px}
-.q-nav-grid{display:grid;grid-template-columns:repeat(10,1fr);gap:6px}
-@media(max-width:520px){.q-nav-grid{grid-template-columns:repeat(6,1fr)}}
-.q-nav-cell{aspect-ratio:1;min-height:34px;border:1.5px solid var(--border);border-radius:8px;
-  background:var(--white);color:var(--ink-muted);font-size:.8rem;font-weight:600;cursor:pointer;
-  font-variant-numeric:tabular-nums;display:flex;align-items:center;justify-content:center;
-  transition:border-color .15s,background .15s,color .15s}
-.q-nav-cell:hover{border-color:var(--indigo)}
-.q-nav-cell:focus{outline:2px solid var(--indigo-ring);outline-offset:1px}
-.q-nav-cell.answered{background:var(--indigo-tint);border-color:var(--indigo);color:var(--indigo-deep)}
-.q-nav-cell.current{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(99,102,241,.35)}
-.q-nav-legend{display:flex;gap:16px;margin-top:11px;font-size:.7rem;color:var(--ink-muted);flex-wrap:wrap}
-.q-nav-legend span{display:inline-flex;align-items:center;gap:5px}
-.q-nav-dot{width:11px;height:11px;border-radius:3px;border:1.5px solid var(--border)}
-.q-nav-dot.a{background:var(--indigo-tint);border-color:var(--indigo)}
-.q-nav-dot.c{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(99,102,241,.35)}
-
 /* ── Small instruction line (all question types) ── */
 .q-hint{font-size:.82rem;color:var(--ink-muted);margin-bottom:14px;line-height:1.45}
-
-/* ── Review explanation ── */
-.review-explain{margin-top:9px;padding:9px 12px;background:var(--bg);border:1px solid var(--border);
-  border-radius:8px;font-size:.8rem;color:var(--ink-body);line-height:1.5}
-.review-explain b{color:var(--ink-head);font-weight:600}
 
 /* ── Submit status (score post-back) ── */
 .submit-status{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;justify-content:center;
@@ -276,21 +231,8 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padd
     Answered: <span id="answeredCount" aria-live="polite" aria-atomic="true">0</span> / <span id="answeredTotal">30</span>
   </div>
 
-  <nav class="q-nav" aria-label="Jump to any question">
-    <div class="q-nav-title">Jump to a question</div>
-    <div class="q-nav-grid" id="qNavGrid"></div>
-    <div class="q-nav-legend">
-      <span><span class="q-nav-dot c"></span> Current</span>
-      <span><span class="q-nav-dot a"></span> Answered</span>
-      <span><span class="q-nav-dot"></span> Not answered yet</span>
-    </div>
-  </nav>
-
   <div class="nav-row">
-    <button class="btn btn-ghost" id="btnBack" onclick="navigate(-1)" aria-label="Previous question">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      Back
-    </button>
+    <span class="answered-count">Answers lock after you continue.</span>
     <button class="btn btn-primary" id="btnNext" onclick="navigate(1)" aria-label="Next question">
       Next
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -310,7 +252,6 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padd
       Once submitted you cannot change your answers.
     </div>
     <div class="confirm-btns">
-      <button class="btn-outline" onclick="backToTest()">Review answers</button>
       <button class="btn btn-danger" id="btnFinalSubmit" onclick="submitTest()">Submit test</button>
     </div>
   </div>
@@ -329,8 +270,6 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padd
     <button class="btn-outline" id="btnRetrySubmit" onclick="postScore()">Try again</button>
   </div>
   <div class="breakdown-grid" id="breakdownGrid"></div>
-  <div class="review-title" role="heading" aria-level="2">Question Review</div>
-  <div class="review-list" id="reviewList" aria-label="Per-question review"></div>
 </div>
 
 <script>
@@ -602,8 +541,8 @@ function renderQuestion(opts){
   else if(q.type==="wo") renderWO(q,idx,body);
   else renderTR(q,idx,body);
 
-  // Nav buttons
-  document.getElementById("btnBack").disabled=(idx===0);
+  // Forward-only navigation: once the student continues, the previous answer
+  // is locked for the rest of this graded attempt.
   const isLast=(idx===TOTAL-1);
   document.getElementById("btnNext").classList.toggle("hidden",isLast);
   document.getElementById("btnSubmit").classList.toggle("hidden",!isLast);
@@ -788,6 +727,7 @@ function renderTR(q,idx,body){
 // NAVIGATION
 // ─────────────────────────────────────────────────────────────────────────────
 function navigate(dir){
+  if(dir!==1) return;
   const next=current+dir;
   if(next<0||next>TOTAL-1) return;
   current=next;
@@ -798,27 +738,7 @@ function updateAnsweredCount(){
   const n=answers.filter(a=>a!==null).length;
   document.getElementById("answeredCount").textContent=n;
   document.getElementById("answeredTotal").textContent=TOTAL;
-  renderNav();
   saveState();
-}
-
-// Question map: tap any number to jump straight to that question. Shows which
-// are answered (filled), which is current (ring), and which are still empty.
-function renderNav(){
-  const grid=document.getElementById("qNavGrid");
-  if(!grid) return;
-  grid.innerHTML="";
-  for(let i=0;i<TOTAL;i++){
-    const done=answers[i]!==null;
-    const b=document.createElement("button");
-    b.type="button";
-    b.className="q-nav-cell"+(done?" answered":"")+(i===current?" current":"");
-    b.textContent=i+1;
-    b.setAttribute("aria-label","Go to question "+(i+1)+(done?" (answered)":" (not answered)"));
-    if(i===current) b.setAttribute("aria-current","true");
-    b.addEventListener("click",()=>{current=i;renderQuestion({focus:true});});
-    grid.appendChild(b);
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -828,11 +748,6 @@ function goConfirm(){
   const n=answers.filter(a=>a!==null).length;
   document.getElementById("confirmMsg").textContent=`You answered ${n} of ${TOTAL} questions. ${n<TOTAL?"("+(TOTAL-n)+" unanswered) ":""}Submit your answers now?`;
   showScreen("screenConfirm","confirmHeading");
-}
-
-function backToTest(){
-  showScreen("screenTest");
-  renderQuestion({focus:true});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -905,36 +820,6 @@ function submitTest(){
       <div class="lbl">Translation</div>
     </div>`;
 
-  // Review list
-  const list=document.getElementById("reviewList");
-  list.innerHTML="";
-  results.forEach((r,i)=>{
-    const {q,correct}=r;
-    const item=document.createElement("div");
-    item.className="review-item "+(correct?"correct":"wrong");
-
-    const icon=correct
-      ?`<svg class="review-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="9" stroke="#0d9488" stroke-width="1.5"/><path d="M6 10l3 3 5-5" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
-      :`<svg class="review-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="9" stroke="#dc2626" stroke-width="1.5"/><path d="M7 7l6 6M13 7l-6 6" stroke="#dc2626" stroke-width="2" stroke-linecap="round"/></svg>`;
-
-    const prompt=q.type==="tr"?q.uz:q.prompt;
-    const stuAns=formatStudentAnswer(q,r.idx);
-    const corAns=formatCorrectAnswer(q);
-
-    item.innerHTML=`
-      <div class="review-item-header">
-        ${icon}
-        <span class="review-num">Q${i+1}</span>
-        <span class="review-prompt">${esc(prompt)}</span>
-      </div>
-      <div class="review-detail">
-        Your answer: <span class="${correct?"stu-ans":"stu-wrong"}">${esc(stuAns)}</span><br>
-        Correct answer: <span class="cor-ans">${esc(corAns)}</span>
-      </div>
-      <div class="review-explain">${explainFor(q)}</div>`;
-    list.appendChild(item);
-  });
-
   showScreen("screenResults","scoreBig");
   window.scrollTo({top:0,behavior:"smooth"});
 
@@ -1002,42 +887,6 @@ function setSubmitStatus(kind,msg){
   document.getElementById("btnRetrySubmit").disabled=(kind==="pending");
 }
 
-// Short, beginner-level "why" note for the review screen. Keyed on the sentence
-// form so the rule matches what the question was testing.
-function explainFor(q){
-  if(q.pol==="neg") return "<b>Negative:</b> add <b>not</b> after am / is / are — isn't (is not), aren't (are not), 'm not (am not) + the verb-ing form.";
-  if(q.pol==="q") return "<b>Question:</b> put <b>am / is / are</b> before the person — (Wh-word +) is/are + subject + verb-ing?";
-  return "<b>Positive:</b> subject + <b>am / is / are</b> + verb-ing. Use <b>am</b> with I, <b>is</b> with he/she/it, <b>are</b> with you/we/they.";
-}
-
-function formatStudentAnswer(q,idx){
-  const ans=answers[idx];
-  if(ans===null||ans===undefined) return "(no answer)";
-  if(q.type==="mc"){
-    const letters=["A","B","C","D"];
-    return letters[ans]+". "+q.shuffledChoices[ans];
-  }
-  if(q.type==="wo"){
-    if(!Array.isArray(ans)||ans.length===0) return "(no answer)";
-    const punct=q.pol==="q"?"?":".";
-    return ans.join(" ")+punct;
-  }
-  return ans;
-}
-
-function formatCorrectAnswer(q){
-  if(q.type==="mc"){
-    const letters=["A","B","C","D"];
-    return letters[q.shuffledCorrect]+". "+q.shuffledChoices[q.shuffledCorrect];
-  }
-  if(q.type==="wo"){
-    const punct=q.pol==="q"?"?":".";
-    return q.tiles.join(" ")+punct;
-  }
-  // tr: show first accepted (in display form, initial cap)
-  const a=q.accepted[0];
-  return a.charAt(0).toUpperCase()+a.slice(1)+(q.pol==="q"?"?":".");
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCREEN SWITCH

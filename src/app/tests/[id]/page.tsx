@@ -2,12 +2,11 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Button, Card } from "@/components/ui";
 import { QuestionRunner, type SubmitMeta } from "@/components/QuestionRunner";
 import {
   bookOf,
-  gradeQuestion,
   gradeTest,
   getTest,
   maxScore,
@@ -15,7 +14,7 @@ import {
   uid,
   useAttempts,
 } from "@/lib/store";
-import { type Question, type Test } from "@/lib/types";
+import { type Test } from "@/lib/types";
 import { loadConfig, sendMessage } from "@/lib/telegram-client";
 import { useSession } from "@/lib/auth";
 
@@ -75,8 +74,6 @@ export default function TakeTestPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const wantReview = searchParams.get("review") === "1";
   const { user } = useSession();
   const attempts = useAttempts();
   const [test, setTest] = useState<Test | null>(null);
@@ -98,10 +95,10 @@ export default function TakeTestPage({
     setTest(t);
   }, [id, router]);
 
-  // Review mode (?review=1): jump straight to the graded breakdown of the
-  // student's most recent attempt at this test. Read-only — never re-saves.
+  // Completion is terminal. A direct URL or an old review link returns only the
+  // saved score summary and never exposes the question set for a retake.
   useEffect(() => {
-    if (!test || !wantReview) return;
+    if (!test) return;
     const me = takerName.trim().toLowerCase();
     const latest = attempts
       .filter(
@@ -113,7 +110,7 @@ export default function TakeTestPage({
       setTimedOut(!!latest.timedOut);
       setPhase("done");
     }
-  }, [test, wantReview, attempts, takerName]);
+  }, [test, attempts, takerName]);
 
   if (!test) {
     return (
@@ -138,6 +135,10 @@ export default function TakeTestPage({
       submittedAt: Date.now(),
       timeTakenSec: meta.timeTakenSec,
       timedOut: meta.timedOut || undefined,
+      integrityViolations:
+        meta.integrity.violations > 0 ? meta.integrity.violations : undefined,
+      integrityFlags:
+        meta.integrity.violations > 0 ? meta.integrity.flags : undefined,
     });
     void notifyTelegram(test!, takerName, score, total, "", "");
     setFinalAnswers(answers);
@@ -153,11 +154,6 @@ export default function TakeTestPage({
         answers={finalAnswers}
         name={takerName}
         timedOut={timedOut}
-        reviewing={wantReview}
-        onRetake={() => {
-          router.replace(`/tests/${test.id}`);
-          setPhase("running");
-        }}
       />
     );
   }
@@ -203,29 +199,15 @@ function Results({
   answers,
   name,
   timedOut,
-  reviewing = false,
-  onRetake,
 }: {
   test: Test;
   answers: Answers;
   name: string;
   timedOut?: boolean;
-  reviewing?: boolean;
-  onRetake?: () => void;
 }) {
   const score = gradeTest(test, answers);
   const total = maxScore(test);
   const pct = total > 0 ? Math.round((score / total) * 100) : 0;
-
-  function label(q: Question, ids: string[]): string {
-    if (q.type === "short" || q.type === "gap") return ids[0] || "—";
-    if (q.type === "boolean")
-      return ids[0] === "false" ? "False" : ids[0] === "true" ? "True" : "—";
-    const texts = ids
-      .map((id) => q.choices.find((c) => c.id === id)?.text)
-      .filter(Boolean);
-    return texts.length ? texts.join(", ") : "—";
-  }
 
   return (
     <div className="space-y-6">
@@ -237,7 +219,7 @@ function Results({
       )}
       <Card className="space-y-2 text-center">
         <p className="text-sm text-slate-500">
-          {reviewing ? "Reviewing your last attempt" : `Results for ${name}`}
+          Results for {name}
         </p>
         <h1 className="text-4xl font-bold tabular-nums">
           {score} / {total}
@@ -248,38 +230,11 @@ function Results({
         >
           {pct}%
         </p>
+        <p className="text-sm text-slate-500">
+          Your detailed answers remain with your teacher. Use Practice or Books
+          to work on the same skill again.
+        </p>
       </Card>
-
-      <div className="space-y-3">
-        {test.questions.map((q, i) => {
-          const earned = gradeQuestion(q, answers[q.id]);
-          const correct = earned === q.points;
-          return (
-            <Card key={q.id} className="space-y-1">
-              <div className="flex justify-between gap-4">
-                <h3 className="font-medium">
-                  <span className="mr-2 text-slate-400">Q{i + 1}.</span>
-                  {q.prompt}
-                </h3>
-                <span
-                  className="shrink-0 text-sm font-semibold tabular-nums"
-                  style={{ color: correct ? "#3F8F5F" : "#C1473A" }}
-                >
-                  {correct ? "✓" : "✗"} {earned}/{q.points}
-                </span>
-              </div>
-              <p className="text-sm text-slate-600">
-                Your answer: {label(q, answers[q.id] ?? [])}
-              </p>
-              {!correct && (
-                <p className="text-sm" style={{ color: "#3F8F5F" }}>
-                  Correct: {label(q, q.correct)}
-                </p>
-              )}
-            </Card>
-          );
-        })}
-      </div>
 
       <div className="flex flex-wrap gap-2">
         <Link
@@ -288,15 +243,6 @@ function Results({
         >
           Back to tests
         </Link>
-        {reviewing && onRetake && (
-          <button
-            type="button"
-            onClick={onRetake}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Retake test
-          </button>
-        )}
         <Link
           href="/results"
           className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"

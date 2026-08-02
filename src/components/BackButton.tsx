@@ -9,7 +9,18 @@ export function BackButton() {
   const pathname = usePathname();
   const router = useRouter();
 
-  if (pathname === "/" || pathname === "/login") return null;
+  const isLiveTest =
+    pathname.startsWith("/t/") ||
+    (/^\/tests\/[^/]+$/.test(pathname) &&
+      ![
+        "/tests/grammar",
+        "/tests/vocabulary",
+        "/tests/reading",
+        "/tests/listening",
+        "/tests/links",
+      ].includes(pathname));
+
+  if (pathname === "/" || pathname === "/login" || isLiveTest) return null;
 
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) {

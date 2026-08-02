@@ -139,8 +139,8 @@ export function TestTaker({
     setPhase("finished");
   }, [testId, responses]);
 
-  // Proctor (strict lockdown). Enabled while the exam is live; auto-submits when
-  // the student switches tabs/windows. getIntegrity feeds the submit payload.
+  // Proctor (strict lockdown). The first tab/app switch warns and the second
+  // submits. getIntegrity feeds the teacher-facing integrity payload.
   const proctor = useProctor({
     enabled: phase === "taking" || phase === "submitting",
     onAutoSubmit: () => finishSubmit("left"),
@@ -155,10 +155,25 @@ export function TestTaker({
   }, [phase, proctor]);
 
   // Start (or resume) the single attempt, server-side.
+  //
+  // The server component already confirmed (via the read-only 0032 gate)
+  // that this test is startable before rendering this component at all — so
+  // a failure here that looks transient (dropped connection, blip) should be
+  // retried rather than immediately stranding the student. Only a genuine
+  // refusal (bad link, stale session, wrong role) blocks outright; retrying
+  // those would just fail again and delays a message the student can act on.
   useEffect(() => {
     let active = true;
+    const MAX_ATTEMPTS = 3;
     (async () => {
-      const res = await startAttempt(token);
+      let res = await startAttempt(token);
+      let tries = 1;
+      while (active && !res.ok && res.transient && tries < MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, 400 * tries));
+        if (!active) return;
+        res = await startAttempt(token);
+        tries += 1;
+      }
       if (!active) return;
       if (!res.ok) {
         setError(res.error ?? "Could not start.");
@@ -322,17 +337,16 @@ export function TestTaker({
     return (
       <div className="mx-auto max-w-lg">
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-card-hover">
-          <div className="relative bg-gradient-to-br from-slate-900 via-brand-900 to-brand-800 p-7 text-white">
-            <div className="pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full bg-brand-500/30 blur-3xl" />
-            <span className="relative inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-brand-100 ring-1 ring-inset ring-white/20">
+          <div className="bg-brand-600 p-7 text-white">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-100 ring-1 ring-inset ring-white/15">
               <ShieldCheck className="h-3.5 w-3.5" />
               Proctored exam
             </span>
-            <h1 className="relative mt-4 text-2xl font-extrabold tracking-tight">
+            <h1 className="mt-4 text-2xl font-bold tracking-tight">
               {title}
             </h1>
             {description && (
-              <p className="relative mt-1.5 text-sm text-brand-100/90">
+              <p className="mt-1.5 text-sm text-slate-200">
                 {description}
               </p>
             )}
@@ -422,12 +436,10 @@ export function TestTaker({
         <ProctorWarning onDismiss={proctor.dismissTabWarning} />
       )}
 
-      {/* Premium exam header */}
-      <header className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-900 via-brand-900 to-brand-800 p-5 text-white shadow-card">
-        <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-brand-500/25 blur-3xl" />
-        <div className="relative flex items-start justify-between gap-4">
+      <header className="rounded-2xl border border-slate-200 bg-brand-600 p-5 text-white shadow-card">
+        <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand-100 ring-1 ring-inset ring-white/20">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-slate-100 ring-1 ring-inset ring-white/15">
               <ShieldCheck className="h-3 w-3" />
               Secure mode
             </span>

@@ -66,7 +66,7 @@ commit**.
 
 ## 2. What is actually outstanding
 
-Four migrations remain. Only one is subtractive against the running app, and one has an
+Six migrations remain. Only one is subtractive against the running app, and one has an
 ordering constraint of its own.
 
 | Migration | Effect | Risk against the running app |
@@ -75,6 +75,8 @@ ordering constraint of its own.
 | `0029` | answer-key content | none |
 | `0030` | enumerated per-table grants; `anon` gets nothing | none functionally, but **expected to abort** — §3 |
 | `0031` | publish gate: tests start unpublished and must be published by an admin | none for existing tests, but **the ordering matters** — §5 |
+| `0032` | adds `share_attempt_state`, a read-only, `authenticated`-only sibling of `start_share_attempt` used during the `/t/<token>` render to check submission state before questions are fetched | none for existing tests or attempts — additive and read-only. The preflight (§6) now requires it; deploying app code that calls it against a database without it breaks every share-link render with "Could not open this test." |
+| `0033` | `create or replace function share_test_questions(p_token text)` — adds a submitted-attempt check: a student holding a submitted attempt gets zero rows back, teachers untouched | none for existing tests or attempts — additive, redefines a function body only. **But do not skip it**: the app-level gate added in `/t/[token]` (checks `share_attempt_state` from `0032` before rendering questions) only covers normal page navigation. `share_test_questions` is itself a public RPC, callable directly over PostgREST by any authenticated session holding the share token — without `0033`, a student who already completed a test can call it straight from the browser with their own JWT and the token, and get the full question bank back. `0033` closes that path at the RPC itself. |
 
 An earlier version of this runbook planned a Phase 1 / Phase 2 split with an outage window,
 on the assumption that none of `0024`–`0030` were applied. That assumption was wrong:
@@ -216,7 +218,7 @@ deploy lands.
 ### Sequence
 
 1. Confirm nobody is mid-upload, and tell whoever administers tests not to upload until
-   step 4 reports success.
+   step 5 reports success.
 2. Apply `0031`, then verify:
    ```sql
    select count(*) filter (where published) as published,
@@ -226,8 +228,15 @@ deploy lands.
    > **Abort if:** any pre-existing test comes back unpublished. The backfill did not run.
    > Do not publish them by hand one at a time — investigate why, since the same fault
    > would apply to `html_tests`.
-3. Deploy immediately (§6). The preflight will now pass.
-4. Verify in the admin share-links page that the publish toggle renders and flips state.
+3. Apply `0032`, then `0033`, in that order.
+   > **The preflight cannot verify `0033`.** `scripts/preflight-deploy.mjs` only probes for
+   > RPC *existence*, and `share_test_questions` has existed under that exact name and
+   > signature since `0025`/`0031` — so the preflight will report it present even against a
+   > database still running the pre-`0033` body, which has no submitted-attempt check. A
+   > green preflight is not evidence `0033` applied. Confirm it some other way, e.g.
+   > `npx supabase migration list --linked`, before treating the direct-RPC bypass as closed.
+4. Deploy immediately (§6). The preflight will now pass.
+5. Verify in the admin share-links page that the publish toggle renders and flips state.
 
 ### Rollback
 

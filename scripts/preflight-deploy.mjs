@@ -3,7 +3,7 @@
 //
 // Why this exists. `main` can be merged long before its migrations are applied
 // (that is deliberate — see the production migration runbook in docs/). The
-// token-gated test flow calls SECURITY DEFINER RPCs introduced in 0025/0026.
+// token-gated test flow calls SECURITY DEFINER RPCs introduced in 0025/0026/0032.
 // Deploying that code against a database without them means every student hits
 // a failure the moment they open a share link: the RPC 404s, startAttempt()
 // returns "Could not start the test.", and nobody can sit an exam. Nothing in
@@ -111,6 +111,16 @@ const REQUIRED_RPCS = [
     migration: "0031",
     why: "admin publish/unpublish for hosted HTML tests",
     args: { p_test_id: "00000000-0000-0000-0000-000000000000", p_published: false },
+  },
+  // 0032. Read-only sibling of start_share_attempt, called during the /t/<token>
+  // Server Component render to check submission state before questions are
+  // fetched. anon holds no EXECUTE grant (authenticated only), same shape as
+  // the 0031 entries above, so a rejected probe still means PRESENT.
+  {
+    fn: "share_attempt_state",
+    migration: "0032",
+    why: "gates the share-link render so a submitted student never gets the question bank serialized",
+    args: TOKEN_ARG,
   },
 ];
 
