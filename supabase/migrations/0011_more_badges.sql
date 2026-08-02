@@ -4,7 +4,9 @@
 -- in the app catalog (src/lib/badges.ts); the DB stores identity + threshold and
 -- is the source of truth for badge ids. Idempotent via on conflict (code).
 insert into badges (code, name, description, skill_area, threshold) values
-  -- Per-skill Bronze/Silver/Gold tiers (starters already seeded in 0001).
+  -- Per-skill Bronze/Silver/Gold tiers. The per-skill starters are seeded by
+  -- supabase/seed.sql, NOT by 0001 — 0001 creates the badges table but inserts
+  -- no rows. Harmless either way thanks to on conflict (code) do nothing.
   ('grammar_bronze',    'Grammar Bronze',     'Complete 5 grammar tests.',      'GRAMMAR', 5),
   ('grammar_silver',    'Grammar Silver',     'Complete 15 grammar tests.',     'GRAMMAR', 15),
   ('grammar_gold',      'Grammar Gold',       'Complete 30 grammar tests.',     'GRAMMAR', 30),
@@ -23,7 +25,7 @@ insert into badges (code, name, description, skill_area, threshold) values
   ('speaking_bronze',   'Speaking Bronze',    'Complete 5 speaking tasks.',     'SPEAKING', 5),
   ('speaking_silver',   'Speaking Silver',    'Complete 15 speaking tasks.',    'SPEAKING', 15),
   ('speaking_gold',     'Speaking Gold',      'Complete 30 speaking tasks.',    'SPEAKING', 30),
-  -- Streak ladder (7-day already seeded in 0001).
+  -- Streak ladder. streak_7 comes from supabase/seed.sql, not 0001.
   ('streak_3',          '3-Day Streak',       'Practise on three session days in a row.',    null, 3),
   ('streak_14',         '14-Day Streak',      'Practise on fourteen session days in a row.', null, 14),
   ('streak_30',         '30-Day Streak',      'Practise on thirty session days in a row.',   null, 30),
