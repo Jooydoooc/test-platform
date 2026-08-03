@@ -169,7 +169,10 @@ export function useMyAttempts(): UseMyAttemptsResult {
       const testIds = [...new Set(valid.map((r) => r.test_id))];
 
       // Step 3 — fetch skill scores + test titles in parallel.
-      const [{ data: skillRows }, { data: testRows }] = await Promise.all([
+      const [
+        { data: skillRows, error: skillErr },
+        { data: testRows, error: testErr },
+      ] = await Promise.all([
         supabase
           .from("result_skill_scores")
           .select("result_id, correct_count, total_count")
@@ -181,6 +184,11 @@ export function useMyAttempts(): UseMyAttemptsResult {
       ]);
 
       if (!active) return;
+      if (skillErr || testErr) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
 
       const skillData = (skillRows ?? []) as SkillScoreRow[];
       const testData = (testRows ?? []) as TestTitleRow[];

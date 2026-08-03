@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useEffect, useRef } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Card, LinkButton } from "@/components/ui";
 import { useAttempts } from "@/lib/store";
@@ -18,9 +17,6 @@ interface ResultRow {
   score: number;
   maxScore: number;
   submittedAt: number;
-  /** Where "Take again" points, or null when we can't reconstruct a take URL
-   *  (Supabase-graded tests are taken via /t/<token>, not /tests/<id>). */
-  retakeHref: string | null;
 }
 
 export default function ResultsPage() {
@@ -48,7 +44,6 @@ export default function ResultsPage() {
         score: a.score,
         maxScore: a.maxScore,
         submittedAt: a.submittedAt,
-        retakeHref: null,
       }));
     }
     if (!user) return [];
@@ -63,7 +58,6 @@ export default function ResultsPage() {
         score: a.score,
         maxScore: a.maxScore,
         submittedAt: a.submittedAt,
-        retakeHref: `/tests/${a.testId}`,
       }));
   }, [supaAttempts, localAttempts, user]);
 
@@ -104,7 +98,6 @@ export default function ResultsPage() {
                 <th className="px-4 py-3 font-medium">Score</th>
                 <th className="px-4 py-3 font-medium">%</th>
                 <th className="px-4 py-3 font-medium">When</th>
-                <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -142,16 +135,6 @@ export default function ResultsPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {new Date(a.submittedAt).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      {a.retakeHref && (
-                        <Link
-                          href={a.retakeHref}
-                          className="text-xs font-semibold text-brand-600 hover:text-brand-700"
-                        >
-                          Take again
-                        </Link>
-                      )}
                     </td>
                   </tr>
                 );

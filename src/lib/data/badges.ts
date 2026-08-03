@@ -37,10 +37,17 @@ function longestDailyStreak(isoDates: string[]): number {
 async function computeCounts(studentId: string): Promise<BadgeCounts> {
   const admin = createAdminClient();
 
+  // PLACEMENT tests are diagnostic and are explicitly documented (0001_schema.sql)
+  // as excluded from ranking, streaks, and progress trends. Badges are a progress
+  // signal, so they must honour the same filter as my-attempts.ts and
+  // use-skill-mastery.ts — otherwise a student who has only ever done the initial
+  // placement diagnostic could unlock "___ Starter" / "Explorer" badges for doing
+  // nothing.
   const { data: results } = await admin
     .from("results")
     .select("id, created_at")
-    .eq("student_id", studentId);
+    .eq("student_id", studentId)
+    .eq("excluded_from_progress", false);
 
   const resultIds = (results ?? []).map((r) => r.id);
   const skillTests: Partial<Record<BadgeSkill, number>> = {};

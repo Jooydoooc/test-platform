@@ -223,11 +223,13 @@ export default function DashboardPage() {
     !loadTimedOut &&
     (attLoading || masteryLoading || streakLoading || badgesLoading);
 
-  // True when the attempts fetch itself failed. This one matters most: stats,
-  // the "have you done anything" empty-state gate, momentum, activity and the
-  // daily goal all derive from realAttempts, so a failed fetch must not be
-  // allowed to masquerade as "brand-new account, 0 tests taken".
-  const attemptsUnavailable = SUPABASE_ENABLED && attemptsError;
+  // True when the attempts fetch itself failed, OR the 8s safety-net timeout
+  // fired while it was still loading. Stats, the "have you done anything"
+  // empty-state gate, momentum, activity and the daily goal all derive from
+  // realAttempts, so neither a failed fetch nor a stalled one may be allowed
+  // to masquerade as "brand-new account, 0 tests taken".
+  const attemptsUnavailable =
+    SUPABASE_ENABLED && (attemptsError || (loadTimedOut && attLoading));
 
   // ---------------------------------------------------------------------------
   // Stats: sourced from Supabase when enabled, localStorage otherwise.

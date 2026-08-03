@@ -66,7 +66,7 @@ commit**.
 
 ## 2. What is actually outstanding
 
-Four migrations remain. Only one is subtractive against the running app, and one has an
+Nine migrations remain. Two are subtractive against the running app, and one has an
 ordering constraint of its own.
 
 | Migration | Effect | Risk against the running app |
@@ -75,6 +75,11 @@ ordering constraint of its own.
 | `0029` | answer-key content | none |
 | `0030` | enumerated per-table grants; `anon` gets nothing | none functionally, but **expected to abort** — §3 |
 | `0031` | publish gate: tests start unpublished and must be published by an admin | none for existing tests, but **the ordering matters** — §5 |
+| `0032` | adds `share_attempt_state`, a read-only, `authenticated`-only sibling of `start_share_attempt` used during the `/t/<token>` render to check submission state before questions are fetched | none for existing tests or attempts — additive and read-only. The preflight (§6) now requires it; deploying app code that calls it against a database without it breaks every share-link render with "Could not open this test." |
+| `0033` | `create or replace function share_test_questions(p_token text)` — adds a submitted-attempt check: a student holding a submitted attempt gets zero rows back, teachers untouched | none for existing tests or attempts — additive, redefines a function body only. **But do not skip it**: the app-level gate added in `/t/[token]` (checks `share_attempt_state` from `0032` before rendering questions) only covers normal page navigation. `share_test_questions` is itself a public RPC, callable directly over PostgREST by any authenticated session holding the share token — without `0033`, a student who already completed a test can call it straight from the browser with their own JWT and the token, and get the full question bank back. `0033` closes that path at the RPC itself. |
+| `0034` | `revoke update, delete on attempts` and `revoke insert, update, delete on attempt_answers`, from `authenticated` and `anon` | **subtractive, and it is what makes `0033` hold.** Verified live: `has_table_privilege('authenticated','public.attempts','UPDATE')` is `true` today, and `attempts_update` (`0002_rls.sql:181`) is row-scoped but not column-scoped. So a student can `PATCH /rest/v1/attempts?id=eq.<their own>` with `{"submitted_at": null}` and reopen a finished attempt — which defeats `0033` entirely, since that gate keys on `submitted_at is not null`. The same grant lets them re-point `test_id` at another test to satisfy the "an attempt row proves the link" check in `0025`. No app code writes these columns through the session client (every writer is the service-role admin client or a SECURITY DEFINER RPC), so the revoke is not expected to break any path. This is also the only change anywhere in the repo that revokes `attempts` UPDATE — see §3, where `0030` asserts on exactly that. |
+| `0035` | schema hardening: locks the RLS helper functions (`is_teacher`, `owns_group`, `teaches_student`, `in_group`) behind explicit grants, rewrites `books_write` to enforce real ownership, redefines `group_xp_leaderboard()`, and pins `attempt_answers.question_id` to `ON DELETE RESTRICT` | additive/corrective; no data written. Its assertion block includes `anon holds DML on a public table` — the same invariant `0030` trips on (§3), so **`0035` is expected to abort for the same reason until anon DML is dealt with**. Note its FK assertion is a safety win in its own right: the constraint being `ON DELETE CASCADE` would silently destroy graded student answers when a question is deleted. |
+| `0036` | adds `finalize_html_test_attempt`, a SECURITY DEFINER RPC that stamps the attempt, writes `results` and `result_skill_scores`, and returns `was_already_submitted` in one transaction | additive — new function only. Makes hosted-test finalization atomic; today it is a multi-step non-atomic write that can leave an attempt stamped with no result row. The app code that calls it ships in the same PR, so **deploy and migration must move together** in both directions. |
 
 An earlier version of this runbook planned a Phase 1 / Phase 2 split with an outage window,
 on the assumption that none of `0024`–`0030` were applied. That assumption was wrong:
@@ -216,7 +221,7 @@ deploy lands.
 ### Sequence
 
 1. Confirm nobody is mid-upload, and tell whoever administers tests not to upload until
-   step 4 reports success.
+   step 5 reports success.
 2. Apply `0031`, then verify:
    ```sql
    select count(*) filter (where published) as published,
@@ -226,8 +231,15 @@ deploy lands.
    > **Abort if:** any pre-existing test comes back unpublished. The backfill did not run.
    > Do not publish them by hand one at a time — investigate why, since the same fault
    > would apply to `html_tests`.
-3. Deploy immediately (§6). The preflight will now pass.
-4. Verify in the admin share-links page that the publish toggle renders and flips state.
+3. Apply `0032`, then `0033`, in that order.
+   > **The preflight cannot verify `0033`.** `scripts/preflight-deploy.mjs` only probes for
+   > RPC *existence*, and `share_test_questions` has existed under that exact name and
+   > signature since `0025`/`0031` — so the preflight will report it present even against a
+   > database still running the pre-`0033` body, which has no submitted-attempt check. A
+   > green preflight is not evidence `0033` applied. Confirm it some other way, e.g.
+   > `npx supabase migration list --linked`, before treating the direct-RPC bypass as closed.
+4. Deploy immediately (§6). The preflight will now pass.
+5. Verify in the admin share-links page that the publish toggle renders and flips state.
 
 ### Rollback
 

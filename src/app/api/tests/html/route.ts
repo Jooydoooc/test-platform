@@ -22,6 +22,49 @@ const LEVELS: Level[] = [
   "IELTS_GRADUATION",
 ];
 
+// Postgres error details must never reach the client. Log the raw error
+// server-side with enough context to diagnose, and return a short, safe
+// message. This route is admin-gated but the blast radius of an internals
+// leak (constraint/column names) is still worth avoiding.
+type DbError = { message?: string; code?: string; details?: string } | null | undefined;
+
+function logDbError(
+  operation: string,
+  error: DbError,
+  extra?: Record<string, unknown>,
+) {
+  console.error(`[api/tests/html] ${operation} failed`, {
+    message: error?.message,
+    code: error?.code,
+    details: error?.details,
+    ...extra,
+  });
+}
+
+function safeDbMessage(error: DbError, fallback: string): string {
+  if (!error) return fallback;
+  if (error.code === "23505") return "That already exists.";
+  if (error.code === "23503") return "That references something that no longer exists.";
+  if (error.code === "PGRST116") return "Not found.";
+  return fallback;
+}
+
+// Sanitise a client-supplied filename before it becomes part of a Storage
+// object key. Strips path separators / traversal sequences, restricts to a
+// safe character set, caps the length, and falls back to a generated name if
+// nothing usable remains. The extension is preserved separately since content
+// type may depend on it.
+function sanitiseFilename(name: string): string {
+  const base = name.split(/[/\\]/).pop() ?? "";
+  const dot = base.lastIndexOf(".");
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const ext = dot > 0 ? base.slice(dot + 1) : "";
+  const safeStem = stem.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100);
+  const safeExt = ext.replace(/[^a-zA-Z0-9]+/g, "").slice(0, 10);
+  const finalStem = safeStem || "file";
+  return safeExt ? `${finalStem}.${safeExt}` : finalStem;
+}
+
 // Upload a self-contained HTML test. The file is stored raw in the html-tests
 // bucket; a metadata row gives it a share_token served at /ht/<token>.
 //
@@ -93,15 +136,16 @@ export async function POST(req: Request) {
   }
 
   const supabase = await createClient();
-  const path = `${user.id}/${crypto.randomUUID()}/${file.name}`;
+  const path = `${user.id}/${crypto.randomUUID()}/${sanitiseFilename(file.name)}`;
 
   const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
     contentType: "text/html",
     upsert: false,
   });
   if (upErr) {
+    logDbError("upload html test file", upErr, { userId: user.id, path });
     return NextResponse.json(
-      { ok: false, error: upErr.message || "Could not upload the file." },
+      { ok: false, error: safeDbMessage(upErr, "Could not upload the file.") },
       { status: 500 },
     );
   }
@@ -119,10 +163,11 @@ export async function POST(req: Request) {
     .single();
 
   if (rowErr || !row) {
+    logDbError("insert html_tests row", rowErr, { userId: user.id, path });
     // Remove the orphaned object so the next attempt is clean.
     await supabase.storage.from(BUCKET).remove([path]);
     return NextResponse.json(
-      { ok: false, error: rowErr?.message ?? "Could not save the test." },
+      { ok: false, error: safeDbMessage(rowErr, "Could not save the test.") },
       { status: 500 },
     );
   }

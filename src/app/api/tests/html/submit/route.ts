@@ -284,7 +284,7 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: attempt, error: attErr } = await admin
     .from("attempts")
-    .select("id, student_id, html_test_id, submitted_at")
+    .select("id, student_id, html_test_id, submitted_at, started_at")
     .eq("id", attemptId)
     .maybeSingle();
 
@@ -357,14 +357,36 @@ export async function POST(req: Request) {
       // Key present but not yet enforced (the updated test file isn't live) —
       // fall through to the self-reported score.
     } else {
+      // Fail closed on a missing/invalid declared count. `key.count` is the
+      // denominator the server insists on (see html-regrade.ts) — without it,
+      // grading would silently fall back to trusting parsedAnswers.length,
+      // exactly the forgery migration 0027 exists to prevent ("submit one
+      // correct answer, score 1/1 = 100%"). Both seeded keys set `count`
+      // today, so this should never fire in practice; it exists because keys
+      // are hand-written SQL with nothing else enforcing the field. The
+      // reason is logged server-side (html_test_id only — no answers/PII) so
+      // a misconfigured key is visible without exposing internals to the
+      // client, which gets a generic "can't grade right now" message.
+      if (
+        typeof key.count !== "number" ||
+        !Number.isInteger(key.count) ||
+        key.count <= 0
+      ) {
+        console.error(
+          "[html submit] answer key has no valid count; refusing to grade",
+          { htmlTestId: attempt.html_test_id },
+        );
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "This test cannot be graded right now. Please contact your teacher.",
+          },
+          { status: 500 },
+        );
+      }
       // The key declares how many questions an attempt serves; a payload that
       // doesn't carry exactly that many is malformed or trimmed.
-      if (
-        typeof key.count === "number" &&
-        Number.isInteger(key.count) &&
-        key.count > 0 &&
-        parsedAnswers.length !== key.count
-      ) {
+      if (parsedAnswers.length !== key.count) {
         return NextResponse.json(
           {
             ok: false,
@@ -396,73 +418,57 @@ export async function POST(req: Request) {
   // finalize_attempt pattern. For now the current ordering (stamp first)
   // is the safer choice: a crashed result write is recoverable by an admin
   // but a double-awarded XP is not.
-  const { error: updErr } = await admin
-    .from("attempts")
-    .update({ submitted_at: new Date().toISOString() })
-    .eq("id", attempt.id);
-  if (updErr) {
-    return NextResponse.json(
-      { ok: false, error: "Could not finalize the attempt." },
-      { status: 500 },
-    );
-  }
-
-  // Insert the result row. HTML tests are never PLACEMENT, never PENDING_REVIEW
-  // (the HTML grades locally, no AI/teacher check needed).
-  const { data: result, error: rErr } = await admin
-    .from("results")
-    .insert({
-      attempt_id: attempt.id,
-      student_id: user.id,
-      status: "COMPLETED" as const,
-      excluded_from_progress: false,
-    })
-    .select("id")
-    .single();
-  if (rErr || !result) {
-    return NextResponse.json(
-      { ok: false, error: "Could not save the result." },
-      { status: 500 },
-    );
-  }
-
-  // One result_skill_scores row per skill reported by the HTML.
+  // Atomic finalize (migration 0036). Stamping submitted_at and writing the
+  // result used to be two separate statements. If the result insert failed
+  // after the stamp landed, a retry saw submitted_at already set, took the
+  // idempotency branch above, found no result, and returned ok:true with a
+  // null resultId — success reported to the student, score gone, and no code
+  // path able to re-insert it. finalize_html_test_attempt does the stamp, the
+  // result and the skill scores in ONE transaction: either everything commits
+  // or nothing does and the attempt stays retryable.
+  //
+  // XP is deliberately NOT delegated to the RPC (p_exp 0). awardHtmlTestExp
+  // below owns the TEST_EXP reason and the once-per-test ledger key, and is
+  // idempotent, so a retry recovers a grant missed by an earlier failure.
+  const integrityCols = sanitizeIntegrity(integrity);
   const skillRows = [...perSkill.entries()].map(([skill_area, t]) => ({
-    result_id: result.id,
     skill_area,
     correct_count: t.correct,
     total_count: t.total,
     accuracy: t.correct / t.total,
   }));
-  if (skillRows.length > 0) {
-    const { error: ssErr } = await admin
-      .from("result_skill_scores")
-      .insert(skillRows);
-    // Surface the failure instead of swallowing it: without skill scores the
-    // result contributes nothing to progress/leaderboard, so returning success
-    // here would silently under-record the student's work.
-    if (ssErr) {
-      return NextResponse.json(
-        { ok: false, error: "Could not save skill scores." },
-        { status: 500 },
-      );
-    }
+
+  const { data: finalized, error: finErr } = await admin
+    .rpc("finalize_html_test_attempt", {
+      p_attempt_id: attempt.id,
+      p_student_id: user.id,
+      p_skill_scores: skillRows,
+      p_exp: 0,
+      p_exp_unique_key: null,
+      p_integrity_violations: integrityCols?.violations ?? 0,
+      p_integrity_flags: integrityCols?.flags ?? null,
+    })
+    .maybeSingle<{
+      result_id: string;
+      exp_awarded: number;
+      was_already_submitted: boolean;
+    }>();
+
+  if (finErr || !finalized) {
+    console.error("[api/tests/html/submit] finalize failed", {
+      message: finErr?.message,
+      code: finErr?.code,
+      details: finErr?.details,
+      attemptId: attempt.id,
+      studentId: user.id,
+    });
+    return NextResponse.json(
+      { ok: false, error: "Could not save your result. Please try again." },
+      { status: 500 },
+    );
   }
 
-  // Proctor telemetry (best-effort, additive column from migration 0024). Done
-  // as a SEPARATE update AFTER the result exists — never part of the insert — so
-  // a missing column or bad payload can't fail the submission. Only written when
-  // the client reported a violation; the returned error is intentionally ignored.
-  const integrityCols = sanitizeIntegrity(integrity);
-  if (integrityCols) {
-    await admin
-      .from("results")
-      .update({
-        integrity_violations: integrityCols.violations,
-        integrity_flags: integrityCols.flags,
-      })
-      .eq("id", result.id);
-  }
+  const result = { id: finalized.result_id };
 
   // ---------------------------------------------------------------------------
   // EXP: overall accuracy = total correct / total questions across all skills.

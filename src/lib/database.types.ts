@@ -352,6 +352,25 @@ export interface Database {
        * Fixes High #6 (non-transactional finalize) and High #7 (points-weighted accuracy).
        * Called exclusively from submit.ts via the service-role admin client.
        */
+      // Hosted-HTML sibling of finalize_test_attempt (migration 0036). Writes
+      // the attempt stamp, result and skill scores in one transaction; XP is
+      // granted separately by awardHtmlTestExp so it keeps its own reason.
+      finalize_html_test_attempt: {
+        Args: {
+          p_attempt_id: string;
+          p_student_id: string;
+          p_skill_scores: Json;
+          p_exp: number;
+          p_exp_unique_key: string | null;
+          p_integrity_violations?: number;
+          p_integrity_flags?: Json | null;
+        };
+        Returns: {
+          result_id: string;
+          exp_awarded: number;
+          was_already_submitted: boolean;
+        }[];
+      };
       finalize_test_attempt: {
         Args: {
           p_attempt_id: string;
@@ -418,6 +437,20 @@ export interface Database {
           started_at: string;
           submitted_at: string | null;
           time_limit_sec: number | null;
+        }[];
+      };
+      /**
+       * Read-only completion check (migration 0032): reports whether this
+       * student already has a submitted attempt on the shared test, WITHOUT
+       * inserting an attempt row or anchoring started_at. Safe to call during
+       * Server Component render, unlike start_share_attempt. Returns no rows
+       * for a non-student, a bad token, or an unpublished test.
+       */
+      share_attempt_state: {
+        Args: { p_token: string };
+        Returns: {
+          submitted_at: string | null;
+          result_id: string | null;
         }[];
       };
       /**

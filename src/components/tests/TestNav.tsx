@@ -22,7 +22,7 @@ export function TestNav() {
   return (
     <nav
       aria-label="Test categories"
-      className="-mx-1 flex items-center gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-card [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="-mx-1 flex items-center gap-1 overflow-x-auto border-b border-slate-200 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {TABS.map((t) => {
         const active = pathname === t.href;
@@ -32,10 +32,10 @@ export function TestNav() {
             key={t.href}
             href={t.href}
             aria-current={active ? "page" : undefined}
-            className={`flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
+            className={`flex min-h-[44px] shrink-0 items-center gap-2 border-b-2 px-3.5 py-2 text-sm font-semibold transition-colors ${
               active
-                ? "bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-[0_8px_20px_-8px_rgba(90,63,202,0.6)]"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900"
             }`}
           >
             <Icon className="h-4 w-4" />
