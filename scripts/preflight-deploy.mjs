@@ -76,6 +76,18 @@ const REQUIRED_RPCS = [
   { fn: "start_share_attempt", migration: "0025", args: TOKEN_ARG, why: "mints the single attempt row" },
   { fn: "start_share_html_attempt", migration: "0026", args: TOKEN_ARG, why: "same, for hosted HTML tests" },
   {
+    fn: "finalize_html_test_attempt",
+    migration: "0036",
+    why: "atomic submit + grading for the hosted-HTML rail",
+    args: {
+      p_attempt_id: "00000000-0000-0000-0000-000000000000",
+      p_student_id: "00000000-0000-0000-0000-000000000000",
+      p_skill_scores: [],
+      p_exp: 0,
+      p_exp_unique_key: "preflight",
+    },
+  },
+  {
     fn: "finalize_test_attempt",
     migration: "0019",
     why: "atomic submit + grading",
@@ -90,11 +102,13 @@ const REQUIRED_RPCS = [
       p_exp_unique_key: "preflight",
     },
   },
-  // 0031 publish gate. These two are the only MUTATING functions in this list,
-  // and probing them is still safe for exactly one reason: `anon` holds no
-  // EXECUTE grant on them (0031 revokes from public/anon and grants only to
-  // authenticated), so the call is refused by the grant before the function
-  // body runs. Nothing is updated. Belt and braces, the id below is the
+  // 0031 publish gate. These two mutate, as do both finalizers above, and
+  // probing any of them is safe for exactly one reason: `anon` holds no
+  // EXECUTE grant on them, so the call is refused by the grant before the
+  // function body runs. Each migration does its own revoke — 0019 for
+  // finalize_test_attempt, 0036 for finalize_html_test_attempt, 0031 for the
+  // two below — so the guarantee is per-function, not inherited from one
+  // migration. Nothing is updated. Belt and braces, the id below is the
   // all-zeros uuid, which matches no test — so even a hypothetical execution
   // would raise P0002 rather than change a row.
   //
