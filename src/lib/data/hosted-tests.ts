@@ -103,6 +103,13 @@ export function useHostedTests(): { hosted: HostedTest[]; loading: boolean } {
       // so it must not blank out the test list.
       const submittedAtByTest = new Map<string, number>();
       if (rows.length > 0) {
+        // .is("superseded_at", null) — this feeds the Test Center's completed
+        // badge ("can I take this?"), not a history list. Migration 0037 lets
+        // an admin reopen a hosted test by marking the old attempt row
+        // superseded_at (never deleting it), so without this filter a
+        // reopened test would still show its stale submitted_at here and the
+        // badge would keep reading "completed" forever — the student would
+        // have no way back into a test an admin just reopened for them.
         const { data: attemptRows } = await supabase
           .from("attempts")
           .select("html_test_id, submitted_at")
@@ -111,7 +118,8 @@ export function useHostedTests(): { hosted: HostedTest[]; loading: boolean } {
             "html_test_id",
             rows.map((r) => r.id),
           )
-          .not("submitted_at", "is", null);
+          .not("submitted_at", "is", null)
+          .is("superseded_at", null);
 
         if (!active) return;
         for (const a of (attemptRows ?? []) as unknown as {

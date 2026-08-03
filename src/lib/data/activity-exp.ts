@@ -95,11 +95,19 @@ export async function submitVocabTest(
   // The unique index on (student_id, vocab_source_id) guards against races —
   // on conflict we re-select.
   // -------------------------------------------------------------------------
+  // superseded_at is null: a re-opened vocab attempt (should never happen now
+  // that the reopen RPC refuses vocab kinds, and the admin UI no longer offers
+  // the control for them — see FINDING 1/1b) must not be resumed here. Without
+  // this filter a superseded row would be picked up and finalize_test_attempt
+  // below would see its submitted_at already set, reporting "already
+  // submitted" for what is actually a fresh retake. Correct by construction
+  // rather than relying on the refusal enforced elsewhere.
   const { data: existing } = await admin
     .from("attempts")
     .select("id")
     .eq("student_id", user.id)
     .eq("vocab_source_id", unitId)
+    .is("superseded_at", null)
     .maybeSingle();
 
   let attemptId: string;
@@ -107,7 +115,8 @@ export async function submitVocabTest(
   if (existing) {
     attemptId = existing.id;
   } else {
-    // No attempt yet — insert one, handling the unique-index race by re-selecting.
+    // No (non-superseded) attempt yet — insert one, handling the unique-index
+    // race by re-selecting.
     const { data: inserted, error: insErr } = await admin
       .from("attempts")
       .insert({ student_id: user.id, vocab_source_id: unitId })
@@ -121,6 +130,7 @@ export async function submitVocabTest(
         .select("id")
         .eq("student_id", user.id)
         .eq("vocab_source_id", unitId)
+        .is("superseded_at", null)
         .maybeSingle();
       if (!raced) return { status: "error" };
       attemptId = raced.id;

@@ -66,12 +66,22 @@ export async function submitAttempt(
 
   // The single attempt must already exist (created by startAttempt). This is the
   // anti-cheat gate: no fresh attempt is minted here.
+  //
+  // superseded_at is null is load-bearing, not defensive. Once a teacher
+  // re-opens a test (0037) the student has TWO rows for this (student, test):
+  // the superseded original and the fresh one. Without this filter
+  // .maybeSingle() sees two rows and fails with PGRST116, which lands in the
+  // infra-error branch below — so the student would be told their answers were
+  // not submitted, on the retake the re-open existed to give them. The partial
+  // unique index guarantees at most one live row, so this stays a single-row
+  // read.
   const admin = createAdminClient();
   const { data: attemptRow, error: attemptErr } = await admin
     .from("attempts")
     .select("id, submitted_at")
     .eq("student_id", user.id)
     .eq("test_id", testId)
+    .is("superseded_at", null)
     .maybeSingle();
   // Distinguish an infra failure from a genuinely-missing attempt. This used to
   // discard `error` and fall through to "Start the test before submitting." —
