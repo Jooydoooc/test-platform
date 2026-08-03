@@ -190,6 +190,11 @@ export type AttemptRow = {
   vocab_source_id: string | null;
   started_at: string;
   submitted_at: string | null;
+  /** Migration 0037 — set by reopen_test_attempt() (admin-only). Non-null
+   *  means this attempt was superseded by a fresh one and is kept purely as
+   *  historical record; it is excluded from the "one attempt per student per
+   *  target, ever" unique indexes and from every completed-test gate. */
+  superseded_at: string | null;
 };
 
 export type AttemptAnswerRow = {
@@ -480,6 +485,17 @@ export interface Database {
       set_html_test_published: {
         Args: { p_test_id: string; p_published: boolean };
         Returns: boolean;
+      };
+      /**
+       * Admin-only "reopen a completed test" (migration 0037). Supersedes the
+       * given attempt (attempts.superseded_at := now()), flags its result
+       * excluded_from_progress, and writes an attempt_reopens audit row —
+       * never deletes or overwrites anything. Raises 42501 for a non-admin,
+       * P0002 for not-found / already-superseded / not-yet-submitted.
+       */
+      reopen_test_attempt: {
+        Args: { p_attempt_id: string; p_reason?: string | null };
+        Returns: { attempt_id: string; student_id: string }[];
       };
     };
     Enums: {

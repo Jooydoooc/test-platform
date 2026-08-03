@@ -8,6 +8,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  RotateCcw,
   Search,
   Trash2,
   Users,
@@ -18,6 +19,7 @@ import { LEVEL_OPTIONS } from "@/lib/books";
 import {
   MANAGEABLE_ROLES,
   type GroupOption,
+  type RecentResult,
   type StudentDetail,
   type StudentSummary,
 } from "@/lib/admin-students";
@@ -29,6 +31,7 @@ import {
   updateGroup,
   updateStudent,
 } from "@/lib/admin-client";
+import { reopenAttempt } from "@/lib/data/reopen-attempt";
 import type { Level, Role } from "@/lib/database.types";
 
 const DAY = 86_400_000;
@@ -585,6 +588,7 @@ function StudentDrawer({
   const [detail, setDetail] = useState<StudentDetail | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -638,6 +642,40 @@ function StudentDrawer({
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not delete.");
       setDeleting(false);
+    }
+  }
+
+  // Reopen a completed attempt (e.g. a proctor kick-out or a tab-switch
+  // lockout with no other recovery path). The old attempt and its result are
+  // kept forever, just excluded from progress — the student gets a brand-new
+  // attempt to take right away. window.prompt() doubles as the confirmation:
+  // Cancel aborts, OK (even with an empty reason) proceeds, matching the
+  // native-dialog pattern the delete flow above already uses.
+  async function reopen(r: RecentResult) {
+    if (!r.attemptId) return;
+    const reason = window.prompt(
+      `Reopen "${r.title}" for ${fullName(summary)}?\n\n` +
+        "Their old attempt and result are kept — nothing is deleted — but it " +
+        "stops counting toward their progress. They'll get a brand-new attempt " +
+        "to take right away.\n\n" +
+        "Why are you reopening it? (optional, kept for the record)",
+    );
+    if (reason === null) return; // cancelled
+    setReopeningId(r.id);
+    setErr(null);
+    try {
+      const res = await reopenAttempt(r.attemptId, reason.trim() || undefined);
+      if (!res.ok) {
+        setErr(res.error ?? "Could not reopen the attempt.");
+        return;
+      }
+      await onChanged();
+      const fresh = await fetchStudentDetail(summary.id);
+      setDetail(fresh);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not reopen the attempt.");
+    } finally {
+      setReopeningId(null);
     }
   }
 
@@ -808,11 +846,38 @@ function StudentDrawer({
                           <p className="text-xs text-slate-400">
                             {timeAgo(r.createdAt)}
                             {r.status === "PENDING_REVIEW" && " · pending review"}
+                            {r.superseded && " · reopened, excluded from progress"}
                           </p>
                         </div>
-                        <span className="shrink-0 text-sm font-semibold text-slate-700">
-                          {r.correct}/{r.total}
-                        </span>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="text-sm font-semibold text-slate-700">
+                            {r.correct}/{r.total}
+                          </span>
+                          {/* Only "test" and "html_test" attempts have a working
+                              re-entry path for a fresh attempt. Re-opening a
+                              vocab (or task/unknown) attempt would exclude the
+                              old result from progress with no way for the
+                              student to retake it, so the control is hidden —
+                              not just refused server-side — for those kinds. */}
+                          {r.attemptId &&
+                            !r.superseded &&
+                            (r.attemptKind === "test" ||
+                              r.attemptKind === "html_test") && (
+                            <button
+                              type="button"
+                              onClick={() => reopen(r)}
+                              disabled={reopeningId === r.id}
+                              title="Reopen this attempt so the student can retake it"
+                              className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-600 disabled:opacity-50"
+                            >
+                              {reopeningId === r.id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <RotateCcw className="size-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>

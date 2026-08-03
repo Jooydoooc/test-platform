@@ -126,15 +126,26 @@ export default function TestCenterPage() {
     // Hosted tests submit against html_test_id, so they never appear in
     // useMyAttempts (test_id only) — count them separately or "Completed" reads
     // 0 for a student whose whole history is hosted tests.
+    // Excluded (superseded) attempts are dropped first: a re-opened test keeps
+    // its testId on the old attempt, so without this filter "Completed" would
+    // still count a test the teacher just re-opened for a retake — exactly the
+    // signal that reopening should have cleared. Same reasoning as `avg` below.
     const completed =
-      new Set(realAttempts.map((a) => a.testId)).size +
-      hosted.filter((h) => h.completedAt !== null).length;
+      new Set(
+        realAttempts
+          .filter((a) => !a.excludedFromProgress)
+          .map((a) => a.testId),
+      ).size + hosted.filter((h) => h.completedAt !== null).length;
+    // Average over attempts that still count. A re-opened attempt (0037) is
+    // kept in history but flagged excluded_from_progress, so without this
+    // filter a student who retook one test would have both their old and new
+    // score averaged in — the retake would barely move the number it exists to
+    // correct. The dashboard already filters the same way.
+    const scored = realAttempts.filter((a) => !a.excludedFromProgress);
     const avg =
-      realAttempts.length > 0
+      scored.length > 0
         ? Math.round(
-            (realAttempts.reduce((s, a) => s + a.accuracy, 0) /
-              realAttempts.length) *
-              100,
+            (scored.reduce((s, a) => s + a.accuracy, 0) / scored.length) * 100,
           )
         : 0;
     return {
@@ -153,9 +164,19 @@ export default function TestCenterPage() {
     tests.filter((t) => groupOf(t) === g).length +
     hosted.filter((h) => hostedInGroup(h, g)).length;
 
+  // Unlike the admin's history list (which must keep showing a superseded row
+  // so the teacher can see what they re-opened), this card is the student's
+  // "what did I just get" widget, not a history log — same audience as `avg`
+  // and `completed` above. If the most recent attempt was just re-opened, it's
+  // an attempt the teacher discarded; surfacing its score here would show the
+  // student a result that no longer counts, with no indication it was undone.
+  // Skip excluded attempts so this reflects the most recent one that still
+  // stands — or nothing, if the only attempt for that test is now excluded
+  // and the student hasn't retaken it yet.
   const recent = useMemo(() => {
-    if (realAttempts.length === 0) return null;
-    return [...realAttempts].sort((a, b) => b.submittedAt - a.submittedAt)[0];
+    const eligible = realAttempts.filter((a) => !a.excludedFromProgress);
+    if (eligible.length === 0) return null;
+    return [...eligible].sort((a, b) => b.submittedAt - a.submittedAt)[0];
   }, [realAttempts]);
 
   return (
