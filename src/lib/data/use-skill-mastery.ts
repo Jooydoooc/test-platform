@@ -39,6 +39,8 @@ export type SkillMastery = Record<SkillArea, SkillStat>;
 export interface UseSkillMasteryResult {
   mastery: SkillMastery;
   loading: boolean;
+  /** True when the fetch failed — lets the UI avoid claiming every skill is "Not started". */
+  error: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +81,7 @@ const EMPTY_MASTERY: SkillMastery = {
 export function useSkillMastery(): UseSkillMasteryResult {
   const [mastery, setMastery] = useState<SkillMastery>(EMPTY_MASTERY);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!SUPABASE_ENABLED) {
@@ -113,7 +116,12 @@ export function useSkillMastery(): UseSkillMasteryResult {
         .eq("excluded_from_progress", false);
 
       if (!active) return;
-      if (rErr || !resultRows || resultRows.length === 0) {
+      if (rErr) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
+      if (!resultRows || resultRows.length === 0) {
         setMastery(EMPTY_MASTERY);
         setLoading(false);
         return;
@@ -130,7 +138,12 @@ export function useSkillMastery(): UseSkillMasteryResult {
         .in("result_id", resultIds);
 
       if (!active) return;
-      if (sErr || !skillRows || skillRows.length === 0) {
+      if (sErr) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
+      if (!skillRows || skillRows.length === 0) {
         setMastery(EMPTY_MASTERY);
         setLoading(false);
         return;
@@ -174,7 +187,7 @@ export function useSkillMastery(): UseSkillMasteryResult {
     // combined loading gate can never hang on this hook.
     load().catch(() => {
       if (active) {
-        setMastery(EMPTY_MASTERY);
+        setError(true);
         setLoading(false);
       }
     });
@@ -184,5 +197,5 @@ export function useSkillMastery(): UseSkillMasteryResult {
     };
   }, []); // one-shot on mount; user resolved inside the effect
 
-  return { mastery, loading };
+  return { mastery, loading, error };
 }

@@ -22,7 +22,7 @@
 // into hosted /ht tests, so teacher-facing integrity data reads uniformly across
 // both test surfaces.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 export type IntegrityFlags = Record<string, number>;
 
@@ -308,14 +308,69 @@ export function useProctor({ onAutoSubmit, enabled }: UseProctorOptions): Procto
   };
 }
 
+// Shared keyboard focus trap for blocking overlays: FullscreenGuard and
+// ProctorWarning below, and TestTaker's ConfirmSubmit. All three are
+// role="dialog"/"alertdialog" screens meant to be modal, but neither
+// `role="dialog"` nor `autoFocus` on the default button actually stops Tab
+// from walking off the overlay into whatever is behind it — for the proctor
+// guards specifically, that "whatever" is the live exam, so an un-trapped Tab
+// lets a keyboard user change answers while the guard claims to be blocking
+// them. This cycles Tab/Shift+Tab within the container and hands focus back
+// to whatever had it before the overlay mounted, once it unmounts.
+export function useFocusTrap(containerRef: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    const FOCUSABLE =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const focusables = Array.from(
+        container.querySelectorAll<HTMLElement>(FOCUSABLE),
+      ).filter((el) => el.offsetParent !== null); // skip hidden elements
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !container.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !container.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    // Capture phase: run before the guarded controls (or any other page
+    // listener) can react to Tab, so the trap can't be bypassed by a handler
+    // that stops propagation further down the tree.
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      previouslyFocused?.focus?.();
+    };
+  }, [containerRef]);
+}
+
 // Blocking overlay shown when the student leaves fullscreen mid-exam.
 export function FullscreenGuard({
   onReenter,
 }: {
   onReenter: () => void;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef);
   return (
     <div
+      ref={containerRef}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-md"
       role="alertdialog"
       aria-modal="true"
@@ -363,8 +418,11 @@ export function FullscreenGuard({
 // One-time warning shown when the student returns after their first tab/window
 // switch. The next switch will submit — this makes the rule fair, not a trap.
 export function ProctorWarning({ onDismiss }: { onDismiss: () => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef);
   return (
     <div
+      ref={containerRef}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-md"
       role="alertdialog"
       aria-modal="true"

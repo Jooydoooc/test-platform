@@ -68,18 +68,26 @@ type TestTitleRow = {
 // Hook
 // ---------------------------------------------------------------------------
 
+export interface UseMyAttemptsResult {
+  attempts: MyAttempt[];
+  loading: boolean;
+  /** True when the fetch failed — lets the UI avoid claiming "0 tests taken". */
+  error: boolean;
+}
+
 /**
  * Reactive hook: returns the signed-in student's completed test attempts,
- * sorted newest-first. Returns `{ attempts: [], loading: false }` immediately
- * when Supabase is not configured.
+ * sorted newest-first. Returns `{ attempts: [], loading: false, error: false }`
+ * immediately when Supabase is not configured.
  *
  * Structure mirrors useStudentXp (src/lib/xp.ts): one-shot fetch on mount
  * keyed by user id, `active` flag for safe async, no subscription needed for
  * this phase (history doesn't change while the student is viewing it).
  */
-export function useMyAttempts(): { attempts: MyAttempt[]; loading: boolean } {
+export function useMyAttempts(): UseMyAttemptsResult {
   const [attempts, setAttempts] = useState<MyAttempt[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     // Gate: when Supabase isn't configured, skip entirely.
@@ -128,7 +136,12 @@ export function useMyAttempts(): { attempts: MyAttempt[]; loading: boolean } {
         .order("submitted_at", { ascending: false });
 
       if (!active) return;
-      if (attErr || !attemptRows || attemptRows.length === 0) {
+      if (attErr) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
+      if (!attemptRows || attemptRows.length === 0) {
         setAttempts([]);
         setLoading(false);
         return;
@@ -156,7 +169,10 @@ export function useMyAttempts(): { attempts: MyAttempt[]; loading: boolean } {
       const testIds = [...new Set(valid.map((r) => r.test_id))];
 
       // Step 3 — fetch skill scores + test titles in parallel.
-      const [{ data: skillRows }, { data: testRows }] = await Promise.all([
+      const [
+        { data: skillRows, error: skillErr },
+        { data: testRows, error: testErr },
+      ] = await Promise.all([
         supabase
           .from("result_skill_scores")
           .select("result_id, correct_count, total_count")
@@ -168,6 +184,11 @@ export function useMyAttempts(): { attempts: MyAttempt[]; loading: boolean } {
       ]);
 
       if (!active) return;
+      if (skillErr || testErr) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
 
       const skillData = (skillRows ?? []) as SkillScoreRow[];
       const testData = (testRows ?? []) as TestTitleRow[];
@@ -216,7 +237,7 @@ export function useMyAttempts(): { attempts: MyAttempt[]; loading: boolean } {
     // flag so the dashboard never hangs on its spinner waiting for this hook.
     load().catch(() => {
       if (active) {
-        setAttempts([]);
+        setError(true);
         setLoading(false);
       }
     });
@@ -226,5 +247,5 @@ export function useMyAttempts(): { attempts: MyAttempt[]; loading: boolean } {
     };
   }, []); // one-shot on mount; user identity is resolved inside the effect
 
-  return { attempts, loading };
+  return { attempts, loading, error };
 }

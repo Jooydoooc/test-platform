@@ -152,8 +152,16 @@ export default function DashboardPage() {
   // Real Supabase data — all three hooks return empty/zero immediately when
   // SUPABASE_ENABLED is false, so they're always safe to call.
   // ---------------------------------------------------------------------------
-  const { attempts: realAttempts, loading: attLoading } = useMyAttempts();
-  const { mastery: realMastery, loading: masteryLoading } = useSkillMastery();
+  const {
+    attempts: realAttempts,
+    loading: attLoading,
+    error: attemptsError,
+  } = useMyAttempts();
+  const {
+    mastery: realMastery,
+    loading: masteryLoading,
+    error: masteryError,
+  } = useSkillMastery();
   // Badge truth comes from badge_unlocks, not from client-side re-derivation.
   const {
     codes: earnedCodes,
@@ -164,6 +172,7 @@ export default function DashboardPage() {
     current: realStreakCurrent,
     longest: realStreakLongest,
     loading: streakLoading,
+    error: streakError,
   } = useStreak();
 
   // Lifetime XP + level from the SHARED source of truth (useStudentXp): the sum
@@ -213,6 +222,14 @@ export default function DashboardPage() {
     SUPABASE_ENABLED &&
     !loadTimedOut &&
     (attLoading || masteryLoading || streakLoading || badgesLoading);
+
+  // True when the attempts fetch itself failed, OR the 8s safety-net timeout
+  // fired while it was still loading. Stats, the "have you done anything"
+  // empty-state gate, momentum, activity and the daily goal all derive from
+  // realAttempts, so neither a failed fetch nor a stalled one may be allowed
+  // to masquerade as "brand-new account, 0 tests taken".
+  const attemptsUnavailable =
+    SUPABASE_ENABLED && (attemptsError || (loadTimedOut && attLoading));
 
   // ---------------------------------------------------------------------------
   // Stats: sourced from Supabase when enabled, localStorage otherwise.
@@ -600,15 +617,47 @@ export default function DashboardPage() {
 
           {/* Stat tiles — sourced from real Supabase data when enabled */}
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <HeroStat icon={Flame} label="Day streak" value={stats.streak} />
-            <HeroStat icon={TrendingUp} label="Avg score" value={`${stats.avg}%`} />
-            <HeroStat icon={Star} label="Best score" value={`${stats.best}%`} />
-            <HeroStat icon={BookOpen} label="Tests taken" value={stats.tests} />
+            <HeroStat
+              icon={Flame}
+              label="Day streak"
+              value={streakError ? "Unavailable" : stats.streak}
+            />
+            <HeroStat
+              icon={TrendingUp}
+              label="Avg score"
+              value={attemptsUnavailable ? "Unavailable" : `${stats.avg}%`}
+            />
+            <HeroStat
+              icon={Star}
+              label="Best score"
+              value={attemptsUnavailable ? "Unavailable" : `${stats.best}%`}
+            />
+            <HeroStat
+              icon={BookOpen}
+              label="Tests taken"
+              value={attemptsUnavailable ? "Unavailable" : stats.tests}
+            />
           </div>
         </div>
       </header>
 
-      {!started ? (
+      {!started && attemptsUnavailable ? (
+        <Card className="flex flex-col items-center gap-3 py-12 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+            <Sparkles className="h-7 w-7" />
+          </span>
+          <h2 className="text-lg font-bold text-slate-900">
+            We couldn&apos;t load your dashboard
+          </h2>
+          <p className="max-w-sm text-sm text-slate-600">
+            Something went wrong fetching your progress. This is likely
+            temporary — try refreshing the page.
+          </p>
+          <Button onClick={() => window.location.reload()} className="mt-1">
+            Try again
+          </Button>
+        </Card>
+      ) : !started ? (
         <Card className="flex flex-col items-center gap-3 py-12 text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
             <Sparkles className="h-7 w-7" />
@@ -636,7 +685,7 @@ export default function DashboardPage() {
                   Skill mastery
                 </h2>
                 <span className="text-xs text-slate-500">
-                  avg accuracy per skill
+                  {masteryError ? "Unavailable" : "avg accuracy per skill"}
                 </span>
               </div>
               <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
@@ -649,7 +698,11 @@ export default function DashboardPage() {
                           {s.label}
                         </span>
                         <span className="tabular-nums text-slate-500">
-                          {s.done > 0 ? (
+                          {masteryError ? (
+                            <span className="text-xs text-slate-500">
+                              Unavailable
+                            </span>
+                          ) : s.done > 0 ? (
                             <span className="font-semibold text-slate-800">
                               {s.avg}%
                             </span>
@@ -679,7 +732,12 @@ export default function DashboardPage() {
                   <Target className="h-4 w-4 text-brand-600" />
                   Focus area
                 </h2>
-                {focus ? (
+                {masteryError ? (
+                  <p className="mt-3 text-sm text-slate-500">
+                    Couldn&apos;t load your skill mastery right now, so we
+                    can&apos;t recommend a focus area. Try refreshing.
+                  </p>
+                ) : focus ? (
                   <div className="mt-3">
                     <p className="text-lg font-extrabold text-slate-900">
                       {focus.label}
@@ -743,7 +801,9 @@ export default function DashboardPage() {
                 <p className="mt-3 text-xs font-medium text-slate-500">
                   {goalDone >= dailyGoal
                     ? "Goal smashed — see you tomorrow!"
-                    : `${dailyGoal - goalDone} to go · ${stats.streak}-day streak`}
+                    : streakError
+                      ? `${dailyGoal - goalDone} to go · streak unavailable`
+                      : `${dailyGoal - goalDone} to go · ${stats.streak}-day streak`}
                 </p>
               </Card>
             </div>

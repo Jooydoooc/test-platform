@@ -38,6 +38,98 @@ export async function getTestByShareToken(
   };
 }
 
+export interface ExistingAttemptResult {
+  ok: boolean;
+  /** True when no attempt row exists yet for this student/test. */
+  none?: boolean;
+  attemptId?: string;
+  startedAt?: string;
+  /** True when this student already submitted. */
+  alreadyCompleted?: boolean;
+  resultId?: string;
+  /**
+   * True for a teacher/admin viewing the link. Server-derived from
+   * profiles.role — never accepted from the client. See startAttempt.
+   */
+  preview?: boolean;
+  error?: string;
+}
+
+// Read-only check for an existing attempt — creates nothing.
+//
+// Used on mount so the briefing screen can tell, before the student clicks
+// Begin, whether this is a fresh test (no countdown yet — clock starts on
+// Begin), a resume of an in-progress attempt (deadline anchored to the
+// existing started_at, never reset), or an already-completed test (skip the
+// briefing entirely). Students retain SELECT on `attempts` and RLS scopes it
+// to their own rows, so this is a plain client read — no RPC, no insert.
+export async function getExistingAttempt(
+  testId: string,
+): Promise<ExistingAttemptResult> {
+  const user = await getServerUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (user.role !== "STUDENT") {
+    // Teacher/admin previewing the link. They never have an attempt of their
+    // own, and querying for one would send them through the exam briefing on
+    // the way to an empty result. Report preview here so the mount check can
+    // render read-only immediately — same server-derived role decision
+    // startAttempt makes, kept in one place per rail.
+    return { ok: true, preview: true };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("attempts")
+    .select("id, started_at, submitted_at")
+    .eq("test_id", testId)
+    .eq("student_id", user.id)
+    .maybeSingle<{
+      id: string;
+      started_at: string;
+      submitted_at: string | null;
+    }>();
+
+  // Mirror startAttempt's error-code mapping: session failures arrive as
+  // PostgREST codes, not the DB's own 42501.
+  if (error) {
+    if (
+      error.code === "42501" ||
+      error.code === "PGRST301" ||
+      error.code === "PGRST303"
+    ) {
+      return { ok: false, error: STALE_SESSION };
+    }
+    return { ok: false, error: "Could not load the test." };
+  }
+
+  if (!data) return { ok: true, none: true };
+
+  if (data.submitted_at) {
+    // Don't discard this error. A failed lookup used to return ok:true with no
+    // resultId, sending the student to a results page that cannot render —
+    // a blank screen instead of something they can act on.
+    const { data: result, error: resErr } = await supabase
+      .from("results")
+      .select("id")
+      .eq("attempt_id", data.id)
+      .maybeSingle();
+    if (resErr) {
+      return { ok: false, error: "Could not load your result. Please try again." };
+    }
+    return {
+      ok: true,
+      alreadyCompleted: true,
+      resultId: result?.id,
+    };
+  }
+
+  return {
+    ok: true,
+    attemptId: data.id,
+    startedAt: data.started_at,
+  };
+}
+
 export interface StartAttemptResult {
   ok: boolean;
   /** Present when a fresh or in-progress attempt is ready to take. */
@@ -148,11 +240,16 @@ export async function startAttempt(token: string): Promise<StartAttemptResult> {
   if (!data) return { ok: false, error: BAD_LINK };
 
   if (data.submitted_at) {
-    const { data: result } = await supabase
+    // Same discarded-error hazard as getExistingAttempt above: a null result
+    // from a failed query is not the same as "no result exists".
+    const { data: result, error: resErr } = await supabase
       .from("results")
       .select("id")
       .eq("attempt_id", data.attempt_id)
       .maybeSingle();
+    if (resErr) {
+      return { ok: false, error: "Could not load your result. Please try again." };
+    }
     return {
       ok: true,
       testId: data.test_id,
