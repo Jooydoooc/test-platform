@@ -44,41 +44,82 @@ export type BookForRead = {
   passages: BookPassageRow[];
   glossary: BookGlossaryRow[];
   questionCount: number;
+  // Optional, additive: true when the corresponding query errored rather
+  // than genuinely returning zero rows. `passages`/`glossary`/`questionCount`
+  // are `[]`/0 in BOTH cases (a real empty book and a failed fetch look the
+  // same in those fields on purpose, for backward compatibility) — callers
+  // that want to distinguish "empty" from "couldn't load" must check these
+  // flags. Absent/undefined must be treated as `false` (no error).
+  passagesError?: boolean;
+  glossaryError?: boolean;
+  questionCountError?: boolean;
 };
 
 export async function getBookForRead(id: string): Promise<BookForRead | null> {
   if (!SUPABASE_ENABLED) return null;
   const supabase = createClient();
-  const [{ data: book }, { data: passages }, { data: glossary }, { count }] =
-    await Promise.all([
-      supabase.from("books").select("*").eq("id", id).single(),
-      supabase.from("book_passages").select("*").eq("book_id", id).order("order"),
-      supabase.from("book_glossary").select("*").eq("book_id", id).order("word"),
-      supabase
-        .from("book_questions")
-        .select("id", { count: "exact", head: true })
-        .eq("book_id", id),
-    ]);
-  if (!book) return null;
+  const [
+    { data: book, error: bookError },
+    { data: passages, error: passagesError },
+    { data: glossary, error: glossaryError },
+    { count, error: countError },
+  ] = await Promise.all([
+    supabase.from("books").select("*").eq("id", id).single(),
+    supabase.from("book_passages").select("*").eq("book_id", id).order("order"),
+    supabase.from("book_glossary").select("*").eq("book_id", id).order("word"),
+    supabase
+      .from("book_questions")
+      .select("id", { count: "exact", head: true })
+      .eq("book_id", id),
+  ]);
+  // Fail closed: without the book row itself there is nothing safe to show.
+  if (bookError || !book) return null;
   return {
     book,
     passages: passages ?? [],
     glossary: glossary ?? [],
     questionCount: count ?? 0,
+    passagesError: Boolean(passagesError),
+    glossaryError: Boolean(glossaryError),
+    questionCountError: Boolean(countError),
   };
 }
 
-/** A question book as an in-memory Test, so QuestionRunner can render it. */
+/**
+ * A question book as an in-memory Test, so QuestionRunner can render it —
+ * plus the book's passages (if any), so callers that need the source text
+ * (e.g. the practice page, for comprehension questions) don't have to make
+ * a second round trip. `passages` is `[]` both for question-only books
+ * (Grammar/Vocabulary uploads, which genuinely have no `book_passages`
+ * rows) AND when the `book_passages` query itself failed — check
+ * `passagesError` to tell those two cases apart before treating a book as
+ * "no article to show".
+ */
+export type BookAsTest = { test: Test; passages: BookPassageRow[]; passagesError: boolean };
+
 export async function getBookAsTest(id: string): Promise<Test | null> {
+  const result = await getBookAsTestWithPassages(id);
+  return result?.test ?? null;
+}
+
+export async function getBookAsTestWithPassages(
+  id: string,
+): Promise<BookAsTest | null> {
   if (!SUPABASE_ENABLED) return null;
   const supabase = createClient();
-  const [{ data: book }, { data: rows }] = await Promise.all([
+  const [
+    { data: book, error: bookError },
+    { data: rows, error: rowsError },
+    { data: passages, error: passagesError },
+  ] = await Promise.all([
     supabase.from("books").select("*").eq("id", id).single(),
     supabase.from("book_questions").select("*").eq("book_id", id).order("order"),
+    supabase.from("book_passages").select("*").eq("book_id", id).order("order"),
   ]);
-  if (!book) return null;
+  if (bookError || !book) return null;
+  if (rowsError) return null;
   const questions = (rows ?? []).map(bookQuestionToQuestion);
-  return {
+  const test: Test = {
     id: book.id,
     title: book.title,
     description: book.description,
@@ -86,6 +127,7 @@ export async function getBookAsTest(id: string): Promise<Test | null> {
     createdAt: Date.parse(book.created_at) || Date.now(),
     updatedAt: Date.parse(book.updated_at) || Date.now(),
   };
+  return { test, passages: passages ?? [], passagesError: Boolean(passagesError) };
 }
 
 function asStrings(value: unknown): string[] {
