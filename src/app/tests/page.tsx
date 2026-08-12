@@ -193,7 +193,7 @@ export default function TestCenterPage() {
               you are ready to stay on the test screen until submission.
             </p>
           </div>
-          <div className="grid grid-cols-3 divide-x divide-white/15 rounded-xl bg-white/[0.07] ring-1 ring-inset ring-white/15">
+          <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl bg-white/15 ring-1 ring-inset ring-white/15">
             <StatTile icon={Layers} label="Available" value={headerStats.total} />
             <StatTile icon={CheckCircle2} label="Completed" value={headerStats.completed} />
             <StatTile icon={TrendingUp} label="Average" value={`${headerStats.avg}%`} />
@@ -203,7 +203,11 @@ export default function TestCenterPage() {
 
       <TestNav />
 
-      {/* Category tiles */}
+      {/* Category tiles. Name, blurb and count each get their own row instead
+          of competing in one line — at 360px the blurb used to get squeezed
+          between the count and the arrow and truncate mid-word. The name and
+          count are now never in the same flex context as free-form text, so
+          they stay legible regardless of blurb length or viewport width. */}
       <div className="grid gap-3 sm:grid-cols-2">
         {CATEGORIES.map((c) => {
           const Icon = c.icon;
@@ -212,21 +216,25 @@ export default function TestCenterPage() {
             <Link
               key={c.group}
               href={c.href}
-              className="group flex w-full min-w-0 items-center gap-4 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-card transition-colors hover:border-brand-300"
+              className="group flex min-h-[44px] w-full min-w-0 items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-card transition-colors hover:border-brand-300"
             >
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/10">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 ring-1 ring-inset ring-brand-600/10">
                 <Icon className="size-5" />
               </span>
               <div className="min-w-0 flex-1">
-                <h2 className="font-semibold text-slate-900">
-                  {c.group.replace(" Tests", "")}
-                </h2>
-                <p className="mt-0.5 truncate text-sm text-slate-600">{c.blurb}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="font-semibold text-slate-900">
+                    {c.group.replace(" Tests", "")}
+                  </h2>
+                  <ArrowRight className="size-4 shrink-0 text-brand-600 transition-transform group-hover:translate-x-0.5" />
+                </div>
+                <p className="mt-0.5 text-sm leading-snug text-slate-600">
+                  {c.blurb}
+                </p>
+                <span className="mt-2 inline-block text-xs font-semibold tabular-nums text-slate-500">
+                  {count} test{count === 1 ? "" : "s"}
+                </span>
               </div>
-              <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-500">
-                {count} test{count === 1 ? "" : "s"}
-              </span>
-              <ArrowRight className="size-4 shrink-0 text-brand-600 transition-transform group-hover:translate-x-0.5" />
             </Link>
           );
         })}
@@ -263,6 +271,13 @@ export default function TestCenterPage() {
   );
 }
 
+// Stacked icon-over-value-over-label, one column each, wrapped in a shared
+// grid gap (see call site) rather than divide-x borders. divide-x plus a
+// centered layout was the culprit at 360px: three equal columns left ~80px
+// of content width per tile, and "Completed"/"Available" would clip against
+// the border with no room to spare. Left-aligned content and a bg-white/[..]
+// tile (instead of a border) gives each label its own breathing room and
+// scales down cleanly with min-w-0 + break-words instead of truncating.
 function StatTile({
   icon: Icon,
   label,
@@ -273,12 +288,12 @@ function StatTile({
   value: string | number;
 }) {
   return (
-    <div className="min-w-0 px-3 py-4 text-center">
-      <Icon className="mx-auto size-4 text-slate-300" />
-      <div className="mt-1 truncate text-xl font-bold leading-tight tabular-nums">
+    <div className="min-w-0 bg-brand-600 px-2.5 py-3.5 sm:px-4 sm:py-4">
+      <Icon className="size-4 text-accent-300" />
+      <div className="mt-1.5 text-lg font-bold leading-none tabular-nums sm:text-xl">
         {value}
       </div>
-      <div className="mt-0.5 truncate text-[11px] font-medium text-slate-300">
+      <div className="mt-1 break-words text-[10.5px] font-medium leading-tight text-slate-300 sm:text-[11px]">
         {label}
       </div>
     </div>

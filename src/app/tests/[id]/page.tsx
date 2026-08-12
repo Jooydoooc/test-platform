@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Card } from "@/components/ui";
+import { ExamResult } from "@/components/exam";
 import { QuestionRunner, type SubmitMeta } from "@/components/QuestionRunner";
 import {
   bookOf,
@@ -170,10 +171,25 @@ export default function TakeTestPage({
     );
   }
 
-  // ---- Start screen: identity + test summary ----
+  // ---- Start screen: test detail, not a duplicate "start" click ----
+  //
+  // This used to be a bare "Start test" button with no rules, immediately
+  // followed by QuestionRunner's own SecureBriefing screen — two near-
+  // identical gates in a row, the second of which repeats "single attempt",
+  // repeats the question count, and is the one that actually matters (it's
+  // the screen whose Begin button starts the clock and engages the proctor).
+  // A student clicking through two "are you sure you want to start" screens
+  // learns to click fast, not to read either of them.
+  //
+  // This screen now does something SecureBriefing doesn't: shows the test's
+  // title/description and, since attempts here are one-shot (see the
+  // terminal-completion effect above), makes that permanence explicit before
+  // the student is even one click from the proctored briefing. SecureBriefing
+  // remains the single pre-exam gate that covers fullscreen/tab/lock rules
+  // and is the one whose click starts the timer.
   const timed = !!(test.durationMinutes && test.durationMinutes > 0);
   return (
-    <div className="space-y-6">
+    <Card className="mx-auto max-w-lg space-y-5 p-7">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           {test.title}
@@ -189,8 +205,15 @@ export default function TakeTestPage({
         </p>
       </div>
 
-      <Button onClick={() => setPhase("running")}>Start test</Button>
-    </div>
+      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+        This is a single-attempt test. Once you submit, you can't retake it or
+        review the questions again — your teacher keeps the detailed record.
+      </p>
+
+      <Button onClick={() => setPhase("running")} className="w-full justify-center">
+        Continue to secure test
+      </Button>
+    </Card>
   );
 }
 
@@ -207,47 +230,28 @@ function Results({
 }) {
   const score = gradeTest(test, answers);
   const total = maxScore(test);
-  const pct = total > 0 ? Math.round((score / total) * 100) : 0;
 
   return (
     <div className="space-y-6">
-      {timedOut && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Time ran out — your test was submitted automatically with the answers you
-          had so far.
-        </div>
-      )}
-      <Card className="space-y-2 text-center">
-        <p className="text-sm text-slate-500">
-          Results for {name}
-        </p>
-        <h1 className="text-4xl font-bold tabular-nums">
-          {score} / {total}
-        </h1>
-        <p
-          className="text-lg font-semibold tabular-nums"
-          style={{ color: pct >= 50 ? "#3F8F5F" : "#C1473A" }}
-        >
-          {pct}%
-        </p>
-        <p className="text-sm text-slate-500">
-          Your detailed answers remain with your teacher. Use Practice or Books
-          to work on the same skill again.
-        </p>
-      </Card>
+      <ExamResult
+        heading={`Results for ${name}`}
+        scoreEarned={score}
+        scoreTotal={total}
+        cause={timedOut ? "timeout" : "manual"}
+        primaryHref="/results"
+        primaryLabel="View all results"
+      />
+      <p className="text-center text-sm text-slate-500">
+        Your detailed answers remain with your teacher. Use Practice or Books
+        to work on the same skill again.
+      </p>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap justify-center gap-2">
         <Link
           href="/tests"
           className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
           Back to tests
-        </Link>
-        <Link
-          href="/results"
-          className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          View all results
         </Link>
       </div>
     </div>

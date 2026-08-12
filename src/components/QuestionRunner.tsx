@@ -7,12 +7,7 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
-  Clock,
-  Lock,
-  Maximize,
   RotateCcw,
-  Send,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import type { Question, Test } from "@/lib/types";
@@ -30,11 +25,19 @@ import {
 import {
   FullscreenGuard,
   ProctorWarning,
-  fullscreenSupported,
   useProctor,
   type Integrity,
   type ProctorApi,
 } from "@/components/Proctor";
+import { Button } from "@/components/ui";
+import {
+  ExamHeader,
+  ProgressStrip,
+  QuestionPalette,
+  ConfirmSubmit,
+  SecureBriefing,
+  type PaletteItem,
+} from "@/components/exam";
 
 /** Metadata returned to the parent when a test is submitted. */
 export interface SubmitMeta {
@@ -45,17 +48,6 @@ export interface SubmitMeta {
 }
 
 type Answers = Record<string, string[]>;
-
-/** Seconds -> "M:SS" (or "H:MM:SS" past an hour). */
-function formatTime(totalSec: number): string {
-  const s = Math.max(0, Math.floor(totalSec));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
-  const ss = String(sec).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
 
 export function QuestionRunner({
   test,
@@ -78,7 +70,29 @@ export function QuestionRunner({
   const [answers, setAnswers] = useState<Answers>({});
   // Practice only: which questions have been checked (shows feedback + locks input).
   const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>({});
+  // Test only: questions the student has advanced past via Next. Graded mode
+  // is strictly one-way now — there is no Previous and no palette to jump
+  // back with — but that alone is only a UI-level guarantee. This map is the
+  // real enforcement: once a question id is locked here, its answer inputs
+  // render `disabled` no matter what triggers a re-render (a future edit
+  // that reintroduces backward navigation, a resumed/rehydrated state, a
+  // stray setIndex somewhere), because the disabled check reads this map,
+  // not the current index. A question is locked the moment the student
+  // presses Next and leaves it — not before, so the question they're
+  // currently sitting on (including after backing out of the review screen)
+  // stays editable.
+  const [lockedMap, setLockedMap] = useState<Record<string, boolean>>({});
+  // Test only: the submit confirmation modal. There is no pre-submit review
+  // screen any more — it opens directly over the current (last) question.
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Test only: true from the moment the student confirms submission. Passed
+  // straight through to ConfirmSubmit as `submitting` so it freezes its own
+  // buttons/Escape/backdrop — this is the piece of state that has to be set
+  // BEFORE submitTest() runs (see submitTest handler below) so a fast
+  // double-click can't slip a second call in ahead of submittedRef flipping.
+  // The component is swapped out for the results view right after submit, so
+  // this never needs to be reset back to false.
+  const [submitting, setSubmitting] = useState(false);
   const [practiceDone, setPracticeDone] = useState(false);
   const [secureStarted, setSecureStarted] = useState(mode === "practice");
 
@@ -104,6 +118,33 @@ export function QuestionRunner({
           gradeQuestion(qq, answers[qq.id] ?? []) === qq.points,
       ).length,
     [test, checkedMap, answers],
+  );
+
+  // Palette items for the practice-only inline QuestionPalette. Graded mode
+  // no longer has a jumpable palette (ProgressStrip is read-only and needs
+  // no per-item data), and flagging was never part of graded mode, so this
+  // list — and the "flagged" field the shared PaletteItem type still
+  // carries — only matters here for practice.
+  const paletteItems: PaletteItem[] = useMemo(
+    () =>
+      test.questions.map((qq) => ({
+        id: qq.id,
+        label: qq.prompt,
+        answered: isAnswered(answers[qq.id]),
+        flagged: false,
+      })),
+    [test, answers],
+  );
+
+  // Test only: 1-based numbers of questions with no answer, used only for
+  // its length (the ConfirmSubmit unanswered count). Blank answers are
+  // always allowed — this is informational, never a block on Next.
+  const unansweredNumbers = useMemo(
+    () =>
+      test.questions
+        .map((qq, i) => (isAnswered(answers[qq.id]) ? null : i + 1))
+        .filter((n): n is number => n !== null),
+    [test, answers],
   );
 
   // Keep the newest submit closure reachable from the timer without re-arming it.
@@ -201,11 +242,45 @@ export function QuestionRunner({
     setAnswers((prev) => ({ ...prev, [q.id]: value }));
   }
 
+  // Focus target for the question card. When a palette / Previous / Next
+  // click swaps the question card's contents out from under a focused
+  // control, nothing in the new subtree is focused by default and
+  // keyboard/screen-reader users lose their place silently. Moving focus
+  // here on every index change keeps that position honest in both modes.
+  // The ConfirmSubmit modal sits on top of this card rather than replacing
+  // it, so opening or dismissing it never changes `index` and never needs to
+  // steal focus back — the modal manages its own focus trap.
+  const cardRef = useRef<HTMLDivElement>(null);
+  // secureStarted is a dependency because the question card does not exist
+  // behind the briefing screen: without it the effect's first run finds no
+  // target and focus stays on the body for the entire first question.
+  useEffect(() => {
+    cardRef.current?.focus();
+  }, [index, secureStarted]);
+
+  // Practice navigates freely in both directions via Previous/Next/the
+  // palette. Test mode calls this too (from nextTestQuestion below) but only
+  // ever with an increasing index — there is no Previous button and no
+  // palette to jump backward with in graded mode.
   function goTo(next: number) {
-    if (isTest && next < index) return;
     setIndex(Math.max(0, Math.min(total - 1, next)));
     if (typeof window !== "undefined")
       window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // Test only: the sole forward-navigation action. Locks the question being
+  // left (see lockedMap above) and either advances to the next question or,
+  // on the last question, opens ConfirmSubmit directly over it. The last
+  // question is deliberately NOT locked here — opening the modal isn't
+  // "advancing past" it, and dismissing the modal ("Continue test") returns
+  // the student to exactly this question, which must still be editable.
+  function nextTestQuestion() {
+    if (atLast) {
+      setConfirmOpen(true);
+      return;
+    }
+    setLockedMap((prev) => ({ ...prev, [q.id]: true }));
+    goTo(index + 1);
   }
 
   function checkAnswer() {
@@ -243,122 +318,56 @@ export function QuestionRunner({
 
   if (isTest && !secureStarted) {
     return (
-      <div className="mx-auto max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-card-hover">
-        <div className="bg-brand-600 p-7 text-white">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-100 ring-1 ring-inset ring-white/15">
-            <ShieldCheck className="size-3.5" />
-            Secure test
-          </span>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight">{test.title}</h1>
-          {subtitle && <p className="mt-1.5 text-sm text-slate-200">{subtitle}</p>}
-        </div>
-        <div className="space-y-4 p-7">
-          <p className="text-sm text-slate-600">
-            This is a graded, single-attempt test. Read the rules before you begin.
-          </p>
-          <ul className="space-y-2.5 text-sm text-slate-700">
-            {fullscreenSupported() && (
-              <SecureRule icon={Maximize}>The test opens in fullscreen.</SecureRule>
-            )}
-            <SecureRule icon={ShieldCheck}>
-              The first tab or app switch shows a warning. The second submits your test.
-            </SecureRule>
-            <SecureRule icon={Lock}>
-              Answers lock when you continue. Copy, paste and right-click are disabled.
-            </SecureRule>
-            {timeLimitMin && timeLimitMin > 0 ? (
-              <SecureRule icon={Clock}>Time limit: {timeLimitMin} minutes.</SecureRule>
-            ) : null}
-          </ul>
-          <PrimaryButton onClick={beginSecureTest} className="w-full">
-            <ShieldCheck className="size-4" />
-            Begin secure test
-          </PrimaryButton>
-        </div>
-      </div>
+      <SecureBriefing
+        title={test.title}
+        subtitle={subtitle}
+        questionCount={total}
+        timeLimitSec={
+          timeLimitMin && timeLimitMin > 0 ? timeLimitMin * 60 : undefined
+        }
+        onBegin={beginSecureTest}
+      />
     );
   }
 
   const atLast = index + 1 >= total;
-  const timeLow = remainingSec !== null && remainingSec <= 60;
-  const progress = ((index + 1) / total) * 100;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 text-[#0F172A]">
+    <div className="mx-auto max-w-3xl space-y-5 text-brand-600">
       {isTest && proctor.needsFullscreen && (
         <FullscreenGuard onReenter={proctor.reenterFullscreen} />
       )}
       {isTest && proctor.tabWarning && !proctor.needsFullscreen && (
         <ProctorWarning onDismiss={proctor.dismissTabWarning} />
       )}
-      {/* ---- Top bar ---- */}
-      <div className="sticky top-2 z-10 rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md sm:px-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="truncate font-display text-base font-semibold sm:text-lg">
-              {test.title}
-            </h1>
-            {subtitle && (
-              <p className="truncate text-xs text-slate-500 sm:text-sm">
-                {subtitle}
-              </p>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
-            <div className="text-right">
-              <div className="font-mono text-sm font-semibold tabular-nums sm:text-base">
-                {index + 1}
-                <span className="text-slate-400"> / {total}</span>
-              </div>
-              <div className="text-xs text-slate-500">
-                {mode === "practice" ? (
-                  <>
-                    <span className="font-mono tabular-nums text-success">
-                      {nCorrect}
-                    </span>{" "}
-                    correct
-                  </>
-                ) : (
-                  <>
-                    <span className="font-mono tabular-nums">{nAnswered}</span>{" "}
-                    answered
-                  </>
-                )}
-              </div>
-            </div>
-            {remainingSec !== null && (
-              <div
-                className="flex flex-col items-end border-l border-slate-200 pl-3 sm:pl-4"
-                role="timer"
-                aria-live={timeLow ? "assertive" : "off"}
-              >
-                <span
-                  className={`flex items-center gap-1 font-mono text-base font-semibold tabular-nums sm:text-lg ${
-                    timeLow ? "text-error" : "text-[#0F172A]"
-                  }`}
-                >
-                  <Clock className="size-4" />
-                  {formatTime(remainingSec)}
-                </span>
-                <span className="text-[10px] uppercase tracking-wide text-slate-500">
-                  time left
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* Progress meter */}
-        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-          <div
-            className="h-full rounded-full bg-brand-600 transition-[width] duration-500 ease-out"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
+      {/* ---- Top bar ---- */}
+      {isTest ? (
+        <ExamHeader
+          title={test.title}
+          subtitle={subtitle}
+          index={index}
+          total={total}
+          answered={nAnswered}
+          remainingSec={remainingSec}
+          violations={proctor.violations}
+        />
+      ) : (
+        <PracticeHeader
+          title={test.title}
+          subtitle={subtitle}
+          index={index}
+          total={total}
+          nCorrect={nCorrect}
+        />
+      )}
 
       {/* ---- Question card ---- */}
-      <div className="rounded-3xl border border-slate-200/70 bg-white p-5 shadow-card sm:p-8">
+      <div
+        ref={cardRef}
+        tabIndex={-1}
+        className="rounded-3xl border border-slate-200/70 bg-white p-5 shadow-card outline-none sm:p-8"
+      >
         <div className="flex items-center gap-2.5">
           <span className="flex h-7 items-center rounded-full bg-brand-50 px-2.5 font-mono text-xs font-bold tabular-nums text-brand-700">
             Q{index + 1}
@@ -378,7 +387,12 @@ export function QuestionRunner({
           <Options
             question={q}
             answer={answer}
-            disabled={checked}
+            // Practice: input disables once the answer is checked (existing
+            // behaviour, unchanged). Test: input disables once this question
+            // has been locked via nextTestQuestion — reading lockedMap here,
+            // not the current index, is what makes the lock real rather than
+            // cosmetic (see the lockedMap declaration above for why).
+            disabled={isTest ? !!lockedMap[q.id] : checked}
             reveal={verdict !== null}
             onChange={setAnswer}
           />
@@ -398,78 +412,145 @@ export function QuestionRunner({
         {verdict && <Feedback verdict={verdict} question={q} />}
       </div>
 
-      {/* ---- Question navigator ---- */}
-      {mode === "practice" && (
-        <Navigator test={test} answers={answers} current={index} onJump={goTo} />
+      {/* ---- Question navigator ----
+          Practice keeps the jumpable palette. Test mode is strictly
+          one-way now, so it gets the read-only ProgressStrip instead —
+          no buttons, no jumping, just an honest "where am I" readout. */}
+      {isTest ? (
+        <ProgressStrip total={total} index={index} answered={nAnswered} />
+      ) : (
+        <QuestionPalette items={paletteItems} current={index} onJump={goTo} />
       )}
 
-      {/* ---- Bottom navigation ---- */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {mode === "practice" ? (
-          <SecondaryButton onClick={() => goTo(index - 1)} disabled={index === 0}>
+      {/* ---- Bottom navigation ----
+          Practice keeps Previous. Test mode has no Previous at all — the
+          lock above only means anything because there's no button here
+          that could route the student back to a locked question. */}
+      <div
+        className={`flex flex-wrap items-center gap-3 ${
+          mode === "practice" ? "justify-between" : "justify-end"
+        }`}
+      >
+        {mode === "practice" && (
+          <Button
+            variant="secondary"
+            onClick={() => goTo(index - 1)}
+            disabled={index === 0}
+          >
             <ArrowLeft className="size-4" />
             Previous
-          </SecondaryButton>
-        ) : (
-          <p className="flex items-center gap-1.5 text-xs text-slate-500">
-            <Lock className="size-3.5" />
-            Answers lock after you continue.
-          </p>
+          </Button>
         )}
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {mode === "practice" ? (
             checked ? (
               <>
-                <SecondaryButton onClick={retry}>
+                <Button variant="secondary" onClick={retry}>
                   <RotateCcw className="size-4" />
                   Try again
-                </SecondaryButton>
-                <PrimaryButton
+                </Button>
+                <Button
                   onClick={() =>
                     atLast ? setPracticeDone(true) : goTo(index + 1)
                   }
                 >
                   {atLast ? "Finish" : "Next question"}
                   {!atLast && <ArrowRight className="size-4" />}
-                </PrimaryButton>
+                </Button>
               </>
             ) : (
-              <PrimaryButton onClick={checkAnswer} disabled={!answered}>
+              <Button onClick={checkAnswer} disabled={!answered}>
                 <Check className="size-4" />
                 Check answer
-              </PrimaryButton>
+              </Button>
             )
           ) : (
-            <>
-              {!atLast && (
-                <SecondaryButton onClick={() => goTo(index + 1)}>
-                  Next
-                  <ArrowRight className="size-4" />
-                </SecondaryButton>
-              )}
-              <PrimaryButton onClick={() => setConfirmOpen(true)}>
-                <Send className="size-4" />
-                Submit test
-              </PrimaryButton>
-            </>
+            <Button onClick={nextTestQuestion}>
+              {atLast ? "Finish test" : "Next"}
+              {!atLast && <ArrowRight className="size-4" />}
+            </Button>
           )}
         </div>
       </div>
 
-      {/* ---- Submit confirmation ---- */}
+      {/* ---- Submit confirmation ----
+          Opens directly over the current (last) question — there is no
+          review screen underneath it. "Continue test" just closes this
+          modal, leaving the question exactly as it was. */}
       {confirmOpen && (
         <ConfirmSubmit
           answered={nAnswered}
           total={total}
+          unanswered={unansweredNumbers.length}
+          submitting={submitting}
           onCancel={() => setConfirmOpen(false)}
           onConfirm={() => {
-            setConfirmOpen(false);
+            // Set BEFORE submitTest() so a fast double-click can't fire
+            // onConfirm twice ahead of submittedRef flipping inside it —
+            // submittedRef stays the real backstop, this is the UI-level one.
+            setSubmitting(true);
             submitTest(false);
           }}
         />
       )}
     </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Practice header (no proctor, no briefing — a running "N correct" tally that
+// the shared ExamHeader doesn't model, so it stays local to this file).
+// ----------------------------------------------------------------------------
+
+function PracticeHeader({
+  title,
+  subtitle,
+  index,
+  total,
+  nCorrect,
+}: {
+  title: string;
+  subtitle?: string;
+  index: number;
+  total: number;
+  nCorrect: number;
+}) {
+  const progress = total > 0 ? ((index + 1) / total) * 100 : 0;
+  return (
+    <header className="sticky top-2 z-10 rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md sm:px-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="truncate font-display text-base font-semibold sm:text-lg">
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="truncate text-xs text-slate-500 sm:text-sm">
+              {subtitle}
+            </p>
+          )}
+        </div>
+        <div className="text-right">
+          <div className="font-mono text-sm font-semibold tabular-nums sm:text-base">
+            {Math.min(index + 1, total)}
+            <span className="text-slate-400"> / {total}</span>
+          </div>
+          <div className="text-xs text-slate-500">
+            <span className="font-mono tabular-nums text-success">
+              {nCorrect}
+            </span>{" "}
+            correct
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full bg-brand-600 transition-[width] duration-500 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </header>
   );
 }
 
@@ -507,7 +588,7 @@ function Options({
   if (q.type === "short") {
     return (
       <input
-        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-[#0F172A] outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 sm:text-sm"
+        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-brand-600 outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 sm:text-sm"
         value={answer[0] ?? ""}
         disabled={disabled}
         onChange={(e) => onChange([e.target.value])}
@@ -623,7 +704,7 @@ function OptionCard({
       >
         {letter}
       </span>
-      <span className="flex-1 text-sm leading-snug text-[#0F172A] sm:text-base">
+      <span className="flex-1 text-sm leading-snug text-brand-600 sm:text-base">
         {text}
       </span>
       {state === "correct" && (
@@ -671,7 +752,7 @@ function GapSentence({
 
   const input = (
     <input
-      className={`mx-1 inline-block min-w-[7rem] max-w-full border-b-2 bg-transparent px-1 pb-0.5 text-center text-lg font-semibold text-[#0F172A] outline-none sm:text-xl ${borderColor}`}
+      className={`mx-1 inline-block min-w-[7rem] max-w-full border-b-2 bg-transparent px-1 pb-0.5 text-center text-lg font-semibold text-brand-600 outline-none sm:text-xl ${borderColor}`}
       value={answer[0] ?? ""}
       disabled={disabled}
       autoComplete="off"
@@ -684,7 +765,7 @@ function GapSentence({
   );
 
   return (
-    <p className="font-display text-lg leading-relaxed text-[#0F172A] sm:text-xl">
+    <p className="font-display text-lg leading-relaxed text-brand-600 sm:text-xl">
       {before}
       {match ? input : null}
       {after}
@@ -738,7 +819,7 @@ function Feedback({
           {correct ? "Correct." : "Not quite."}
         </p>
         {!correct && (
-          <p className="mt-1 text-sm text-[#0F172A]">
+          <p className="mt-1 text-sm text-brand-600">
             Correct answer: {correctText || "—"}
           </p>
         )}
@@ -747,117 +828,6 @@ function Feedback({
             {question.explanation}
           </p>
         )}
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// Question navigator (jump between questions)
-// ----------------------------------------------------------------------------
-
-function Navigator({
-  test,
-  answers,
-  current,
-  onJump,
-}: {
-  test: Test;
-  answers: Answers;
-  current: number;
-  onJump: (i: number) => void;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200/70 bg-white p-3 shadow-sm sm:p-4">
-      <div className="flex flex-wrap gap-2">
-        {test.questions.map((question, i) => {
-          const isCurrent = i === current;
-          const done = isAnswered(answers[question.id]);
-          return (
-            <button
-              key={question.id}
-              type="button"
-              onClick={() => onJump(i)}
-              aria-label={`Go to question ${i + 1}${done ? ", answered" : ""}`}
-              aria-current={isCurrent ? "true" : undefined}
-              className={`flex size-9 items-center justify-center rounded-xl border font-mono text-sm tabular-nums transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${
-                isCurrent
-                  ? "border-brand-600 bg-brand-600 font-semibold text-white shadow-sm"
-                  : done
-                    ? "border-brand-200 bg-brand-50 font-semibold text-brand-700 hover:border-brand-300"
-                    : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50"
-              }`}
-            >
-              {i + 1}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// Submit confirmation modal
-// ----------------------------------------------------------------------------
-
-function ConfirmSubmit({
-  answered,
-  total,
-  onCancel,
-  onConfirm,
-}: {
-  answered: number;
-  total: number;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const confirmRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    confirmRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
-  const unanswered = total - answered;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="confirm-title"
-      onClick={onCancel}
-    >
-      <div
-        className="w-full max-w-sm rounded-3xl border border-slate-200/70 bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2
-          id="confirm-title"
-          className="font-display text-lg font-semibold text-[#0F172A]"
-        >
-          Submit test?
-        </h2>
-        <p className="mt-2 text-sm text-[#0F172A]">
-          You answered{" "}
-          <span className="font-mono tabular-nums">{answered}</span> of{" "}
-          <span className="font-mono tabular-nums">{total}</span> questions.
-        </p>
-        {unanswered > 0 && (
-          <p className="mt-1 text-sm text-slate-500">
-            Unanswered questions can lower your score.
-          </p>
-        )}
-        <div className="mt-5 flex justify-end gap-3">
-          <SecondaryButton onClick={onCancel}>Cancel</SecondaryButton>
-          <PrimaryButton ref={confirmRef} onClick={onConfirm}>
-            Submit test
-          </PrimaryButton>
-        </div>
       </div>
     </div>
   );
@@ -888,7 +858,7 @@ function PracticeSummary({
     pct >= 80 ? "text-success" : pct >= 50 ? "text-brand-600" : "text-error";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 text-[#0F172A]">
+    <div className="mx-auto max-w-3xl space-y-5 text-brand-600">
       <div className="overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-card">
         <div className="flex flex-col items-center bg-brand-600 px-6 py-8 text-center text-white">
           <span className="flex size-14 items-center justify-center rounded-2xl bg-white/10">
@@ -912,10 +882,10 @@ function PracticeSummary({
       </div>
 
       <div className="flex flex-wrap justify-center gap-3">
-        <PrimaryButton onClick={onRestart}>
+        <Button onClick={onRestart}>
           <RotateCcw className="size-4" />
           Practise again
-        </PrimaryButton>
+        </Button>
         <Link
           href="/practice"
           className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:min-h-0 sm:py-2.5"
@@ -924,55 +894,5 @@ function PracticeSummary({
         </Link>
       </div>
     </div>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// Buttons (Lexora tokens: navy primary, bordered secondary — gold stays an accent)
-// ----------------------------------------------------------------------------
-
-function SecureRule({
-  icon: Icon,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-}) {
-  return (
-    <li className="flex items-start gap-2.5">
-      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-        <Icon className="size-3.5" />
-      </span>
-      <span>{children}</span>
-    </li>
-  );
-}
-
-const buttonBase =
-  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-2 disabled:opacity-45 disabled:pointer-events-none disabled:active:scale-100 sm:min-h-0 sm:py-2.5";
-
-function PrimaryButton({
-  ref,
-  className = "",
-  ...props
-}: React.ComponentProps<"button"> & { ref?: React.Ref<HTMLButtonElement> }) {
-  return (
-    <button
-      ref={ref}
-      className={`${buttonBase} bg-brand-600 text-white shadow-sm hover:bg-brand-700 hover:shadow-card-hover ${className}`}
-      {...props}
-    />
-  );
-}
-
-function SecondaryButton({
-  className = "",
-  ...props
-}: React.ComponentProps<"button">) {
-  return (
-    <button
-      className={`${buttonBase} border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 ${className}`}
-      {...props}
-    />
   );
 }

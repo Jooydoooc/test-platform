@@ -33,7 +33,13 @@ Tests are **single-attempt by default**. A teacher can explicitly re-open a test
 
 ## Secure attempt policy
 
-Graded tests are forward-only. Once a student continues to the next question, the earlier answer is locked. The first tab or app switch shows a warning; the second switch submits the current answers automatically. Copy, paste, right-click, and normal site navigation are unavailable while the test is live. Practice and Books do not use these restrictions.
+Graded tests are strictly **forward-only**. A student answers a question, presses Next, and that answer is locked: there is no Previous button, no jumping between questions, and no flag-for-review. A question the student leaves blank stays blank and scores zero — advancing is never blocked on answering, but it is never reversible either. Progress is shown as a read-only strip (position, answered count, unanswered count), not as a tappable question map.
+
+This is enforced on all three delivery rails — the local runner, the database-backed `/t/<token>` rail, and hosted HTML tests — as real state that disables the answer controls, not by hiding a navigation button.
+
+There is no pre-submit review screen. On the last question, "Finish test" opens a confirmation modal **on top of that question**, showing how many questions were answered and how many blank ones will score zero. "Continue test" closes the modal and leaves that question editable — nothing is locked merely by opening or dismissing it. "Submit test" is terminal. Once submission starts the modal freezes: both buttons disable, and Escape and backdrop clicks stop dismissing it, so a second click, a stray tap or a retry cannot fire a duplicate submission. Server-side that is backstopped by a compare-and-swap inside the finalize RPCs, which is what actually makes submission idempotent.
+
+What else holds: the attempt remains single-shot, the whole-test timer auto-submits on expiry, the first tab or app switch shows a warning and the second submits the current answers automatically, and copy, paste, right-click and normal site navigation are unavailable while the test is live. Practice and Books do not use any of these restrictions: Practice stays freely navigable, repeatable and editable, with per-question feedback.
 
 After completion, the student cannot reopen the graded question set or start a retake from the result page. A teacher can still inspect the detailed attempt and deliberately re-open access when there was a technical problem.
 
