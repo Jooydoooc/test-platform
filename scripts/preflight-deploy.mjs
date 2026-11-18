@@ -136,6 +136,31 @@ const REQUIRED_RPCS = [
     why: "gates the share-link render so a submitted student never gets the question bank serialized",
     args: TOKEN_ARG,
   },
+  // 0037. Admin-only "reopen a completed test attempt" RPC — mutates
+  // (attempts.superseded_at + an attempt_reopens audit row), same as the
+  // 0031 entries above, and probing it is safe for the same reason: 0037
+  // does `revoke all on function reopen_test_attempt(uuid, text) from
+  // public, anon; grant execute ... to authenticated;` (0037, end of
+  // section 4), so anon is refused by the grant before the function body
+  // ever runs. Nothing is read or updated. Belt and braces, the id below is
+  // the all-zeros uuid, which matches no attempt, so even a hypothetical
+  // execution would raise P0002 ("Attempt not found.") rather than touch a
+  // row. Args use the RPC's real parameter names (p_attempt_id, p_reason) —
+  // see src/lib/data/reopen-attempt.ts, which calls it the same way.
+  //
+  // Never probe this with an authenticated key. With an ADMIN user's session
+  // it would execute and could supersede a real attempt. (A service-role key
+  // carries no auth.uid(), so the RPC's own ADMIN check refuses it — but don't
+  // rely on that; use the anon key only.)
+  {
+    fn: "reopen_test_attempt",
+    migration: "0037",
+    why: "admin-only reopen of a completed test attempt (supersede, don't overwrite)",
+    args: {
+      p_attempt_id: "00000000-0000-0000-0000-000000000000",
+      p_reason: null,
+    },
+  },
 ];
 
 async function probe(fn, args) {

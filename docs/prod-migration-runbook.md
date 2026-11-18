@@ -66,7 +66,7 @@ commit**.
 
 ## 2. What is actually outstanding
 
-Nine migrations remain. Two are subtractive against the running app, and one has an
+Eleven migrations remain. Two are subtractive against the running app, and one has an
 ordering constraint of its own.
 
 | Migration | Effect | Risk against the running app |
@@ -89,6 +89,8 @@ guarantee explicit and immune to a future `DEFERRABLE` change, but no live path 
 silently destroying data — the migration's own comment (L86-99) is explicit that `CASCADE` was
 never the prior state, only the option it deliberately avoided. |
 | `0036` | adds `finalize_html_test_attempt`, a SECURITY DEFINER RPC that stamps the attempt, writes `results` and `result_skill_scores`, and returns `was_already_submitted` in one transaction | additive — new function only. Makes hosted-test finalization atomic; today it is a multi-step non-atomic write that can leave an attempt stamped with no result row. The app code that calls it ships in the same PR, so **deploy and migration must move together** in both directions. The preflight (§6) now requires it (`scripts/preflight-deploy.mjs`, `finalize_html_test_attempt` entry, migration `0036`) — deploying app code that calls it against a database without it is blocked, the same way `0032`'s entry blocks a `share_attempt_state`-less deploy. |
+| `0037` | adds `attempts.superseded_at`, re-points the three one-attempt-per-student partial unique indexes to exclude superseded rows, adds the append-only audit table `attempt_reopens`, and adds ADMIN-only `reopen_test_attempt(p_attempt_id, p_reason)` — "supersede, don't overwrite": a reopened attempt keeps its history forever and its `results.excluded_from_progress` is flipped to `true`; a fresh attempt row is what the student actually retakes. Also re-points `share_test_questions` (`0033`), `share_attempt_state` (`0032`), `start_share_attempt` / `start_share_html_attempt` (`0031`) to ignore superseded rows. | additive — new column, new table, new RPC, four `create or replace function` bodies. No existing row is mutated by applying the migration itself (`superseded_at` defaults `null` everywhere); behaviour only changes once an admin calls `reopen_test_attempt`. **But see the deploy-ordering trap below** — the app code on this branch reads `superseded_at` directly in several places, not only through the re-pointed RPCs. |
+| `0038` | `grant select on public.attempt_reopens to authenticated` (RLS, via `attempt_reopens_select`'s `is_teacher()` check, still decides which rows come back) plus two defensive re-`revoke`s of what `0037` already revoked | additive — a grant only, no RLS change, no DML grant, no new function. Fixes a bug `0037` shipped unverified: this project's `supabase/config.toml` leaves table auto-expose off, so `0037` never actually gave `authenticated` the SELECT it assumed came for free, and the table failed **closed** (no reads at all, not even by a teacher) until this migration. Adds no RPC, so there is nothing for the preflight (§6) to check. |
 
 ### `db push` cannot be used for this set
 
@@ -96,7 +98,9 @@ never the prior state, only the option it deliberately avoided. |
 dependency order this runbook needs does not match that order — most importantly, `0034`
 must be live before `0030` can pass (below), but `0034` is numbered after `0030`, so a plain
 `db push` runs `0030` first and it aborts before `0034` is ever reached. There is no flag that
-reorders this.
+reorders this. `0037` and `0038` do stay in filename order relative to each other and to
+everything before them — `0038` only exists to fix a gap `0037` itself opened — so this
+caveat does not add any new reordering requirement, only an extension of the existing one.
 
 **Apply the still-outstanding files individually, via the dashboard SQL editor, in the
 dependency order below** — the same way §4 and §5 already single out `0028` and `0031` rather
@@ -140,8 +144,32 @@ extended to this batch instead of just `0025`–`0027`.
 - `0030` and `0035` are **expected to abort** until the `anon`-DML decision in §3 is made and
   carried out. That is expected, and is not a failure to route around — it is not something
   to fix by weakening either assertion (§3, §7).
+- `0037` has no dependency on `0028`–`0036` beyond ordinary numeric order — it re-points
+  `share_test_questions` / `share_attempt_state` / `start_share_attempt` /
+  `start_share_html_attempt`, but only by adding a `superseded_at is null` clause to
+  predicates those functions already had; it does not need `0031`–`0036` to have landed to
+  apply cleanly (it would apply against a plain `0019`-era schema too). It is listed last
+  here only because it is the most recently written, not because anything before it blocks
+  it.
+- `0038` must come immediately after `0037`, and only after it — it grants `select` on a
+  table `0037` creates, so it fails outright (`relation "attempt_reopens" does not exist`)
+  if run first. Nothing else depends on `0038`.
+- **`0037` and the app deploy have the same two-way trap `0031`/§5 and `0036`/§2 already
+  document, and it is sharper here.** The branch's app code (`src/app/tests/hosted/[token]/
+  page.tsx:115`, `src/lib/data/attempts.ts:94`, `src/lib/data/submit.ts:84`,
+  `src/lib/data/activity-exp.ts:110,133`, `src/lib/data/hosted-tests.ts:122`) reads
+  `attempts.superseded_at` **directly**, with a plain `.is("superseded_at", null)` — not only
+  through the four RPCs `0037` re-points. If that code deploys before `0037` adds the column,
+  every one of those reads fails with "column attempts.superseded_at does not exist" the
+  instant it runs, not just the admin reopen feature. Whether that is survivable depends on
+  the call site: the paths gating test access and submission **fail closed** (refuse
+  to render / refuse to submit, per this repo's own fail-closed rule), but
+  `src/lib/data/hosted-tests.ts:93,113-122` discards the error and silently shows the Test
+  Center's "completed" badge as unset instead, which is a cosmetic regression, not a security
+  one. Apply `0037` (and ideally `0038` right after, since nothing blocks it) **before**
+  deploying this branch's code, not after.
 
-### Full sequence, `0028`–`0036`
+### Full sequence, `0028`–`0038`
 
 One dependency-ordered checklist, replacing the need to reassemble it from the bullets above
 and §4/§5. `0030` and `0035` are listed where their dependencies land them but are **deferred**
@@ -168,10 +196,16 @@ list does not depend on them.
    it reads `tests.published` too (`0033:66`).
 8. `0036` — apply before, or together with, the deploy in the next step; the migration and its
    app code are useless applied alone (§2).
-9. Deploy (§6) — the app code for `0031`/`0032`/`0033` and for `0036` all ship in this same
-   deploy; the preflight now checks for all of them (§2, §6).
-10. `0035` — **expected to abort** on the same `anon`-DML assertion as `0030` (§3). Deferred
-    pending the same decision; nothing in steps 1–9 unblocks it.
+9. `0037` — independent of `0028`–`0036` (above); apply it before the deploy in step 11, not
+   after — the branch's app code reads `attempts.superseded_at` directly in several places
+   that are not gated by the preflight (§2's deploy-ordering note, above).
+10. `0038` — apply immediately after `0037`; it grants `select` on a table `0037` creates, so
+    it cannot run first.
+11. Deploy (§6) — the app code for `0031`/`0032`/`0033`, for `0036`, and for `0037` all ship in
+    this same deploy; the preflight now checks for all RPCs among them (§2, §6) — but not for
+    `attempts.superseded_at` itself, which `0037` adds as a plain column, not an RPC (§6).
+12. `0035` — **expected to abort** on the same `anon`-DML assertion as `0030` (§3). Deferred
+    pending the same decision; nothing in steps 1–11 unblocks it.
 
 An earlier version of this runbook planned a Phase 1 / Phase 2 split with an outage window,
 on the assumption that none of `0024`–`0030` were applied. That assumption was wrong:
@@ -600,6 +634,26 @@ way a missing `0031`/`0032` RPC already was. This existence probe still cannot d
 correct RPC body from a stale one with the same name and signature — §5 already covers the one
 case where that matters (`0033`'s `share_test_questions`, which reuses a pre-existing name).
 
+The preflight also now includes `reopen_test_attempt` (`0037`, §2): `scripts/preflight-
+deploy.mjs`'s `REQUIRED_RPCS` entry probes it with the all-zeros attempt id, the same
+belt-and-braces pattern as the `0031` and `0036` entries — `0037` revokes `EXECUTE` from
+`public`/`anon` and grants it only to `authenticated`, so the anon-key probe is refused by the
+grant before the function body runs, and nothing is read or written.
+
+**This probe only proves the RPC exists — it does not prove `attempts.superseded_at` exists.**
+Several reads on this branch query that column directly over PostgREST (`.is("superseded_at",
+null)`), bypassing the four RPCs `0037` re-points entirely — see the deploy-ordering note under
+§2. The preflight has no check for that column, and this run did not add one: there is no safe
+way to probe a plain column's existence with only the anon key the way the RPC checks do — the
+RPC probes work because a rejected call (`PGRST202` vs. `42501`/success) distinguishes "missing"
+from "present" without executing anything, but there is no equivalent PostgREST surface for "does
+this column exist" that doesn't require either a service-role key (ruled out — see the warning
+above) or a row read gated by RLS, which could just as easily fail because RLS denies the row as
+because the column is missing, giving a false "missing" or false "present" either way. If this
+gap needs closing, it should be its own reviewed addition — e.g. a tiny `SECURITY DEFINER` RPC
+that reports column existence — not a column probe bolted onto the existing RPC-existence
+pattern.
+
 Deploy from a **clean checkout**, not a dirty working tree. The current inability to say what
 is running in production is a direct consequence of `gitDirty` deploys, and it is why §1 and
 §4 still contain unresolved unknowns.
@@ -614,6 +668,13 @@ is running in production is a direct consequence of `gitDirty` deploys, and it i
 - Apply `0028` before confirming the hosted-test path uses the RPC (§4).
 - Upload a test between applying `0031` and completing the deploy (§5).
 - Edit `tests.published` directly in the SQL editor — publish through the admin RPC (§5).
+- Deploy this branch's app code before applying `0037` — it reads `attempts.superseded_at`
+  directly in several places the preflight does not check (§2, §6).
+- Apply `0038` before `0037` — it grants `select` on a table `0037` creates (§2).
+- Null `attempts.submitted_at` to "reopen" an attempt by hand — `0037`'s own header explains
+  why that deadlocks the student's next resubmit; use `reopen_test_attempt` only.
+- Delete rows from `attempt_reopens`, or un-supersede an attempt (clear `superseded_at`) once
+  a student has already taken a fresh attempt against the same test — see §8.
 - Deploy from a dirty working tree (§6).
 - Disable RLS as a recovery step.
 - Delete, truncate, or overwrite student data.
@@ -641,6 +702,8 @@ migrations, stated plainly rather than assumed:
 | `0034` | yes, in principle, `authenticated` only | `0034` revokes from both `authenticated` and `anon` at once, but by the time a rollback of `0034` would be considered, `0030`/`0035` are expected to have already applied — which requires the separate, deliberate `anon`-DML decision in §3 to have already stripped `anon` of DML across the board. A rollback here must not blindly regrant to `anon`; doing so would undo that unrelated decision as a side effect and recreate the exact invariant §3's decision and `0030`/`0035`'s assertions exist to prevent. Restore only the privileges `0034` took from `authenticated`, captured from what it revoked: `grant update, delete on public.attempts to authenticated; grant insert, update, delete on public.attempt_answers to authenticated;` — `anon` is intentionally left out. Even scoped to `authenticated` only, doing this reopens the attempt-reopen bypass `0034` exists to close, and un-satisfies one of `0030`'s four assertions (§3). Not written down as a supported rollback path for that reason. |
 | `0035` | partially | The RLS-helper grants and `group_xp_leaderboard()`/`books_write` redefinitions are reversible in principle by restoring prior function/policy bodies, none of which are written down here. The `attempt_answers.question_id` FK change (`ON DELETE RESTRICT`, replacing `ON DELETE NO ACTION` — not `CASCADE`; see §2) is also reversible as a schema change: a faithful rollback restores `NO ACTION`. `NO ACTION` still makes the database refuse the delete — it is not `CASCADE`, and nothing in this schema declares the constraint `DEFERRABLE`, so the refusal is immediate either way (§2). Reverting to `NO ACTION` does **not** remove the database-level backstop and does **not** leave the app-layer pre-check as the only thing standing between a delete and a student's graded answers; the database still refuses on its own. What reverting loses is `RESTRICT`'s explicit, self-documenting semantics and its immunity to a future `DEFERRABLE` change on the constraint (§2) — not the refusal itself. Still not a rollback to reach for without reason. |
 | `0036` | yes, in principle | Adds `finalize_html_test_attempt` only; dropping it is a clean schema change. But it ships with app code that calls it (§2), so — same as `0032` — do not drop it while the deployed app still expects it. |
+| `0037` | **additive, but never actually reversible once used** | The schema objects (`attempts.superseded_at`, the three re-pointed partial indexes, `attempt_reopens`, `reopen_test_attempt`) could in principle be dropped — `0037`'s own header even writes out the SQL for it. But §2's header is explicit that doing so is **not** a safe undo once any admin has actually called `reopen_test_attempt`: the old attempt is deliberately never deleted (that is the entire "supersede, don't overwrite" design — see `0037`'s header), so a superseded attempt and its result row persist regardless of whether this migration is "rolled back." Dropping the column or the function after a real reopen would only hide the audit trail and the exclusion flag, not undo anything a student experienced — and the no-deletion rule in §7/§8 forbids exactly that outcome. Treat `0037` as reversible only in the narrow sense of "before it has ever been used for a real student"; once used, there is no rollback that doesn't mean living with the state it already wrote (which is by design, not a defect). |
+| `0038` | yes, cleanly | A single `grant select on public.attempt_reopens to authenticated;` plus two already-redundant defensive revokes. `revoke select on public.attempt_reopens from authenticated;` undoes it exactly, with no data implication either way — RLS (`attempt_reopens_select`, `is_teacher()`) still governs which rows are visible regardless of the table-level grant, so reverting this only restores the fail-closed bug `0038`'s header describes, not any access students could be affected by. No app code depends on this grant yet (§2) — nothing reads `attempt_reopens` from `src/` today — so there is no deploy-pairing concern either way. |
 
 **No app-rollback procedure exists at all.** Per §1, the running production build was
 deployed `gitDirty` — built from a working tree, not a clean commit — and by that same
