@@ -176,7 +176,8 @@ and §4/§5. `0030` and `0035` are listed where their dependencies land them but
 — do not run them until the `anon`-DML decision in §3 is made; everything after them in this
 list does not depend on them.
 
-1. `0028` — gated on confirming the hosted-test RPC path is live (§4's abort condition).
+1. `0028` — gated on confirming the hosted-test RPC path is live (§4's abort condition);
+   confirmed against the deployed build's source on 2026-11-19 (§4).
 2. `0029` — independent of everything else here; capture the prior answer-key row first (§4).
 3. `0034` — apply here, ahead of `0030` and ahead of `0031`/`0032`/`0033`, for both reasons
    above.
@@ -389,6 +390,24 @@ commit, this cannot be settled from the repository.
 > creates hosted-test attempts via the RPC. If that cannot be confirmed, deploy current
 > `main` first — where the RPC path is known to be in the source — and apply `0028`
 > immediately afterwards.
+
+> **Resolved 2026-11-19 — the abort condition is satisfied; the fallback deploy is not
+> needed.** The deployed build's source was read back from Vercel (newest `READY`
+> production deployment `dpl_4nwkj5UXjsmDiYEiXSyB1S5XLGts`, created 2026-07-31, CLI,
+> `gitDirty`) — read-only, via the deployment file-tree API. In that source:
+>
+> - hosted-test attempts are created via `start_share_html_attempt`
+>   (`src/app/ht/[token]/route.ts:219`), DB-rail attempts via `start_share_attempt`
+>   (`src/lib/data/attempts.ts:76`);
+> - the only direct `attempts` insert is the vocab path (`src/lib/data/activity-exp.ts:121`),
+>   through `createAdminClient()` — service role, unaffected by `0028`;
+> - every `attempts` UPDATE (`src/app/api/tests/html/submit/route.ts:400`,
+>   `src/lib/data/activity-exp.ts:155`) is also through `createAdminClient()`, and nothing
+>   writes `attempt_answers` at all — so `0034` is safe against the running build too.
+>
+> Assumes the newest `READY` production deployment is the one currently aliased; confirm
+> under Vercel → Deployments → Current before applying. If a newer deploy has gone out
+> since, re-check its source the same way.
 
 > **That fallback is not free, and may not be available at all. Read this before relying
 > on it.** Deploying current `main` means passing the preflight (§6), which requires nine
@@ -665,7 +684,8 @@ is running in production is a direct consequence of `gitDirty` deploys, and it i
 - Repair the migration history until each migration is confirmed applied *in full* (§1).
 - Weaken or bypass `0030`'s assertion block (§3).
 - Revoke `anon` DML as an undocumented side effect — it needs its own review (§3).
-- Apply `0028` before confirming the hosted-test path uses the RPC (§4).
+- Apply `0028` before confirming the hosted-test path uses the RPC (§4) — confirmed for the
+  build deployed 2026-07-31; re-confirm if production has been redeployed since.
 - Upload a test between applying `0031` and completing the deploy (§5).
 - Edit `tests.published` directly in the SQL editor — publish through the admin RPC (§5).
 - Deploy this branch's app code before applying `0037` — it reads `attempts.superseded_at`
