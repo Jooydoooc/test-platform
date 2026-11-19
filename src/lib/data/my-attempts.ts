@@ -125,6 +125,22 @@ export function useMyAttempts(): UseMyAttemptsResult {
       //
       // attempts → joined results (PostgREST inner-join via !inner) to exclude
       // rows with no result yet. RLS on attempts filters to student_id = auth.uid().
+      //
+      // Deliberately NO `.is("superseded_at", null)` here (unlike the
+      // completed-badge queries in attempts.ts/hosted-tests.ts). This is a
+      // HISTORY list, not a "can I take this?" signal — after migration 0037,
+      // a reopened attempt is a real thing the student did, and hiding it
+      // would make their past silently disappear. It stays in this list
+      // forever, alongside the fresh attempt that superseded it.
+      //
+      // This does NOT double-count in any aggregate: the RPC that reopens an
+      // attempt (reopen_test_attempt, 0037) sets that old attempt's
+      // results.excluded_from_progress = true in the same transaction, and
+      // that flag is threaded through below as `excludedFromProgress` on
+      // every MyAttempt. Callers that build stats from this list (e.g.
+      // dashboard.tsx's `realAttempts.filter((a) => !a.excludedFromProgress)`)
+      // already filter on it before summing — a superseded attempt shows up
+      // in history but is excluded from anything that adds scores together.
       const { data: attemptRows, error: attErr } = await supabase
         .from("attempts")
         .select(

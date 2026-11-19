@@ -78,11 +78,20 @@ export async function getExistingAttempt(
   }
 
   const supabase = await createClient();
+  // .is("superseded_at", null) matters here specifically because this is a
+  // RAW table read, not one of the RPCs migration 0037 re-pointed
+  // (share_test_questions / share_attempt_state / start_share_attempt). RLS
+  // lets a student SELECT their own attempts rows directly, so without this
+  // filter a reopened (superseded) attempt would still surface here with its
+  // old submitted_at, and the check below would report alreadyCompleted for a
+  // test an admin just reopened — defeating the whole feature before the
+  // student ever reaches the RPC-gated entry point.
   const { data, error } = await supabase
     .from("attempts")
     .select("id, started_at, submitted_at")
     .eq("test_id", testId)
     .eq("student_id", user.id)
+    .is("superseded_at", null)
     .maybeSingle<{
       id: string;
       started_at: string;

@@ -2,27 +2,25 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  AlertTriangle,
-  Check,
-  Clock,
-  Lock,
-  Maximize,
-  ShieldCheck,
-} from "lucide-react";
-import { Button, Card, ProgressBar } from "@/components/ui";
+import { Check, ShieldCheck } from "lucide-react";
+import { Button, Card } from "@/components/ui";
 import { getExistingAttempt, startAttempt } from "@/lib/data/attempts";
 import { submitAttempt } from "@/lib/data/submit";
 import {
   useProctor,
-  useFocusTrap,
   FullscreenGuard,
   ProctorWarning,
-  fullscreenSupported,
   type Integrity,
 } from "@/components/Proctor";
 import type { Json, QuestionFormat } from "@/lib/database.types";
 import { setLiveTest } from "@/lib/live-test";
+import {
+  ExamHeader,
+  ExamResult,
+  ConfirmSubmit,
+  SecureBriefing,
+  ProgressStrip,
+} from "@/components/exam";
 
 export interface TakerQuestion {
   id: string;
@@ -76,13 +74,6 @@ function isAnswered(format: QuestionFormat, value: unknown): boolean {
   return typeof text === "string" && text.trim().length > 0;
 }
 
-// Shared mm:ss formatter for the countdown — used both on the pre-exam
-// briefing (Fix 1: the clock is already running there, so it must show a live
-// time too) and in the live exam header, so the two never drift in format.
-function formatClock(totalSeconds: number): string {
-  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
-}
-
 type Phase = "loading" | "blocked" | "done" | "taking" | "submitting" | "finished";
 
 export function TestTaker({
@@ -127,11 +118,42 @@ export function TestTaker({
     "manual",
   );
 
-  // Forward-only: index only ever increases; past questions are locked.
+  // ONE-WAY navigation: index only ever advances via Next (or, in preview,
+  // via the previewer's own Next click — see below). There is no Previous
+  // button and no palette to jump backward with, so under normal operation
+  // `index` and `highWaterMark` move in lockstep and index is never less
+  // than highWaterMark.
+  //
+  // highWaterMark exists anyway, as its own piece of state, rather than
+  // deriving the lock purely from "is this the current question": that
+  // would just be hiding the Previous control, which the task explicitly
+  // rejects as an implementation. With a real high-water mark, the answer
+  // controls for the current question are disabled whenever `index` is
+  // somehow behind it — a defense-in-depth guard against any future code
+  // path (a bug, a future feature) that moves `index` backward without
+  // meaning to re-open an already-locked question. It composes with
+  // `locked = submitting` below: both conditions feed the same `locked`
+  // value the ChoiceList/textarea already know how to freeze.
   const [index, setIndex] = useState(0);
+  const [highWaterMark, setHighWaterMark] = useState(0);
   const [responses, setResponses] = useState<Record<string, unknown>>({});
   const [deadline, setDeadline] = useState<number | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
+
+  // Where keyboard/screen-reader focus lands whenever the student returns to
+  // the question view — from an ordinary palette jump / Previous / Next.
+  // Without this, focus falls back to document.body on every navigation,
+  // which is silent and disorienting for keyboard and screen-reader users.
+  // There is no review screen to return focus from any more: "Finish test"
+  // opens ConfirmSubmit directly over this same question, so the question
+  // never leaves the screen and this effect never needs to re-fire for it.
+  const promptRef = useRef<HTMLParagraphElement>(null);
+  // secureStarted belongs in the deps: the prompt does not exist behind the
+  // briefing screen, so without it the first run finds no target and focus
+  // stays on the body for the whole first question.
+  useEffect(() => {
+    promptRef.current?.focus();
+  }, [index, secureStarted]);
 
   const submittingRef = useRef(false);
   // The proctor is engaged after finishSubmit is defined; finishSubmit reads the
@@ -146,6 +168,11 @@ export function TestTaker({
   ) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
+    // Clear any error from a previous failed attempt: leaving it up makes a
+    // retry look like it already failed, and re-setting the identical string
+    // into role="alert" produces no content change, so a second identical
+    // failure would never be announced.
+    setError(null);
     setSubmitCause(cause);
     setPhase("submitting");
     const res = await submitAttempt(
@@ -365,10 +392,6 @@ export function TestTaker({
     }
   }, [token, deadline, proctor]);
 
-  // Shared by the briefing screen's live countdown and the live-exam header
-  // badge, so both flip into the "urgent" red styling at the same threshold.
-  const lowTime = remaining != null && remaining <= 30;
-
   // -------------------------------------------------------------------------
   // Terminal / gate screens
   // -------------------------------------------------------------------------
@@ -405,67 +428,17 @@ export function TestTaker({
   }
 
   if (phase === "finished") {
-    const pct =
-      score && score.total > 0
-        ? Math.round((score.earned / score.total) * 100)
-        : null;
-    const tone =
-      pct == null
-        ? "text-slate-900"
-        : pct >= 80
-          ? "text-success"
-          : pct >= 50
-            ? "text-brand-600"
-            : "text-error";
     return (
-      <Card className="mx-auto max-w-md text-center">
-        <h1 className="text-lg font-bold text-slate-900">Test submitted</h1>
-
-        {submitCause !== "manual" && (
-          <p className="mx-auto mt-2 max-w-xs rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">
-            {submitCause === "timeout"
-              ? "Time ran out, so your answers were submitted automatically."
-              : "You left the exam, so your answers were submitted automatically."}
-          </p>
-        )}
-
-        {pendingReview ? (
-          <p className="mt-3 text-sm text-slate-600">
-            Your answers were recorded. Your teacher will grade the written
-            questions, then your score appears in your results.
-          </p>
-        ) : pct != null ? (
-          <div className="mt-4">
-            <p className={`font-mono text-5xl font-bold tabular-nums ${tone}`}>
-              {pct}%
-            </p>
-            <p className="mt-1 text-sm text-slate-600">
-              {score!.earned} of {score!.total} points
-            </p>
-          </div>
-        ) : (
-          <p className="mt-3 text-sm text-slate-600">
-            Your answers were recorded.
-          </p>
-        )}
-
-        {expAwarded > 0 && (
-          <p className="mt-3 text-sm font-semibold text-brand-600">
-            +{expAwarded} EXP earned
-          </p>
-        )}
-        {newBadges.length > 0 && (
-          <p className="mt-1 text-sm font-medium text-amber-700">
-            New badge{newBadges.length > 1 ? "s" : ""}: {newBadges.join(", ")}
-          </p>
-        )}
-        <Link
-          href={resultId ? `/results?r=${resultId}` : "/tests"}
-          className="mt-5 inline-block text-sm font-semibold text-brand-600 hover:text-brand-700"
-        >
-          {resultId ? "View full result" : "Back to Tests"}
-        </Link>
-      </Card>
+      <ExamResult
+        scoreEarned={score?.earned}
+        scoreTotal={score?.total}
+        pendingReview={pendingReview}
+        expAwarded={expAwarded}
+        newBadges={newBadges}
+        cause={submitCause}
+        primaryHref={resultId ? `/results?r=${resultId}` : "/tests"}
+        primaryLabel={resultId ? "View full result" : "Back to Tests"}
+      />
     );
   }
 
@@ -488,89 +461,33 @@ export function TestTaker({
   // true up front, so a teacher/admin never sees this screen.
   if (!secureStarted) {
     return (
-      <div className="mx-auto max-w-lg">
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-card-hover">
-          <div className="bg-brand-600 p-7 text-white">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-100 ring-1 ring-inset ring-white/15">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Proctored exam
-            </span>
-            <h1 className="mt-4 text-2xl font-bold tracking-tight">
-              {title}
-            </h1>
-            {description && (
-              <p className="mt-1.5 text-sm text-slate-200">
-                {description}
-              </p>
-            )}
-          </div>
-          <div className="space-y-4 p-7">
-            {timeLimitSec != null && deadline != null && (
-              // Resuming an in-progress attempt: the deadline was already
-              // anchored to that attempt's real started_at in the mount
-              // effect (read-only check, no attempt created). The countdown
-              // itself does not tick until secureStarted (see the timer
-              // effect above) — this is a static notice, not a live clock,
-              // so reading it costs nothing extra.
-              <div
-                role="timer"
-                aria-live="off"
-                className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm font-semibold text-amber-800"
-              >
-                <Clock className="h-4 w-4 shrink-0" aria-hidden />
-                <span>
-                  You already started this exam — your timer has been
-                  running since you began. Click Begin to re-enter.
-                </span>
-              </div>
-            )}
-            <p className="text-sm text-slate-600">
-              This is a secure, single-attempt test. Before you begin, please
-              read how it’s monitored:
-            </p>
-            <ul className="space-y-2.5 text-sm text-slate-700">
-              {fullscreenSupported() && (
-                <RuleItem icon={Maximize}>
-                  It runs in <b>fullscreen</b>. Leaving fullscreen is recorded.
-                </RuleItem>
-              )}
-              <RuleItem icon={AlertTriangle}>
-                <b>Stay on this tab.</b> Switching tabs or apps is recorded —
-                leaving twice submits your test automatically.
-              </RuleItem>
-              <RuleItem icon={Lock}>
-                Copy, paste and right-click are disabled. Answers lock as you
-                advance.
-              </RuleItem>
-              {timeLimitSec ? (
-                <RuleItem icon={Clock}>
-                  Total time limit:{" "}
-                  <b>
-                    {Math.floor(timeLimitSec / 60)} minute
-                    {timeLimitSec >= 120 ? "s" : ""}
-                  </b>
-                  . It's already counting down above — reading these rules
-                  does not pause it.
-                </RuleItem>
-              ) : null}
-            </ul>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button
-              autoFocus
-              onClick={beginSecure}
-              disabled={beginning}
-              className="w-full justify-center"
+      <SecureBriefing
+        title={title}
+        subtitle={description}
+        questionCount={questions.length}
+        timeLimitSec={timeLimitSec}
+        error={error}
+        busy={beginning}
+        onBegin={beginSecure}
+        notice={
+          timeLimitSec != null && deadline != null ? (
+            // Resuming an in-progress attempt: the deadline was already
+            // anchored to that attempt's real started_at in the mount
+            // effect (read-only check, no attempt created). The countdown
+            // itself does not tick until secureStarted (see the timer
+            // effect above) — this is a static notice, not a live clock,
+            // so reading it costs nothing extra.
+            <div
+              role="timer"
+              aria-live="off"
+              className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm font-semibold text-amber-800"
             >
-              <ShieldCheck className="h-4 w-4" />
-              {beginning ? "Starting…" : "Begin secure test"}
-            </Button>
-            <p className="text-center text-xs text-slate-500">
-              {questions.length} question{questions.length === 1 ? "" : "s"} ·
-              one attempt
-            </p>
-          </div>
-        </div>
-      </div>
+              You already started this exam — your timer has been running
+              since you began. Click Begin to re-enter.
+            </div>
+          ) : null
+        }
+      />
     );
   }
 
@@ -579,8 +496,32 @@ export function TestTaker({
   // -------------------------------------------------------------------------
   const q = questions[index];
   const isLast = index === questions.length - 1;
-  const answered = isAnswered(q.format, responses[q.id]);
   const submitting = phase === "submitting";
+  // finishSubmit snapshots `responses` the moment it fires, so anything the
+  // student changes while the request is in flight — or after a timeout /
+  // proctor-forced auto-submit has already started — is silently dropped from
+  // the payload and then vanishes when the result screen replaces this view.
+  // Freezing the answer controls makes the snapshot honest: what they see is
+  // what was sent.
+  //
+  // The advance-lock (`index < highWaterMark`) composes with that submit
+  // freeze rather than replacing it: either condition alone is enough to
+  // disable the controls, and a submit in flight still wins even on the
+  // one question that would otherwise be editable. Preview is exempt from
+  // the advance-lock entirely — a previewer has no attempt row, nothing is
+  // ever "locked in" for them, they can page freely with Next.
+  const locked = submitting || (!preview && index < highWaterMark);
+  const answeredCount = questions.filter((qq) =>
+    isAnswered(qq.format, responses[qq.id]),
+  ).length;
+  // 1-based question numbers failing isAnswered. ConfirmSubmit only needs the
+  // count (its `unanswered` prop is a number), but keeping this as the full
+  // list — rather than a bare count — keeps isAnswered as the single source
+  // of truth for both `answeredCount` and this tally, so they can never
+  // disagree about which questions are blank.
+  const unanswered = questions
+    .map((qq, i) => (isAnswered(qq.format, responses[qq.id]) ? null : i + 1))
+    .filter((n): n is number => n !== null);
 
   const setChoiceSingle = (choiceId: string) =>
     setResponses((r) => ({ ...r, [q.id]: { selected: [choiceId] } }));
@@ -615,57 +556,43 @@ export function TestTaker({
         <ProctorWarning onDismiss={proctor.dismissTabWarning} />
       )}
 
-      <header className="rounded-2xl border border-slate-200 bg-brand-600 p-5 text-white shadow-card">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-slate-100 ring-1 ring-inset ring-white/15">
-              <ShieldCheck className="h-3 w-3" />
-              Secure mode
-            </span>
-            <h1 className="mt-2 truncate text-lg font-bold tracking-tight">
-              {title}
-            </h1>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {proctor.violations > 0 && (
-              <span
-                className="inline-flex items-center gap-1 rounded-lg bg-red-500/20 px-2.5 py-1.5 text-sm font-semibold text-red-200 ring-1 ring-inset ring-red-400/30"
-                title="Proctor flags recorded for your teacher"
-              >
-                <AlertTriangle className="h-3.5 w-3.5" />
-                {proctor.violations}
-              </span>
-            )}
-            {remaining != null && (
-              <span
-                role="timer"
-                aria-live={lowTime ? "assertive" : "off"}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold tabular-nums ${
-                  lowTime
-                    ? "bg-red-500/25 text-red-100 ring-1 ring-inset ring-red-400/40"
-                    : "bg-white/10 text-white ring-1 ring-inset ring-white/20"
-                }`}
-              >
-                <Clock className="h-3.5 w-3.5" />
-                <span className="sr-only">Time remaining: </span>
-                {formatClock(remaining)}
-              </span>
-            )}
-          </div>
-        </div>
-      </header>
+      <ExamHeader
+        title={title}
+        subtitle={description}
+        index={index}
+        total={questions.length}
+        answered={answeredCount}
+        remainingSec={remaining}
+        violations={proctor.violations}
+        preview={preview}
+      />
 
-      <div className="space-y-1.5">
-        <ProgressBar value={((index + 1) / questions.length) * 100} />
-        <p className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-          <Lock className="size-3.5 text-slate-400" aria-hidden />
-          Question {index + 1} of {questions.length} · answers lock when you
-          move on
+      {/* A manual submit is now started FROM this same question view — there
+          is no separate review screen to drop the student back onto, so a
+          failed submitAttempt just leaves them here with the error visible
+          and the modal (if it's still open) interactive again. */}
+      {error && (
+        <p role="alert" className="text-sm font-medium text-error">
+          {error}
         </p>
-      </div>
+      )}
+
+      {/* Read-only — no click handlers, no jump. Once a student advances
+          past a question the only remaining record of it is this strip. */}
+      <ProgressStrip
+        total={questions.length}
+        index={index}
+        answered={answeredCount}
+      />
 
       <Card className="space-y-4 select-none">
-        <p className="font-medium text-slate-900">{q.prompt}</p>
+        <p
+          ref={promptRef}
+          tabIndex={-1}
+          className="font-medium text-slate-900 outline-none"
+        >
+          {q.prompt}
+        </p>
 
         {isChoice ? (
           <ChoiceList
@@ -673,6 +600,7 @@ export function TestTaker({
             selected={selected}
             multi={isMulti}
             groupLabel={q.prompt}
+            disabled={locked}
             onSelectSingle={setChoiceSingle}
             onToggleMulti={toggleChoiceMulti}
           />
@@ -680,16 +608,50 @@ export function TestTaker({
           <textarea
             value={textValue}
             onChange={(e) => setText(e.target.value)}
+            disabled={locked}
             rows={3}
             placeholder="Type your answer…"
-            className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25"
+            className="w-full rounded-xl border border-line px-3 py-2 text-sm text-slate-900 outline-none transition-colors duration-150 focus-visible:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
           />
         )}
       </Card>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {locked && (
+        <p
+          role="status"
+          className="text-sm font-medium text-slate-600"
+        >
+          Submitting your answers… your answers are locked while this
+          finishes.
+        </p>
+      )}
 
-      <div className="flex flex-col items-end gap-1.5">
+      {/* A student gets NO Previous button, by design: this rail is
+          strictly one-way. Preview is the deliberate exception — see the
+          Previous control below, which renders for teachers/admins only.
+          justify-between so preview's two controls sit at opposite ends;
+          for a student the single Next/Finish button is pushed right by
+          the empty spacer that takes Previous's place. */}
+      <div className="flex items-center justify-between gap-3">
+        {preview ? (
+          // Preview really does page freely, in BOTH directions. A
+          // teacher/admin has no attempt row, so none of the one-way
+          // machinery applies to them (`locked` is already false above)
+          // — and without a Previous button they would be stranded on
+          // the last question with no way back through the test they
+          // came here to read.
+          <Button
+            variant="secondary"
+            onClick={() => setIndex((i) => Math.max(0, i - 1))}
+            disabled={index === 0}
+          >
+            Previous
+          </Button>
+        ) : (
+          // Spacer: keeps the lone Next/Finish button right-aligned
+          // under justify-between without a second layout branch.
+          <span aria-hidden />
+        )}
         {preview ? (
           isLast ? (
             <p className="text-xs font-medium text-slate-500">
@@ -701,38 +663,61 @@ export function TestTaker({
             </Button>
           )
         ) : isLast ? (
-          <Button
-            onClick={() => setConfirmOpen(true)}
-            disabled={!answered || submitting}
-          >
-            {submitting ? "Submitting…" : "Submit test"}
+          // Opens ConfirmSubmit directly over this question — there is no
+          // review/summary screen any more. Opening the modal is purely a UI
+          // overlay: it does not touch `highWaterMark` and does not lock this
+          // question, so "Continue test" in the modal leaves it exactly as
+          // editable as it was before the click.
+          <Button onClick={() => setConfirmOpen(true)} disabled={locked}>
+            Finish test
           </Button>
         ) : (
-          <Button onClick={() => setIndex((i) => i + 1)} disabled={!answered}>
+          <Button
+            onClick={() => {
+              // Raise the high-water mark to the question being left
+              // BEFORE moving forward: this is what makes the lock a
+              // real advance-lock rather than a Previous button that
+              // happens to be hidden. Once this fires, question `index`
+              // can never be rendered editable again — every future
+              // render's `locked` check sees index < highWaterMark and
+              // disables ChoiceList/textarea, with no code path (jump,
+              // back button, anything) able to reopen it.
+              setHighWaterMark((h) => Math.max(h, index + 1));
+              setIndex((i) => i + 1);
+            }}
+            disabled={locked}
+          >
             Next question
           </Button>
-        )}
-        {!preview && answered && (
-          <p className="text-xs text-slate-500">
-            {isLast
-              ? "You can’t change answers after submitting."
-              : "This locks your answer — you can’t come back."}
-          </p>
         )}
       </div>
 
       {!preview && confirmOpen && (
         <ConfirmSubmit
-          answered={
-            questions.filter((qq) => isAnswered(qq.format, responses[qq.id]))
-              .length
-          }
+          answered={answeredCount}
           total={questions.length}
+          unanswered={unanswered.length}
+          note={
+            // The modal is a full overlay, so on a failed submit the page's
+            // own error paragraph above renders behind it — this is the only
+            // copy of the failure the student can actually see while the
+            // modal is still open, which is why it stays mounted for a retry
+            // instead of closing.
+            <>
+              This can’t be undone — each test is taken once.
+              {error && (
+                <span
+                  role="alert"
+                  className="mt-2 block font-semibold text-error"
+                >
+                  {error}
+                </span>
+              )}
+            </>
+          }
+          submitting={submitting}
           onCancel={() => setConfirmOpen(false)}
-          onConfirm={() => {
-            setConfirmOpen(false);
-            finishSubmit();
-          }}
+          onConfirm={() => finishSubmit()}
         />
       )}
     </div>
@@ -749,6 +734,7 @@ function ChoiceList({
   selected,
   multi,
   groupLabel,
+  disabled = false,
   onSelectSingle,
   onToggleMulti,
 }: {
@@ -756,6 +742,8 @@ function ChoiceList({
   selected: string[];
   multi: boolean;
   groupLabel: string;
+  /** Frozen while a submit is in flight, so a discarded edit can't look accepted. */
+  disabled?: boolean;
   onSelectSingle: (id: string) => void;
   onToggleMulti: (id: string) => void;
 }) {
@@ -771,7 +759,7 @@ function ChoiceList({
 
   const moveAndSelect = (from: number, dir: 1 | -1) => {
     const n = choices.length;
-    if (n === 0) return;
+    if (n === 0 || disabled) return;
     const to = ((from + dir) % n + n) % n;
     btnRefs.current[to]?.focus();
     onSelectSingle(choices[to].id);
@@ -806,12 +794,17 @@ function ChoiceList({
             role={multi ? "checkbox" : "radio"}
             aria-checked={on}
             tabIndex={multi ? 0 : i === activeIdx ? 0 : -1}
+            disabled={disabled}
+            aria-disabled={disabled || undefined}
             onKeyDown={(e) => onKeyDown(e, i)}
-            onClick={() => (multi ? onToggleMulti(c.id) : onSelectSingle(c.id))}
-            className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition ${
+            onClick={() => {
+              if (disabled) return;
+              return multi ? onToggleMulti(c.id) : onSelectSingle(c.id);
+            }}
+            className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-70 ${
               on
                 ? "border-brand-500 bg-brand-50 text-slate-900 ring-1 ring-brand-500"
-                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                : "border-line bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
             }`}
           >
             <span
@@ -842,95 +835,6 @@ function PreviewBanner() {
     >
       <ShieldCheck className="h-4 w-4 shrink-0" />
       Preview mode — nothing is recorded and no attempt is created.
-    </div>
-  );
-}
-
-function RuleItem({
-  icon: Icon,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-}) {
-  return (
-    <li className="flex items-start gap-2.5">
-      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-        <Icon className="h-3.5 w-3.5" />
-      </span>
-      <span className="min-w-0">{children}</span>
-    </li>
-  );
-}
-
-function ConfirmSubmit({
-  answered,
-  total,
-  onCancel,
-  onConfirm,
-}: {
-  answered: number;
-  total: number;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  // Traps Tab within the dialog (Fix 3) — without it, a keyboard user could
-  // Tab past "Keep working"/"Submit test" into the answer buttons behind this
-  // overlay and change their answer while a submit decision is pending.
-  useFocusTrap(containerRef);
-
-  useEffect(() => {
-    document.getElementById("taker-confirm-submit")?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
-  const unanswered = total - answered;
-
-  return (
-    <div
-      ref={containerRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="taker-confirm-title"
-      onClick={onCancel}
-    >
-      <div
-        className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2
-          id="taker-confirm-title"
-          className="text-lg font-bold text-slate-900"
-        >
-          Submit test?
-        </h2>
-        <p className="mt-2 text-sm text-slate-600">
-          You answered{" "}
-          <span className="font-mono tabular-nums">{answered}</span> of{" "}
-          <span className="font-mono tabular-nums">{total}</span>. This can’t be
-          undone — each test is taken once.
-        </p>
-        {unanswered > 0 && (
-          <p className="mt-1 text-sm text-amber-700">
-            {unanswered} unanswered question{unanswered > 1 ? "s" : ""} will
-            score zero.
-          </p>
-        )}
-        <div className="mt-5 flex justify-end gap-3">
-          <Button variant="secondary" onClick={onCancel}>
-            Keep working
-          </Button>
-          <Button id="taker-confirm-submit" onClick={onConfirm}>
-            Submit test
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

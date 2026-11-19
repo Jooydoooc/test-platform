@@ -38,6 +38,11 @@ export interface SkillStat {
   resultCount: number;
 }
 
+/** What kind of thing an attempt was taken against — determines whether a
+ *  re-open is even meaningful, and lets the UI render an honest label instead
+ *  of a generic "Untitled". */
+export type AttemptKind = "test" | "html_test" | "task" | "vocab" | "unknown";
+
 /** One recent graded result, flattened for display. */
 export interface RecentResult {
   id: string;
@@ -47,6 +52,16 @@ export interface RecentResult {
   correct: number;
   total: number;
   accuracy: number; // 0..1
+  /** The attempt this result belongs to — what a re-open acts on. Optional
+   *  only for backward compatibility with older cached responses; the API
+   *  always sends it now. */
+  attemptId?: string;
+  /** DB test vs hosted HTML test vs task vs vocab unit. */
+  attemptKind?: AttemptKind;
+  /** True once an admin has already reopened this attempt (its result is
+   *  excluded from progress and a fresh attempt exists). A superseded row
+   *  must never be offered the re-open control again. */
+  superseded?: boolean;
 }
 
 export interface StudentDetail {

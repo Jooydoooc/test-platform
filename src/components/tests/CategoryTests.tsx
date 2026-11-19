@@ -8,7 +8,7 @@
 // Ported from the former single-page /tests view (the group rail is gone — the
 // page IS the category).
 
-import { useMemo, useState, type ComponentType } from "react";
+import { useMemo, useState, type ComponentType, type ReactNode } from "react";
 import {
   ArrowRight,
   CheckCircle2,
@@ -143,8 +143,10 @@ export function CategoryTests({ group }: { group: TestGroup }) {
 
   return (
     <div className="space-y-6">
-      {/* Filter bar */}
-      <Card className="!p-3 sm:!p-4">
+      {/* Filter bar. Same rounded-2xl / border-slate-200 / shadow-card
+          treatment as the test cards below it, just without the hover-lift
+          (it isn't a link) — one card language for the whole page. */}
+      <Card className="!rounded-2xl !p-3 sm:!p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/25">
             <Search className="h-4 w-4 shrink-0 text-slate-400" />
@@ -201,11 +203,61 @@ export function CategoryTests({ group }: { group: TestGroup }) {
 // ============================================================
 // Cards + sub-components (shared)
 // ============================================================
+//
+// Hosted and local tests come from different rails with different metadata,
+// but must read as one visual family — same shell, same badge row, same
+// heading scale, same footer treatment. The pieces below (CARD_SHELL,
+// CardHeading, CardMeta, CompletedFooter) are the single source of truth for
+// that shared treatment; each card supplies only the metadata that differs.
+
+const CARD_SHELL =
+  "flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover sm:p-6";
+
+function CardHeading({ title }: { title: string }) {
+  return (
+    <h2 className="mt-3 text-lg font-extrabold tracking-tight text-slate-900">
+      {title}
+    </h2>
+  );
+}
+
+function CardBlurb({ children }: { children: string }) {
+  return (
+    <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-slate-600">
+      {children}
+    </p>
+  );
+}
+
+function CardMeta({ className = "", children }: { className?: string; children: ReactNode }) {
+  return (
+    <div
+      className={`mt-4 grid grid-cols-2 gap-2 text-[13px] font-semibold text-slate-600 ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Terminal state footer, identical for hosted and local cards: a completed
+// test is NOT reopenable from here. Reopening was a review affordance, but it
+// handed the student the question content back on demand — which contradicts
+// the access model: a test is reachable only while it is published AND the
+// student holds the link. Completion is terminal, and there is deliberately
+// no "review answers" / answer-key link anywhere in this state.
+function CompletedFooter() {
+  return (
+    <p className="flex min-w-[8rem] flex-1 items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-600">
+      <CheckCircle2 className="h-4 w-4 text-success" />
+      Completed
+    </p>
+  );
+}
 
 function HostedTestCard({ test }: { test: HostedTest }) {
   const completed = test.completedAt !== null;
   return (
-    <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
+    <article className={CARD_SHELL}>
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge tone="brand">{scopeLabel(test.skillScope)}</Badge>
         {test.level && (
@@ -222,35 +274,26 @@ function HostedTestCard({ test }: { test: HostedTest }) {
           </Badge>
         )}
       </div>
-      <h2 className="mt-3 text-lg font-extrabold tracking-tight text-slate-900">
-        {test.title}
-      </h2>
-      <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-slate-600">
+      <CardHeading title={test.title} />
+      <CardBlurb>
         {completed
           ? "Completed. Your result is saved to your progress."
           : "One attempt. Leaving the test twice submits it automatically."}
-      </p>
-      <div className="mt-4 grid grid-cols-2 gap-2 text-[13px] font-semibold text-slate-600">
+      </CardBlurb>
+      <CardMeta>
         <Meta icon={Lock} label="Single attempt" />
         <Meta icon={CheckCircle2} label="Auto-graded" />
-      </div>
-      {/* A completed test is NOT reopenable. Reopening was a review affordance,
-          but it handed the student the question content back on demand — which
-          contradicts the access model: a test is reachable only while it is
-          published AND the student holds the link. Completion is terminal. */}
+      </CardMeta>
       <div className="mt-5 flex flex-wrap gap-2">
         {completed ? (
-          <p className="flex min-w-[8rem] flex-1 items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-600">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            Completed
-          </p>
+          <CompletedFooter />
         ) : (
           <LinkButton
-            href={`/ht/${test.shareToken}`}
+            href={`/tests/hosted/${test.shareToken}`}
             className="group min-w-[8rem] flex-1"
           >
             <PlayCircle className="h-4 w-4" />
-            Start Test
+            View test
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </LinkButton>
         )}
@@ -273,7 +316,7 @@ function TestCard({
   const points = maxScore(test);
 
   return (
-    <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
+    <article className={CARD_SHELL}>
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge tone="brand">{groupOf(test).replace(" Tests", "")}</Badge>
         {test.category && <Badge tone="neutral">{test.category}</Badge>}
@@ -286,20 +329,14 @@ function TestCard({
           </Badge>
         )}
       </div>
-      <h2 className="mt-3 text-lg font-extrabold tracking-tight text-slate-900">
-        {test.title}
-      </h2>
-      {test.description && (
-        <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-slate-600">
-          {test.description}
-        </p>
-      )}
-      <div className="mt-4 grid grid-cols-2 gap-2 text-[13px] font-semibold text-slate-600 sm:grid-cols-4">
+      <CardHeading title={test.title} />
+      {test.description && <CardBlurb>{test.description}</CardBlurb>}
+      <CardMeta className="sm:grid-cols-4">
         <Meta icon={ListChecks} label={`${test.questions.length} Qs`} />
         <Meta icon={Star} label={`${points} pts`} />
         <Meta icon={Clock} label={`~${mins}m`} />
         <Meta icon={Lock} label="One attempt" />
-      </div>
+      </CardMeta>
       {completed && (
         <div className="mt-4">
           <div className="mb-1 flex items-center justify-between text-xs font-semibold">
@@ -314,10 +351,7 @@ function TestCard({
       )}
       <div className="mt-5 flex flex-wrap gap-2">
         {completed ? (
-          <p className="flex min-w-[8rem] flex-1 items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-600">
-            <CheckCircle2 className="h-4 w-4 text-success" />
-            Completed
-          </p>
+          <CompletedFooter />
         ) : (
           <LinkButton href={`/tests/${test.id}`} className="group min-w-[8rem] flex-1">
             <PlayCircle className="h-4 w-4" />

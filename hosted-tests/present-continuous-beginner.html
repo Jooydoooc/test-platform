@@ -7,14 +7,24 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --indigo:#4f46e5;--indigo-deep:#4338ca;--indigo-tint:#eef2ff;--indigo-ring:#6366f1;
-  --ink-head:#0f172a;--ink-body:#334155;--ink-muted:#64748b;
-  --success:#0d9488;--error:#dc2626;--amber:#b45309;
-  --border:#e2e8f0;--white:#ffffff;--bg:#f8fafc;
-  --radius:16px;--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --bg:#FAFAF8;--white:#ffffff;
+  --ink:#1B2130;--ink-soft:#565C6E;--ink-faint:#8A8FA0;
+  --ink-tint:#E4E6EC;--ink-tint-border:#7C8296;
+  /* State borders on the question palette carry meaning on their own, so they
+     clear WCAG 1.4.11's 3:1 non-text threshold against white — unlike --border,
+     which is only ever a decorative card edge. */
+  --state-border:#8E94A3;
+  --accent:#E3A82B;--accent-tint:#FBF0D8;--accent-deep:#7D561C;
+  --border:#E3E1DB;
+  --success:#3F8F5F;--success-tint:#E7F3EC;
+  --error:#C1473A;--error-tint:#FBEAE8;
+  --info:#3E6FA0;--info-tint:#E9F1F8;
+  --radius:16px;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
 }
-html{font-family:var(--font);background:var(--bg);color:var(--ink-body);-webkit-font-smoothing:antialiased}
-body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:0 0 80px}
+html{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:0 0 80px;overflow-x:hidden}
 
 /* ── Header ── */
 .lx-header{
@@ -22,39 +32,50 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padd
   padding:14px 20px;display:flex;align-items:center;justify-content:space-between;
   position:sticky;top:0;z-index:100;
 }
-.lx-logo{font-size:1.1rem;font-weight:700;color:var(--indigo);letter-spacing:-.02em}
-.lx-meta{font-size:.8rem;color:var(--ink-muted);font-variant-numeric:tabular-nums}
+.lx-logo{font-size:1.05rem;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+.lx-meta{font-size:.8rem;font-weight:600;color:var(--ink-soft)}
 
 /* ── Progress bar ── */
-.progress-wrap{width:100%;height:4px;background:var(--border);position:sticky;top:57px;z-index:99}
-.progress-fill{height:100%;background:var(--indigo);transition:width .2s ease-out;width:0%}
+.progress-wrap{width:100%;height:4px;background:var(--border);position:sticky;top:53px;z-index:99}
+.progress-fill{height:100%;background:var(--accent);transition:width .2s ease-out;width:0%}
 @media(prefers-reduced-motion:reduce){.progress-fill{transition:none}}
 
 /* ── Cards ── */
 .card{
   width:100%;max-width:640px;background:var(--white);border:1px solid var(--border);
-  border-radius:var(--radius);box-shadow:0 1px 4px rgba(0,0,0,.06);
+  border-radius:var(--radius);box-shadow:0 1px 4px rgba(27,33,48,.06);
   padding:24px 20px;margin-top:24px;
 }
 @media(min-width:640px){.card{padding:32px 36px}}
 
 /* ── Question meta ── */
-.q-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-.q-num{font-size:.75rem;font-weight:600;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.06em;font-variant-numeric:tabular-nums}
+.q-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.q-num{
+  font-family:var(--font-mono);font-variant-numeric:tabular-nums;
+  font-size:.75rem;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;
+}
 .q-type-badge{
-  font-size:.7rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
   padding:3px 9px;border-radius:99px;
 }
-.badge-mc{background:#ede9fe;color:#5b21b6}
-.badge-wo{background:#fef3c7;color:#92400e}
-.badge-tr{background:#d1fae5;color:#065f46}
+.badge-mc{background:var(--info-tint);color:var(--info)}
+.badge-wo{background:var(--ink-tint);color:var(--ink-soft)}
+.badge-tr{background:var(--success-tint);color:var(--success)}
 
 /* ── Prompt ── */
-.q-prompt{
-  font-size:1.08rem;font-weight:600;color:var(--ink-head);line-height:1.5;
-  margin-bottom:22px;
-}
-
+.q-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:22px}
+.q-prompt{font-size:1.08rem;font-weight:700;color:var(--ink);line-height:1.5}
+/* These four take focus programmatically (palette jump, screen change) so the
+   student's screen reader announces where they landed. A blanket outline:none
+   also hid the ring from sighted keyboard users, who now navigate entirely by
+   palette — so suppress the ring only when the browser says the focus was not
+   keyboard-driven, and keep it for :focus-visible. */
+.q-prompt:focus:not(:focus-visible),
+.confirm-card h2:focus:not(:focus-visible),
+.score-big:focus:not(:focus-visible){outline:none}
+.q-prompt:focus-visible,
+.confirm-card h2:focus-visible,
+.score-big:focus-visible{outline:2px solid var(--ink);outline-offset:4px;border-radius:4px}
 /* ── MC Options ── */
 .mc-group{display:flex;flex-direction:column;gap:10px;outline:none}
 .mc-option{
@@ -64,10 +85,10 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padd
   min-height:44px;user-select:none;position:relative;
 }
 .mc-option:focus-within,.mc-option:focus{
-  outline:none;border-color:var(--indigo-ring);box-shadow:0 0 0 3px rgba(99,102,241,.18);
+  outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(27,33,48,.14);
 }
 .mc-option[aria-checked="true"]{
-  border-color:var(--indigo);background:var(--indigo-tint);
+  border-color:var(--accent);background:var(--accent-tint);
 }
 .mc-option input[type=radio]{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
 .mc-indicator{
@@ -75,109 +96,172 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padd
   display:flex;align-items:center;justify-content:center;
   transition:border-color .15s,background .15s;
 }
-.mc-option[aria-checked="true"] .mc-indicator{border-color:var(--indigo);background:var(--indigo)}
+.mc-option[aria-checked="true"] .mc-indicator{border-color:var(--ink);background:var(--ink)}
 .mc-indicator svg{display:none}
 .mc-option[aria-checked="true"] .mc-indicator svg{display:block}
 .mc-letter{
-  font-size:.75rem;font-weight:700;color:var(--ink-muted);min-width:18px;
+  font-family:var(--font-mono);font-size:.75rem;font-weight:700;color:var(--ink-faint);min-width:18px;
   text-transform:uppercase;
 }
-.mc-option[aria-checked="true"] .mc-letter{color:var(--indigo-deep)}
-.mc-text{font-size:.97rem;color:var(--ink-body);line-height:1.4}
-.mc-option[aria-checked="true"] .mc-text{color:var(--ink-head);font-weight:500}
+.mc-option[aria-checked="true"] .mc-letter{color:var(--ink)}
+.mc-text{font-size:.97rem;color:var(--ink-soft);line-height:1.4}
+.mc-option[aria-checked="true"] .mc-text{color:var(--ink);font-weight:600}
 
 /* ── Word order ── */
-.wo-instruction{font-size:.82rem;color:var(--ink-muted);margin-bottom:12px}
+.wo-instruction{font-size:.82rem;color:var(--ink-soft);margin-bottom:12px}
 .wo-answer-area{
   min-height:52px;border:2px dashed var(--border);border-radius:10px;
   padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;
-  transition:border-color .15s;background:var(--indigo-tint);
+  transition:border-color .15s,background .15s;background:var(--bg);
 }
-.wo-answer-area.has-tiles{border-style:solid;border-color:var(--indigo)}
+.wo-answer-area.has-tiles{border-style:solid;border-color:var(--accent);background:var(--accent-tint)}
 .wo-pool{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .tile{
   padding:9px 14px;border-radius:8px;border:1.5px solid var(--border);
-  background:var(--white);cursor:pointer;font-size:.92rem;color:var(--ink-body);
-  min-height:40px;display:flex;align-items:center;
-  transition:border-color .15s,background .15s,transform .1s;
-  font-weight:500;
+  background:var(--white);cursor:pointer;font-size:.92rem;color:var(--ink-soft);
+  min-height:44px;display:flex;align-items:center;
+  transition:border-color .15s,background .15s,color .15s;
+  font-weight:600;
 }
-.tile:hover{border-color:var(--indigo);background:var(--indigo-tint);color:var(--indigo-deep)}
-.tile:focus{outline:2px solid var(--indigo-ring);outline-offset:2px}
-.tile.placed{background:var(--indigo);color:var(--white);border-color:var(--indigo)}
-.tile.placed:hover{background:var(--indigo-deep);border-color:var(--indigo-deep)}
+.tile:hover{border-color:var(--ink-faint);background:var(--bg)}
+.tile:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.tile.placed{background:var(--accent);color:var(--ink);border-color:var(--accent-deep)}
+.tile.placed:hover{background:var(--accent-deep);color:var(--white);border-color:var(--accent-deep)}
 .wo-reset{
-  font-size:.8rem;color:var(--ink-muted);background:none;border:1px solid var(--border);
-  border-radius:8px;padding:6px 14px;cursor:pointer;
+  font-size:.8rem;font-weight:700;color:var(--ink-soft);background:none;border:1px solid var(--border);
+  border-radius:8px;padding:6px 14px;cursor:pointer;min-height:44px;
   transition:color .15s,border-color .15s;
 }
-.wo-reset:hover{color:var(--indigo);border-color:var(--indigo)}
-.wo-reset:focus{outline:2px solid var(--indigo-ring);outline-offset:2px}
+.wo-reset:hover{color:var(--ink);border-color:var(--ink-faint)}
+.wo-reset:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 
 /* ── Translation ── */
-.tr-label{font-size:.85rem;font-weight:600;color:var(--ink-muted);margin-bottom:8px;display:block}
+.tr-label{font-size:.85rem;font-weight:700;color:var(--ink-soft);margin-bottom:8px;display:block}
 .tr-input{
   width:100%;padding:13px 16px;border:2px solid var(--border);border-radius:10px;
-  font-size:1rem;font-family:var(--font);color:var(--ink-head);
+  font-size:1rem;font-family:var(--font);color:var(--ink);
   transition:border-color .15s,box-shadow .15s;background:var(--white);
 }
-.tr-input:focus{outline:none;border-color:var(--indigo);box-shadow:0 0 0 3px rgba(99,102,241,.18)}
-.tr-hint{font-size:.78rem;color:var(--ink-muted);margin-top:7px}
+.tr-input:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(27,33,48,.14)}
+.tr-hint{font-size:.78rem;color:var(--ink-faint);margin-top:7px}
+
+/* ── Question palette ── */
+.palette-card{padding:18px 20px}
+.palette-summary-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  cursor:pointer;list-style:none;font-size:.9rem;font-weight:700;color:var(--ink);
+  /* This <summary> toggles the palette open/closed — it's a real control, and
+     with no padding of its own it was rendering well under the 44px floor. */
+  min-height:44px;
+}
+.palette-summary-row::-webkit-details-marker{display:none}
+.palette-summary-row:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.palette-summary-label{display:inline-flex;align-items:center;gap:8px}
+/* The native marker is suppressed above, so the chevron is the only visual cue
+   that this section collapses — it must actually reflect the open state. */
+.palette-chevron{flex-shrink:0;color:var(--ink-soft);transition:transform .15s ease-out}
+details[open] .palette-chevron{transform:rotate(180deg)}
+@media(prefers-reduced-motion:reduce){.palette-chevron{transition:none}}
+.palette-count{
+  font-family:var(--font-mono);font-variant-numeric:tabular-nums;
+  font-size:.78rem;font-weight:600;color:var(--ink-soft);
+}
+.palette-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+/* 44px, not the usual 38px. These tiles are read-only status, not navigation —
+   the test is strictly one-way — but they still sit in a touch-heavy layout
+   next to controls that do meet the floor, so they hold the same size rather
+   than reading as a smaller, different kind of thing. */
+.palette-tile{
+  position:relative;width:44px;height:44px;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:9px;border:1.5px solid var(--state-border);background:var(--white);color:var(--ink-soft);
+  font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:.85rem;font-weight:700;
+  cursor:default;transition:border-color .15s,background .15s,color .15s;
+}
+.palette-tile.is-answered{border-color:var(--ink-tint-border);background:var(--ink-tint);color:var(--ink)}
+.palette-tile.is-current{border-color:var(--ink);background:var(--ink);color:var(--white)}
+.palette-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;font-size:.75rem;color:var(--ink-soft)}
+.palette-legend-item{display:inline-flex;align-items:center;gap:6px}
+.palette-legend-swatch{width:12px;height:12px;border-radius:4px;border:1.5px solid var(--state-border);background:var(--white)}
+.palette-legend-swatch.current{background:var(--ink);border-color:var(--ink)}
+.palette-legend-swatch.answered{background:var(--ink-tint);border-color:var(--ink-tint-border)}
 
 /* ── Navigation ── */
 .nav-row{
-  width:100%;max-width:640px;display:flex;align-items:center;justify-content:space-between;
-  gap:12px;margin-top:20px;padding:0 4px;
+  width:100%;max-width:640px;display:flex;align-items:center;justify-content:flex-end;
+  gap:12px;margin-top:20px;padding:0 4px;flex-wrap:wrap;row-gap:10px;
 }
+/* Sole control in the row for students — the test stays strictly one-way for
+   them. Teacher/admin preview additionally shows #btnPrevious (see .has-prev),
+   which is why this pushes to flex-end rather than assuming it always fills
+   the row alone. Two classes deep so it beats .btn-primary's max-width, which
+   is declared after this block. */
+.btn.btn-review{max-width:none;flex:0 0 auto;min-width:200px}
+@media(max-width:479px){.btn.btn-review{width:100%;min-width:0}}
+/* Preview-only: set when #btnPrevious is visible, so it sits at the opposite
+   end of the row from the advance button instead of stacking next to it. */
+.nav-row.has-prev{justify-content:space-between}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
-  padding:13px 22px;border-radius:12px;font-size:.95rem;font-weight:600;
-  cursor:pointer;border:none;transition:background .15s,box-shadow .15s,opacity .15s;
+  padding:13px 22px;border-radius:12px;font-size:.95rem;font-weight:700;
+  cursor:pointer;border:none;transition:background .15s,box-shadow .15s,opacity .15s,border-color .15s,color .15s;
   min-height:48px;
 }
-.btn:focus{outline:2px solid var(--indigo-ring);outline-offset:2px}
-.btn-ghost{background:var(--white);color:var(--ink-muted);border:1.5px solid var(--border)}
-.btn-ghost:hover:not(:disabled){background:var(--bg);border-color:var(--ink-muted)}
-.btn-primary{background:var(--indigo);color:var(--white);flex:1;max-width:200px}
-.btn-primary:hover:not(:disabled){background:var(--indigo-deep);box-shadow:0 2px 8px rgba(79,70,229,.3)}
+.btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.btn-ghost{background:var(--white);color:var(--ink-soft);border:1.5px solid var(--border)}
+.btn-ghost:hover:not(:disabled){background:var(--bg);border-color:var(--ink-faint);color:var(--ink)}
+.btn-ghost:disabled{opacity:.45;cursor:not-allowed}
+.btn-primary{background:var(--ink);color:var(--white);flex:1;max-width:220px}
+.btn-primary:hover:not(:disabled){background:#2B3247;box-shadow:0 2px 10px rgba(27,33,48,.28)}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed}
 .btn-danger{background:var(--error);color:var(--white);flex:1;max-width:220px}
-.btn-danger:hover:not(:disabled){background:#b91c1c}
+.btn-danger:hover:not(:disabled){background:#A63A2F}
 .btn-danger:disabled{opacity:.5;cursor:not-allowed}
 
 /* ── Live counter ── */
 .answered-strip{
   width:100%;max-width:640px;margin-top:10px;padding:0 4px;
-  font-size:.82rem;color:var(--ink-muted);text-align:right;font-variant-numeric:tabular-nums;
+  font-family:var(--font-mono);font-variant-numeric:tabular-nums;
+  font-size:.82rem;color:var(--ink-soft);text-align:right;
 }
 
 /* ── Screens ── */
 .screen{display:none;width:100%;max-width:640px;flex-direction:column;align-items:center}
 .screen.active{display:flex}
 
-/* ── Confirm screen ── */
+/* ── Submit confirmation modal ──
+   Opens OVER the current (last) question — screenTest stays active and the
+   question underneath stays exactly as it was, unlike the old review screen
+   which navigated away from it via showScreen(). */
+.modal-backdrop{
+  position:fixed;inset:0;background:rgba(27,33,48,.55);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;z-index:200;
+}
+.modal-backdrop.hidden{display:none}
 .confirm-card{
   background:var(--white);border:1px solid var(--border);border-radius:var(--radius);
-  padding:32px 28px;text-align:center;width:100%;
-  box-shadow:0 1px 4px rgba(0,0,0,.06);
+  padding:32px 28px;text-align:center;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;
+  box-shadow:0 8px 32px rgba(27,33,48,.24);
 }
-.confirm-card h2{font-size:1.25rem;font-weight:700;color:var(--ink-head);margin-bottom:10px}
-.confirm-card p{font-size:.95rem;color:var(--ink-body);margin-bottom:6px;line-height:1.5}
+.confirm-card h2{font-size:1.25rem;font-weight:800;color:var(--ink);margin-bottom:10px}
+.confirm-card p{font-size:.95rem;color:var(--ink-soft);margin-bottom:6px;line-height:1.5}
 .confirm-warning{
-  background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;
-  padding:12px 16px;margin:18px 0;font-size:.85rem;color:var(--amber);line-height:1.5;
-  text-align:left;
+  background:var(--accent-tint);border:1px solid var(--accent);border-radius:10px;
+  padding:12px 16px;margin:18px 0;font-size:.85rem;color:var(--ink);line-height:1.5;
+  text-align:left;font-weight:600;
 }
 .confirm-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:22px}
-.btn-outline{background:var(--white);color:var(--indigo);border:2px solid var(--indigo);min-height:44px;padding:11px 22px;border-radius:12px;font-size:.95rem;font-weight:600;cursor:pointer;transition:background .15s}
-.btn-outline:hover{background:var(--indigo-tint)}
-.btn-outline:focus{outline:2px solid var(--indigo-ring);outline-offset:2px}
+.btn-outline{background:var(--white);color:var(--ink);border:2px solid var(--ink);min-height:44px;padding:11px 22px;border-radius:12px;font-size:.95rem;font-weight:700;cursor:pointer;transition:background .15s}
+.btn-outline:hover:not(:disabled){background:var(--bg)}
+.btn-outline:disabled{opacity:.5;cursor:not-allowed}
+.btn-outline:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 
 /* ── Results ── */
 .results-hero{text-align:center;padding:36px 20px 0}
-.score-big{font-size:3.5rem;font-weight:800;color:var(--indigo);font-variant-numeric:tabular-nums;line-height:1}
-.score-denom{font-size:1.4rem;font-weight:500;color:var(--ink-muted)}
-.score-pct{font-size:1rem;color:var(--ink-muted);margin-top:6px;font-variant-numeric:tabular-nums}
+.score-big{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:3.5rem;font-weight:800;color:var(--ink);line-height:1}
+.score-denom{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:1.4rem;font-weight:600;color:var(--ink-faint)}
+.score-pct{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:1rem;color:var(--ink-soft);margin-top:6px}
 .breakdown-grid{
   display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
   width:100%;margin:22px 0 0;
@@ -186,24 +270,36 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padd
   background:var(--white);border:1px solid var(--border);border-radius:12px;
   padding:16px 10px;text-align:center;
 }
-.breakdown-item .num{font-size:1.5rem;font-weight:700;color:var(--ink-head);font-variant-numeric:tabular-nums}
-.breakdown-item .lbl{font-size:.7rem;color:var(--ink-muted);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+.breakdown-item .num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:1.5rem;font-weight:800;color:var(--ink)}
+.breakdown-item .lbl{font-size:.7rem;color:var(--ink-soft);margin-top:3px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
 
 /* ── Small instruction line (all question types) ── */
-.q-hint{font-size:.82rem;color:var(--ink-muted);margin-bottom:14px;line-height:1.45}
+.q-hint{font-size:.82rem;color:var(--ink-soft);margin-bottom:14px;line-height:1.45}
 
 /* ── Submit status (score post-back) ── */
 .submit-status{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;justify-content:center;
   max-width:640px;margin:0 auto 1rem;padding:.75rem 1rem;border-radius:12px;
-  font-size:.9rem;line-height:1.45;background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
-.submit-status.saved{background:#ecfdf5;color:#065f46;border-color:#6ee7b7}
+  font-size:.9rem;font-weight:600;line-height:1.45;background:var(--info-tint);color:var(--info);border:1px solid var(--info)}
+.submit-status.saved{background:var(--success-tint);color:var(--success);border-color:var(--success)}
 .submit-status.saved #btnRetrySubmit{display:none}
+.submit-status.errorState{background:var(--error-tint);color:var(--error);border-color:var(--error)}
 .submit-status #btnRetrySubmit{flex:none}
+
+/* ── Locked (answered-and-advanced) question state ──
+   Belt-and-braces: normal flow never re-renders a question you've already
+   moved past, but if some future code path did, these disable the control
+   itself rather than relying on the missing click handler alone. */
+.mc-option.is-locked{opacity:.6;cursor:not-allowed;pointer-events:none}
+.tile:disabled{opacity:.55;cursor:not-allowed}
+.tile:disabled:hover{background:var(--white)}
+.tile.placed:disabled:hover{background:var(--accent);color:var(--ink)}
+.wo-reset:disabled{opacity:.5;cursor:not-allowed}
+.tr-input:disabled{opacity:.6;cursor:not-allowed;background:var(--bg)}
 
 /* ── Misc ── */
 .spacer{flex:1}
 .hidden{display:none!important}
-@media(prefers-reduced-motion:reduce){.tile,.mc-option,.btn{transition:none}}
+@media(prefers-reduced-motion:reduce){.tile,.mc-option,.btn,.palette-tile{transition:none}}
 </style>
 </head>
 <body>
@@ -223,36 +319,70 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padd
       <span class="q-num" id="qNum" aria-live="polite">Question 1 of 30</span>
       <span class="q-type-badge" id="qBadge"></span>
     </div>
-    <div class="q-prompt" id="qPrompt" role="heading" aria-level="2" tabindex="-1"></div>
+    <div class="q-head">
+      <div class="q-prompt" id="qPrompt" role="heading" aria-level="2" tabindex="-1"></div>
+    </div>
     <div id="qBody"></div>
+  </div>
+
+  <div class="card palette-card" id="paletteCard">
+    <details id="paletteDetails" open>
+      <summary class="palette-summary-row">
+        <span class="palette-summary-label">
+          <svg class="palette-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Questions
+        </span>
+        <span class="palette-count" id="paletteCount">0/30 answered</span>
+      </summary>
+      <div class="palette-grid" id="paletteGrid" role="group" aria-label="Question status"></div>
+      <div class="palette-legend">
+        <span class="palette-legend-item"><span class="palette-legend-swatch current" aria-hidden="true"></span>Current</span>
+        <span class="palette-legend-item"><span class="palette-legend-swatch answered" aria-hidden="true"></span>Answered</span>
+        <span class="palette-legend-item"><span class="palette-legend-swatch" aria-hidden="true"></span>Unanswered</span>
+      </div>
+    </details>
   </div>
 
   <div class="answered-strip">
     Answered: <span id="answeredCount" aria-live="polite" aria-atomic="true">0</span> / <span id="answeredTotal">30</span>
   </div>
 
-  <div class="nav-row">
-    <span class="answered-count">Answers lock after you continue.</span>
-    <button class="btn btn-primary" id="btnNext" onclick="navigate(1)" aria-label="Next question">
-      Next
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <!-- Students: the advance button is the only forward control there is. On
+       every question but the last it advances to the next question and locks
+       the one just left; on the last question it opens the submit
+       confirmation modal, and therefore is the only way a student can reach submit.
+       Teacher/admin preview (no window.LEXORA_TEST bridge — see isPreview())
+       additionally gets #btnPrevious, shown/hidden and enabled/disabled by
+       renderNav() at render time. It stays in the markup and hidden by default
+       so a student never sees it flash in before the bridge is detected. -->
+  <div class="nav-row" id="navRow">
+    <button class="btn btn-ghost hidden" id="btnPrevious" type="button" onclick="handlePrevious()" aria-label="Go to the previous question">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3l-5 5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Previous</span>
     </button>
-    <button class="btn btn-danger hidden" id="btnSubmit" onclick="goConfirm()" aria-label="Submit test">
-      Submit
+    <button class="btn btn-primary btn-review" id="btnReview" type="button" onclick="handleAdvance()" aria-label="Go to the next question">
+      <span id="btnReviewLabel">Next question</span>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
   </div>
 </div>
 
-<!-- CONFIRM SCREEN -->
-<div id="screenConfirm" class="screen" aria-label="Confirm submission">
-  <div class="card confirm-card">
-    <h2 id="confirmHeading" tabindex="-1">Ready to submit?</h2>
-    <p id="confirmMsg"></p>
+<!-- SUBMIT CONFIRMATION MODAL
+     Opens over the last question instead of navigating to a review screen —
+     screenTest stays active underneath and the question stays exactly as the
+     student left it, editable, whether or not they go on to submit. Dismiss
+     paths (Continue test / Escape / backdrop click) are only live before
+     submission starts — see closeSubmitModal() and onModalKeydown(). -->
+<div class="modal-backdrop hidden" id="submitModalBackdrop" onclick="if(event.target===this) closeSubmitModal()">
+  <div class="card confirm-card" id="submitModalCard" role="dialog" aria-modal="true" aria-labelledby="submitModalHeading" aria-describedby="submitModalMsg">
+    <h2 id="submitModalHeading" tabindex="-1">Submit test?</h2>
+    <p id="submitModalMsg"></p>
     <div class="confirm-warning" role="alert">
       Once submitted you cannot change your answers.
     </div>
     <div class="confirm-btns">
-      <button class="btn btn-danger" id="btnFinalSubmit" onclick="submitTest()">Submit test</button>
+      <button class="btn-outline" type="button" id="btnContinueTest" onclick="closeSubmitModal()">Continue test</button>
+      <button class="btn btn-danger" id="btnFinalSubmit" type="button" onclick="handleFinalSubmit()">Submit test</button>
     </div>
   </div>
 </div>
@@ -455,6 +585,21 @@ function drawQuestions(){
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PREVIEW DETECTION
+// The server injects window.LEXORA_TEST = {attemptId, submitUrl} right before
+// </body> — AFTER this file's own <script> block — only when a real student
+// attempt row exists. So at the moment this script first runs (boot), the
+// bridge is never there yet, even for a real student: a boot-time check would
+// wrongly call every student "preview". This is evaluated lazily, at render
+// time, instead of being frozen into a constant — see the window "load"
+// listener at the bottom of this file for how the very first paint is
+// corrected once the bridge has actually had a chance to run.
+// ─────────────────────────────────────────────────────────────────────────────
+function isPreview(){
+  return !(window.LEXORA_TEST && window.LEXORA_TEST.submitUrl);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // STATE
 // ─────────────────────────────────────────────────────────────────────────────
 let questions=drawQuestions();
@@ -485,16 +630,107 @@ function clearState(){
   try{localStorage.removeItem(STORE_KEY);}catch(e){}
 }
 
+// A saved question must still carry everything the renderer and grader reach
+// for. Valid JSON is not the same as a usable attempt: `{"questions":[null]}`
+// parses fine, passes an Array.isArray check, and then throws on the first
+// render — stranding the student on a blank exam with no way back. Anything
+// that fails this check is discarded in favour of a fresh draw.
+function validQuestion(q){
+  if(!q||typeof q!=="object") return false;
+  if(typeof q.id==="undefined") return false;
+  // Element types matter as much as the array itself: canon() does
+  // (s||"").toLowerCase(), so a single non-string inside `accepted`, `accept` or
+  // `tiles` throws during GRADING — which happens after submitTest() has already
+  // set submitted=true and cleared the saved attempt. That is the one failure
+  // mode that both loses the work and returns no result, so these arrays are
+  // checked element by element rather than just for their shape.
+  if(q.type==="mc") return strings(q.shuffledChoices)&&q.shuffledChoices.length>0
+    // Only labels A–D are defined, so a longer restored list renders blanks.
+    &&q.shuffledChoices.length<=MC_MAX_CHOICES
+    // Out of range would render a question nobody can answer correctly.
+    &&Number.isInteger(q.shuffledCorrect)&&q.shuffledCorrect>=0
+    &&q.shuffledCorrect<q.shuffledChoices.length
+    &&typeof q.prompt==="string";
+  if(q.type==="wo") return strings(q.shuffledTiles)&&q.shuffledTiles.length>0
+    &&strings(q.tiles)&&q.tiles.length>0
+    // `accept` is optional, but gradeQuestion() feeds it straight to canon().
+    &&(q.accept===undefined||strings(q.accept));
+  if(q.type==="tr") return strings(q.accepted)&&q.accepted.length>0
+    &&typeof q.uz==="string";
+  return false;
+}
+
+const MC_MAX_CHOICES=4; // matches the A–D labels the renderer defines
+function strings(v){return Array.isArray(v)&&v.every(x=>typeof x==="string");}
+
+// Rejecting a bad *question* is not enough: a well-formed question carrying a
+// malformed ANSWER or woState entry still throws later, and worst of all it
+// throws inside submitTest() — which has already set submitted=true and wiped
+// the saved attempt before grading. That combination loses the student's work
+// and gives them no result. So coerce every restored answer to the shape its
+// question type expects, dropping anything that doesn't fit rather than
+// trusting it. A dropped answer costs one question; a throw costs the attempt.
+function sanitizeRestored(){
+  answers=questions.map((q,i)=>{
+    const a=answers[i];
+    if(a===null||a===undefined) return null;
+    if(q.type==="mc") return Number.isInteger(a)&&a>=0&&a<q.shuffledChoices.length?a:null;
+    if(q.type==="wo") return Array.isArray(a)&&a.every(t=>typeof t==="string")?a:null;
+    return typeof a==="string"?a:null; // tr — canon() would throw on a non-string
+  });
+  const clean={};
+  questions.forEach((q,i)=>{
+    if(q.type!=="wo") return;
+    const s=woState[i];
+    // renderWO only rebuilds this when it is falsy, so a truthy-but-wrong shape
+    // like {} would survive and throw on state.placed.length.
+    if(!s||typeof s!=="object") return;
+    if(!strings(s.placed)||!strings(s.pool)) return;
+    // placed + pool must still account for exactly this question's tiles, and
+    // the stored answer must match what the tiles show. Otherwise a tampered
+    // snapshot can display a finished sentence while grading it unanswered, or
+    // show empty tiles while grading a hidden answer — the student would see one
+    // thing and be marked on another.
+    if(!sameTiles(s.placed.concat(s.pool),q.shuffledTiles)) return;
+    const a=answers[i];
+    if(a!==null&&!sameOrder(a,s.placed)) return;
+    clean[i]=s;
+  });
+  woState=clean;
+  // Drop any WO answer whose tile state was just rejected, so the two can never
+  // disagree after sanitizing.
+  questions.forEach((q,i)=>{
+    if(q.type==="wo"&&answers[i]!==null&&!clean[i]) answers[i]=null;
+  });
+}
+
+function sameOrder(a,b){
+  return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((x,i)=>x===b[i]);
+}
+
+// Multiset comparison — tiles legitimately repeat ("is", "the"), so sorting and
+// comparing beats any set-based check.
+function sameTiles(a,b){
+  if(!Array.isArray(a)||!Array.isArray(b)||a.length!==b.length) return false;
+  const x=[...a].sort(),y=[...b].sort();
+  return x.every((v,i)=>v===y[i]);
+}
+
 function restoreState(){
   let saved;
   try{saved=JSON.parse(localStorage.getItem(STORE_KEY)||"null");}catch(e){return false;}
   if(!saved||!Array.isArray(saved.questions)||!saved.questions.length) return false;
   if(!Array.isArray(saved.answers)||saved.answers.length!==saved.questions.length) return false;
+  if(!saved.questions.every(validQuestion)) return false;
   questions=saved.questions;
   TOTAL=questions.length;
   answers=saved.answers;
   woState=saved.woState&&typeof saved.woState==="object"?saved.woState:{};
+  // Older saved attempts may still carry a `flags` field from when flag-for-
+  // review existed — ignored here rather than validated, so it neither
+  // restores nor throws.
   current=Number.isInteger(saved.current)&&saved.current>=0&&saved.current<TOTAL?saved.current:0;
+  sanitizeRestored();
   return true;
 }
 
@@ -541,11 +777,27 @@ function renderQuestion(opts){
   else if(q.type==="wo") renderWO(q,idx,body);
   else renderTR(q,idx,body);
 
-  // Forward-only navigation: once the student continues, the previous answer
-  // is locked for the rest of this graded attempt.
-  const isLast=(idx===TOTAL-1);
-  document.getElementById("btnNext").classList.toggle("hidden",isLast);
-  document.getElementById("btnSubmit").classList.toggle("hidden",!isLast);
+  // One-way progression for students: the advance button is "Next question" on
+  // every question but the last, where it becomes "Finish test". There is no
+  // way back to a question once a student has moved past it. Unchanged by
+  // preview — preview gets an additional Previous button (see renderNav()),
+  // not a different advance button.
+  //
+  // The last-question label says "Finish test", NOT "Review answers": there is
+  // no review screen any more. The button opens the submit confirmation modal
+  // directly over this question (see openSubmitModal()), so promising a review
+  // step would be a lie about what the click does — and a student expecting a
+  // summary they can page through would read the modal as that summary.
+  const btnReviewLabel=document.getElementById("btnReviewLabel");
+  const btnReview=document.getElementById("btnReview");
+  if(idx<TOTAL-1){
+    btnReviewLabel.textContent="Next question";
+    btnReview.setAttribute("aria-label","Go to the next question");
+  }else{
+    btnReviewLabel.textContent="Finish test";
+    btnReview.setAttribute("aria-label","Finish the test and open the submit confirmation");
+  }
+  renderNav();
 
   updateAnsweredCount();
   saveState();
@@ -557,6 +809,11 @@ function renderQuestion(opts){
 
 // ── MC ──
 function renderMC(q,idx,body){
+  // Students only: answered-and-advanced questions lock. Teacher/admin preview
+  // (isPreview()) never locks anything — a previewer must be free to
+  // re-inspect and re-answer a question they've paged back to with Previous.
+  const isLocked=idx<current&&!isPreview();
+
   const hint=document.createElement("p");
   hint.className="q-hint";
   hint.textContent="Tap the correct word to fill the gap.";
@@ -569,11 +826,16 @@ function renderMC(q,idx,body){
 
   q.shuffledChoices.forEach((text,ci)=>{
     const opt=document.createElement("div");
-    opt.className="mc-option";
+    opt.className="mc-option"+(isLocked?" is-locked":"");
     opt.setAttribute("role","radio");
     const checked=(answers[idx]===ci);
     opt.setAttribute("aria-checked",checked?"true":"false");
-    opt.setAttribute("tabindex",checked||(answers[idx]===null && ci===0)?0:-1);
+    if(isLocked){
+      opt.setAttribute("aria-disabled","true");
+      opt.setAttribute("tabindex","-1");
+    }else{
+      opt.setAttribute("tabindex",checked||(answers[idx]===null && ci===0)?0:-1);
+    }
     opt.dataset.ci=ci;
     opt.innerHTML=`
       <div class="mc-indicator">
@@ -583,12 +845,14 @@ function renderMC(q,idx,body){
       </div>
       <span class="mc-letter">${letters[ci]}</span>
       <span class="mc-text">${esc(text)}</span>`;
-    opt.addEventListener("click",()=>selectMC(idx,ci));
-    opt.addEventListener("keydown",e=>{
-      if(e.key===" "||e.key==="Enter"){e.preventDefault();selectMC(idx,ci);}
-      if(e.key==="ArrowDown"||e.key==="ArrowRight"){e.preventDefault();moveMCFocus(grp,1);}
-      if(e.key==="ArrowUp"||e.key==="ArrowLeft"){e.preventDefault();moveMCFocus(grp,-1);}
-    });
+    if(!isLocked){
+      opt.addEventListener("click",()=>selectMC(idx,ci));
+      opt.addEventListener("keydown",e=>{
+        if(e.key===" "||e.key==="Enter"){e.preventDefault();selectMC(idx,ci);}
+        if(e.key==="ArrowDown"||e.key==="ArrowRight"){e.preventDefault();moveMCFocus(grp,1);}
+        if(e.key==="ArrowUp"||e.key==="ArrowLeft"){e.preventDefault();moveMCFocus(grp,-1);}
+      });
+    }
     grp.appendChild(opt);
   });
 
@@ -603,6 +867,9 @@ function moveMCFocus(grp,dir){
 }
 
 function selectMC(idx,ci){
+  // Locked for students only — see the matching isLocked check in renderMC().
+  // Preview must be able to re-answer a question it has paged back to.
+  if(idx<current&&!isPreview()) return;
   answers[idx]=ci;
   // re-render just the options
   const grp=document.getElementById("qBody").querySelector(".mc-group");
@@ -618,6 +885,10 @@ function selectMC(idx,ci){
 
 // ── WO ──
 function renderWO(q,idx,body){
+  // See the matching comment in renderMC — locks for students, never for
+  // teacher/admin preview.
+  const isLocked=idx<current&&!isPreview();
+
   if(!woState[idx]){
     woState[idx]={placed:[],pool:[...q.shuffledTiles]};
   }
@@ -648,13 +919,16 @@ function renderWO(q,idx,body){
       t.className="tile placed";
       t.textContent=chunk;
       t.setAttribute("aria-label","Remove: "+chunk);
-      t.addEventListener("click",()=>{
-        state.placed.splice(pi,1);
-        state.pool.push(chunk);
-        answers[idx]=state.placed.length>0?[...state.placed]:null;
-        updateAnsweredCount();
-        refreshWO();
-      });
+      t.disabled=isLocked;
+      if(!isLocked){
+        t.addEventListener("click",()=>{
+          state.placed.splice(pi,1);
+          state.pool.push(chunk);
+          answers[idx]=state.placed.length>0?[...state.placed]:null;
+          updateAnsweredCount();
+          refreshWO();
+        });
+      }
       answerArea.appendChild(t);
     });
 
@@ -663,13 +937,16 @@ function renderWO(q,idx,body){
       t.className="tile";
       t.textContent=chunk;
       t.setAttribute("aria-label","Add: "+chunk);
-      t.addEventListener("click",()=>{
-        state.placed.push(chunk);
-        state.pool.splice(pi,1);
-        answers[idx]=[...state.placed];
-        updateAnsweredCount();
-        refreshWO();
-      });
+      t.disabled=isLocked;
+      if(!isLocked){
+        t.addEventListener("click",()=>{
+          state.placed.push(chunk);
+          state.pool.splice(pi,1);
+          answers[idx]=[...state.placed];
+          updateAnsweredCount();
+          refreshWO();
+        });
+      }
       pool.appendChild(t);
     });
   }
@@ -678,13 +955,16 @@ function renderWO(q,idx,body){
   resetBtn.className="wo-reset";
   resetBtn.textContent="Clear / Reset";
   resetBtn.setAttribute("aria-label","Reset word order");
-  resetBtn.addEventListener("click",()=>{
-    state.placed=[];
-    state.pool=[...q.shuffledTiles];
-    answers[idx]=null;
-    updateAnsweredCount();
-    refreshWO();
-  });
+  resetBtn.disabled=isLocked;
+  if(!isLocked){
+    resetBtn.addEventListener("click",()=>{
+      state.placed=[];
+      state.pool=[...q.shuffledTiles];
+      answers[idx]=null;
+      updateAnsweredCount();
+      refreshWO();
+    });
+  }
 
   refreshWO();
   body.appendChild(answerArea);
@@ -694,6 +974,10 @@ function renderWO(q,idx,body){
 
 // ── TR ──
 function renderTR(q,idx,body){
+  // See the matching comment in renderMC — locks for students, never for
+  // teacher/admin preview.
+  const isLocked=idx<current&&!isPreview();
+
   const label=document.createElement("label");
   label.className="tr-label";
   label.setAttribute("for","trInput_"+idx);
@@ -709,12 +993,15 @@ function renderTR(q,idx,body){
   input.autocorrect="off";
   input.autocapitalize="off";
   input.spellcheck=false;
+  input.disabled=isLocked;
   if(answers[idx]!==null) input.value=answers[idx];
-  input.addEventListener("input",()=>{
-    const v=input.value.trim();
-    answers[idx]=v.length>0?v:null;
-    updateAnsweredCount();
-  });
+  if(!isLocked){
+    input.addEventListener("input",()=>{
+      const v=input.value.trim();
+      answers[idx]=v.length>0?v:null;
+      updateAnsweredCount();
+    });
+  }
   body.appendChild(input);
 
   const hint=document.createElement("p");
@@ -724,30 +1011,165 @@ function renderTR(q,idx,body){
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NAVIGATION
+// QUESTION PALETTE
 // ─────────────────────────────────────────────────────────────────────────────
-function navigate(dir){
-  if(dir!==1) return;
-  const next=current+dir;
-  if(next<0||next>TOTAL-1) return;
-  current=next;
+function paletteItems(){
+  return questions.map((q,i)=>({
+    answered: answers[i]!==null && answers[i]!==undefined
+  }));
+}
+
+// Renderer for the in-test palette. (It used to be shared with a second
+// palette on the pre-submit review screen; that screen is gone — "Finish test"
+// now opens the submit confirmation modal directly — so this is the only
+// caller left.)
+// Read-only status display, not navigation: a plain <span> with no tabindex,
+// no role=button and no click handler, so it is neither clickable nor
+// reachable by keyboard. The test is strictly one-way — this grid can only
+// ever report where the student is, never move them.
+function renderPaletteGrid(gridEl,opts){
+  if(!gridEl) return;
+  opts=opts||{};
+  const items=paletteItems();
+  gridEl.innerHTML="";
+  items.forEach((item,i)=>{
+    const tile=document.createElement("span");
+    const isCurrent=!!opts.highlightCurrent && i===current;
+    let cls="palette-tile";
+    if(isCurrent) cls+=" is-current";
+    else if(item.answered) cls+=" is-answered";
+    tile.className=cls;
+    if(isCurrent) tile.setAttribute("aria-current","true");
+    tile.setAttribute("aria-label",`Question ${i+1}, ${item.answered?"answered":"not answered"}`);
+    tile.textContent=String(i+1);
+    gridEl.appendChild(tile);
+  });
+}
+
+// One-way progression: advances to the next question and — by the mere fact
+// that it moved current forward — locks the one just left, since every
+// render checks idx<current. On the last question this instead opens the
+// submit confirmation modal, the sole gateway to submit. It does NOT move
+// `current` or re-render — the last question stays exactly as rendered,
+// fully editable, whether the student goes on to submit or backs out.
+function handleAdvance(){
+  if(current<TOTAL-1){
+    current++;
+    renderQuestion({focus:true});
+  }else{
+    openSubmitModal();
+  }
+}
+
+// Teacher/admin preview only (see isPreview()). A student never reaches this:
+// the Previous button is hidden for them by renderNav(), and handleAdvance()
+// above never gives them a way to go backward either. The isPreview() guard
+// below is belt-and-braces in case something ever calls this directly.
+function handlePrevious(){
+  if(!navReady||!isPreview()) return;
+  if(current<=0) return;
+  current--;
   renderQuestion({focus:true});
+}
+
+// FAIL CLOSED ON THE BOOT WINDOW. The server injects the window.LEXORA_TEST
+// bridge immediately before </body> — AFTER this script block — so during the
+// first render isPreview() cannot tell a student from a previewer and answers
+// "preview" for everyone. Revealing Previous on that answer would flash a
+// backward-navigation control at a real student for the length of the parse,
+// and a click landing inside that window would actually move them backwards.
+// navReady starts false and is only set by the window "load" listener at the
+// bottom of this file, which is guaranteed to run after the injected bridge
+// has executed. Until then Previous stays hidden for EVERYONE: a previewer
+// waits a few milliseconds for it to appear, which costs nothing, while a
+// student is never shown it at all. handlePrevious() checks the same flag, so
+// even a synthesised click in that window does nothing.
+let navReady=false;
+
+// Shows/hides the Previous button. Preview (no window.LEXORA_TEST bridge) gets
+// it, enabled once past question 1; students never do. Re-read on every call
+// rather than cached, so it reflects the bridge's true state whenever it runs.
+function renderNav(){
+  const navRow=document.getElementById("navRow");
+  const btnPrevious=document.getElementById("btnPrevious");
+  if(navReady&&isPreview()){
+    navRow.classList.add("has-prev");
+    btnPrevious.classList.remove("hidden");
+    btnPrevious.disabled=(current===0);
+  }else{
+    navRow.classList.remove("has-prev");
+    btnPrevious.classList.add("hidden");
+    btnPrevious.disabled=true;
+  }
 }
 
 function updateAnsweredCount(){
   const n=answers.filter(a=>a!==null).length;
   document.getElementById("answeredCount").textContent=n;
   document.getElementById("answeredTotal").textContent=TOTAL;
+  const paletteGrid=document.getElementById("paletteGrid");
+  if(paletteGrid) renderPaletteGrid(paletteGrid,{highlightCurrent:true});
+  const paletteCount=document.getElementById("paletteCount");
+  if(paletteCount) paletteCount.textContent=`${n}/${TOTAL} answered`;
   saveState();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONFIRM
+// SUBMIT CONFIRMATION MODAL
+// Opens over the current (last) question instead of navigating to a separate
+// review screen. Nothing here touches `current`, `answers` or re-renders the
+// question underneath — Continue test simply closes the modal and the student
+// is exactly where they were, still able to edit. Submit test hands off to the
+// existing submitTest() unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
-function goConfirm(){
-  const n=answers.filter(a=>a!==null).length;
-  document.getElementById("confirmMsg").textContent=`You answered ${n} of ${TOTAL} questions. ${n<TOTAL?"("+(TOTAL-n)+" unanswered) ":""}Submit your answers now?`;
-  showScreen("screenConfirm","confirmHeading");
+function openSubmitModal(){
+  const items=paletteItems();
+  const answeredN=items.filter(i=>i.answered).length;
+  const unansweredN=items.length-answeredN;
+
+  document.getElementById("submitModalMsg").textContent=unansweredN>0
+    ? `${unansweredN} unanswered question${unansweredN===1?"":"s"} will score zero. Submitting is final — you cannot change your answers after this.`
+    : `All ${TOTAL} questions answered. Submitting is final — you cannot change your answers after this.`;
+
+  const continueBtn=document.getElementById("btnContinueTest");
+  const submitBtn=document.getElementById("btnFinalSubmit");
+  continueBtn.disabled=false;
+  submitBtn.disabled=false;
+
+  document.getElementById("submitModalBackdrop").classList.remove("hidden");
+  document.addEventListener("keydown",onModalKeydown);
+  document.getElementById("submitModalHeading").focus();
+}
+
+// Only a live dismiss path while nothing has been submitted yet — once
+// handleFinalSubmit() has fired, submitted flips true and this becomes a
+// no-op, so Escape/backdrop/Continue can no longer close (or appear to
+// re-open) the modal mid-submission.
+function closeSubmitModal(){
+  if(submitted) return;
+  document.getElementById("submitModalBackdrop").classList.add("hidden");
+  document.removeEventListener("keydown",onModalKeydown);
+  const btnReview=document.getElementById("btnReview");
+  if(btnReview) btnReview.focus();
+}
+
+function onModalKeydown(e){
+  if(e.key==="Escape"){
+    e.preventDefault();
+    closeSubmitModal();
+  }
+}
+
+// UI-level backstop on top of submitTest()'s own `if(submitted) return;`
+// guard: disable both modal buttons and drop the Escape listener the instant
+// submission begins, so a second click, a stray Escape, or a repeat call here
+// can never fire a second submitTest().
+function handleFinalSubmit(){
+  if(submitted) return;
+  document.getElementById("btnContinueTest").disabled=true;
+  document.getElementById("btnFinalSubmit").disabled=true;
+  document.removeEventListener("keydown",onModalKeydown);
+  submitTest();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -808,15 +1230,15 @@ function submitTest(){
   const grid=document.getElementById("breakdownGrid");
   grid.innerHTML=`
     <div class="breakdown-item">
-      <div class="num">${mcC}<span style="font-size:.9rem;color:var(--ink-muted)">/${mc.length}</span></div>
+      <div class="num">${mcC}<span style="font-size:.9rem;color:var(--ink-soft)">/${mc.length}</span></div>
       <div class="lbl">Multiple Choice</div>
     </div>
     <div class="breakdown-item">
-      <div class="num">${woC}<span style="font-size:.9rem;color:var(--ink-muted)">/${wo.length}</span></div>
+      <div class="num">${woC}<span style="font-size:.9rem;color:var(--ink-soft)">/${wo.length}</span></div>
       <div class="lbl">Word Order</div>
     </div>
     <div class="breakdown-item">
-      <div class="num">${trC}<span style="font-size:.9rem;color:var(--ink-muted)">/${tr.length}</span></div>
+      <div class="num">${trC}<span style="font-size:.9rem;color:var(--ink-soft)">/${tr.length}</span></div>
       <div class="lbl">Translation</div>
     </div>`;
 
@@ -884,6 +1306,7 @@ function setSubmitStatus(kind,msg){
   document.getElementById("submitStatusText").textContent=msg;
   box.classList.remove("hidden");
   box.classList.toggle("saved",kind==="saved");
+  box.classList.toggle("errorState",kind==="error");
   document.getElementById("btnRetrySubmit").disabled=(kind==="pending");
 }
 
@@ -892,10 +1315,18 @@ function setSubmitStatus(kind,msg){
 // SCREEN SWITCH
 // ─────────────────────────────────────────────────────────────────────────────
 // Screens swap in place, so move focus into the new one — otherwise a keyboard
-// or screen-reader user is left on a button that no longer exists.
+// or screen-reader user is left on a button that no longer exists. The submit
+// modal is not a .screen (it overlays screenTest rather than replacing it), so
+// it is not touched by the loop below — but submitTest() reaching the results
+// screen means submission is done and the modal, if still visually present
+// underneath, must not linger over it. Belt-and-braces: handleFinalSubmit()
+// already leaves it hidden-imminently via submitTest()'s own flow, this just
+// guarantees it regardless of call site.
 function showScreen(id,focusId){
   document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
+  const modal=document.getElementById("submitModalBackdrop");
+  if(modal) modal.classList.add("hidden");
   if(focusId){
     const target=document.getElementById(focusId);
     if(target) target.focus();
@@ -917,8 +1348,47 @@ function esc(s){
 // ─────────────────────────────────────────────────────────────────────────────
 // BOOT
 // ─────────────────────────────────────────────────────────────────────────────
+// Last line of defence: validQuestion() rejects the shapes we know about, but a
+// student who cannot render ANY question has no way to sit the exam. If a
+// restored attempt still blows up, throw it away and start a clean draw rather
+// than leaving them on a dead screen.
 restoreState(); // resume an interrupted attempt, if there is one
-renderQuestion();
+try{
+  renderQuestion();
+}catch(e){
+  console.error("[Lexora] restored attempt failed to render — starting a fresh draw.",e);
+  clearState();
+  questions=drawQuestions();
+  TOTAL=questions.length;
+  answers=Array(TOTAL).fill(null);
+  woState={};
+  current=0;
+  renderQuestion();
+}
+// The palette stays open at every width. It used to collapse under 640px; keep
+// it open regardless so a phone student always has the status grid visible,
+// even though it is now read-only and forward progress comes from the
+// Next question / Finish test button instead.
+
+// This file's own <script> block — including the boot renderQuestion() call
+// above — runs before the platform injects window.LEXORA_TEST right before
+// </body>. So the very first paint's nav (rendered via renderNav() inside
+// renderQuestion()) is computed with isPreview() defaulting to true even for
+// a real student, since the bridge genuinely isn't there yet. "load" fires
+// only once every inline script in the document — including the injected
+// bridge script after this one — has finished running, so by the time this
+// listener runs, window.LEXORA_TEST is set for a student and isPreview() reads
+// correctly. Re-run just the nav render (not a full renderQuestion()) to
+// correct that first paint without disturbing anything else — no re-render of
+// answers, no stolen focus, no re-drawn WO tiles.
+//
+// navReady flips here and nowhere else. Before this point renderNav() keeps
+// Previous hidden for everyone (see its comment), so the boot window can never
+// show a student a backward-navigation control it would then take away.
+window.addEventListener("load",function(){
+  navReady=true;
+  renderNav();
+});
 </script>
 </body>
 </html>

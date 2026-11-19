@@ -76,20 +76,23 @@ export async function GET(_req: Request, { params }: Ctx) {
       .eq("student_id", id),
     admin
       .from("results")
-      .select("id, attempt_id, status, created_at")
+      .select("id, attempt_id, status, created_at, excluded_from_progress")
       .eq("student_id", id)
       .order("created_at", { ascending: false }),
     admin.from("points_ledger").select("points").eq("student_id", id),
     admin
       .from("attempts")
-      .select("id, test_id, task_id")
+      .select("id, test_id, task_id, html_test_id, vocab_source_id, superseded_at")
       .eq("student_id", id),
   ]);
 
   const resultRows = results ?? [];
   const resultIds = resultRows.map((r) => r.id);
 
-  // Per-skill scores for all of this student's results.
+  // Per-skill scores for all of this student's results. Fetched for every
+  // result (including excluded ones) because `recent[]` below still needs the
+  // correct/total for a superseded result — only the aggregate skips it (see
+  // the excludedResultIds filter just below).
   const { data: skillScores } = resultIds.length
     ? await admin
         .from("result_skill_scores")
@@ -98,12 +101,25 @@ export async function GET(_req: Request, { params }: Ctx) {
     : { data: [] };
   const scores = skillScores ?? [];
 
-  // Skill roll-up: sum correct/total across every result touching that skill.
+  // Results a re-open has flagged excluded_from_progress (the superseded
+  // "before" row of a retake). resultsCount and recent[] intentionally keep
+  // counting/showing these — they're real history, and recent[] is exactly
+  // where the teacher sees "reopened, excluded from progress". Only the skill
+  // aggregate below drops them, because summing both the discarded attempt and
+  // its replacement would blend two scores into one percentage the teacher
+  // reads as a single truth.
+  const excludedResultIds = new Set(
+    resultRows.filter((r) => r.excluded_from_progress).map((r) => r.id),
+  );
+
+  // Skill roll-up: sum correct/total across every NON-EXCLUDED result touching
+  // that skill (excluded/superseded results are omitted — see above).
   const bySkill = new Map<
     SkillArea,
     { correct: number; total: number; results: Set<string> }
   >();
   for (const s of scores) {
+    if (excludedResultIds.has(s.result_id)) continue;
     const cur =
       bySkill.get(s.skill_area) ??
       { correct: 0, total: 0, results: new Set<string>() };
@@ -120,8 +136,12 @@ export async function GET(_req: Request, { params }: Ctx) {
     }))
     .sort((a, b) => b.accuracy - a.accuracy);
 
-  // Recent results: title comes from the attempt's test/task.
+  // Recent results: title comes from the attempt's test/task/hosted test, and
+  // each result's attempt carries the identity a re-open acts on (attempt id,
+  // whether it's already superseded, and what kind of attempt it is).
   const titleByAttempt = new Map<string, string>();
+  const kindByAttempt = new Map<string, RecentResult["attemptKind"]>();
+  const supersededByAttempt = new Map<string, boolean>();
   const attemptTargets = attempts ?? [];
   const testIds = [
     ...new Set(attemptTargets.map((a) => a.test_id).filter(Boolean)),
@@ -129,23 +149,45 @@ export async function GET(_req: Request, { params }: Ctx) {
   const taskIds = [
     ...new Set(attemptTargets.map((a) => a.task_id).filter(Boolean)),
   ] as string[];
-  const [{ data: tests }, { data: tasks }] = await Promise.all([
+  const htmlTestIds = [
+    ...new Set(attemptTargets.map((a) => a.html_test_id).filter(Boolean)),
+  ] as string[];
+  const [{ data: tests }, { data: tasks }, { data: htmlTests }] = await Promise.all([
     testIds.length
       ? admin.from("tests").select("id, title").in("id", testIds)
       : Promise.resolve({ data: [] }),
     taskIds.length
       ? admin.from("tasks").select("id, title").in("id", taskIds)
       : Promise.resolve({ data: [] }),
+    htmlTestIds.length
+      ? admin.from("html_tests").select("id, title").in("id", htmlTestIds)
+      : Promise.resolve({ data: [] }),
   ]);
   const testTitle = new Map((tests ?? []).map((t) => [t.id, t.title]));
   const taskTitle = new Map((tasks ?? []).map((t) => [t.id, t.title]));
+  const htmlTestTitle = new Map((htmlTests ?? []).map((t) => [t.id, t.title]));
   for (const a of attemptTargets) {
     const title = a.test_id
       ? testTitle.get(a.test_id)
-      : a.task_id
-        ? taskTitle.get(a.task_id)
-        : undefined;
+      : a.html_test_id
+        ? htmlTestTitle.get(a.html_test_id)
+        : a.task_id
+          ? taskTitle.get(a.task_id)
+          : undefined;
     titleByAttempt.set(a.id, title ?? "Untitled");
+    kindByAttempt.set(
+      a.id,
+      a.test_id
+        ? "test"
+        : a.html_test_id
+          ? "html_test"
+          : a.task_id
+            ? "task"
+            : a.vocab_source_id
+              ? "vocab"
+              : "unknown",
+    );
+    supersededByAttempt.set(a.id, a.superseded_at != null);
   }
 
   // Correct/total per result (sum of its skill scores).
@@ -166,6 +208,9 @@ export async function GET(_req: Request, { params }: Ctx) {
       correct: t.correct,
       total: t.total,
       accuracy: t.total > 0 ? t.correct / t.total : 0,
+      attemptId: r.attempt_id,
+      attemptKind: kindByAttempt.get(r.attempt_id) ?? "unknown",
+      superseded: supersededByAttempt.get(r.attempt_id) ?? false,
     };
   });
 
